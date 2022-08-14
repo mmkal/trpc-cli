@@ -3,10 +3,20 @@ import * as trpc from '@trpc/server'
 
 export interface CliAdapterParams {
   router: trpc.AnyRouter
-  process?: Partial<typeof process>
 }
-export const cliAdapter = (router: trpc.AnyRouter) => {
-  const run = ([path, ...argv]: string[] = process.argv.slice(2)) => {
+export interface ProcessLike {
+  argv: string[]
+  exit: <T, U>(code: number, result?: T) => U
+  stdout: {
+    write: (msg: string) => void
+  }
+  stderr: {
+    write: (msg: string) => void
+  }
+}
+const nodeProcess = process
+export const cliAdapter = ({router}) => {
+  const run = ([path, ...argv]: string[]) => {
     const type = path in router._def.queries ? 'query' : 'mutation'
     const def: undefined | {inputParser: unknown} = router._def[type === 'query' ? 'queries' : 'mutations'][path]
     if (!def) {
@@ -32,7 +42,17 @@ export const cliAdapter = (router: trpc.AnyRouter) => {
       type,
     })
   }
-  return {run}
+  const cli = async (process: ProcessLike = nodeProcess) => {
+    try {
+      const result = await run(process.argv.slice(2))
+      process.stdout.write(`Success. Result: ${JSON.stringify(result)}`)
+      return process.exit(0, result)
+    } catch (error) {
+      process.stderr.write(`Failure. Error: ${error?.stack || error}`)
+      return process.exit(1, error)
+    }
+  }
+  return {run, cli}
 }
 
 const parseValues = (argv: string[], argName: string) => {
