@@ -14,7 +14,17 @@ export interface ProcessLike {
     write: (msg: string) => void
   }
 }
-const nodeProcess = process
+const defaultCliConfig = {
+  argv: process.argv,
+  succeed: (value: unknown): any => {
+    console.log(`Success:`, {value})
+    process.exit(0)
+  },
+  fail: (error: unknown): any => {
+    console.log('Failure:', {error})
+    process.exit(1)
+  }
+}
 export const cliAdapter = ({router}) => {
   const run = ([path, ...argv]: string[]) => {
     const type = path in router._def.queries ? 'query' : 'mutation'
@@ -42,14 +52,13 @@ export const cliAdapter = ({router}) => {
       type,
     })
   }
-  const cli = async (process: ProcessLike = nodeProcess) => {
+  const cli = async (config?: Partial<typeof defaultCliConfig>) => {
+    const resolvedConfig = {...defaultCliConfig, ...config}
     try {
-      const result = await run(process.argv.slice(2))
-      process.stdout.write(`Success. Result: ${JSON.stringify(result)}`)
-      return process.exit(0, result)
+      const result = await run(resolvedConfig.argv.slice(2))
+      return resolvedConfig.succeed(result)
     } catch (error) {
-      process.stderr.write(`Failure. Error: ${error?.stack || error}`)
-      return process.exit(1, error)
+      return resolvedConfig.fail(error)
     }
   }
   return {run, cli}

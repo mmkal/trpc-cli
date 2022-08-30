@@ -5,7 +5,7 @@ import {z} from 'zod'
 expect.addSnapshotSerializer({
   test: val => jest.isMockFunction(val),
   print: val =>
-    JSON.stringify((val as jest.Mock).mock.calls)
+    JSON.stringify((val as jest.Mock).mock.calls, null, 2)
       .split(process.cwd())
       .join('[cwd]'),
 })
@@ -34,41 +34,49 @@ test('run', async () => {
 test('cli success', async () => {
   const {cli} = cliAdapter({router: sumRouter})
 
-  const log = jest.fn()
-  const logErr = jest.fn()
-  const exit = jest.fn()
+  const succeed = jest.fn()
   await cli({
     argv: ['node', 'script.js', 'sum', '--left', '1', '--right', '2'],
-    exit,
-    stdout: {write: log},
-    stderr: {write: logErr},
+    succeed,
   })
-  expect({log, logErr, exit}).toMatchInlineSnapshot(`
-    Object {
-      "exit": [[0,3]],
-      "log": [["Success. Result: 3"]],
-      "logErr": [],
-    }
-  `)
+  expect(succeed.mock.calls).toMatchObject([[3]])
 })
 
 test('cli failure', async () => {
   const {cli} = cliAdapter({router: sumRouter})
 
-  const log = jest.fn()
-  const logErr = jest.fn()
-  const exit = jest.fn()
+  const succeed = jest.fn()
+  const fail = jest.fn()
   await cli({
     argv: ['node', 'script.js', 'sum', '--left', '1', '--right', 'notanumber'],
-    exit,
-    stdout: {write: log},
-    stderr: {write: logErr},
+    succeed,
+    fail,
   })
-  expect({log, logErr, exit}).toMatchInlineSnapshot(`
+  expect({succeed, fail}).toMatchInlineSnapshot(`
     Object {
-      "exit": [[1,{"originalError":{"issues":[{"code":"invalid_type","expected":"number","received":"string","path":["right"],"message":"Expected number, received string"}],"name":"ZodError"},"code":"BAD_REQUEST","name":"TRPCError"}]],
-      "log": [],
-      "logErr": [["Failure. Error: TRPCError: [\\n  {\\n    \\"code\\": \\"invalid_type\\",\\n    \\"expected\\": \\"number\\",\\n    \\"received\\": \\"string\\",\\n    \\"path\\": [\\n      \\"right\\"\\n    ],\\n    \\"message\\": \\"Expected number, received string\\"\\n  }\\n]\\n    at Procedure.parseInput ([cwd]/node_modules/@trpc/server/dist/router-bf2f9f44.cjs.dev.js:71:13)\\n    at processTicksAndRejections (node:internal/process/task_queues:96:5)\\n    at Array.<anonymous> ([cwd]/node_modules/@trpc/server/dist/router-bf2f9f44.cjs.dev.js:100:21)\\n    at callRecursive ([cwd]/node_modules/@trpc/server/dist/router-bf2f9f44.cjs.dev.js:119:24)\\n    at Procedure.call ([cwd]/node_modules/@trpc/server/dist/router-bf2f9f44.cjs.dev.js:144:20)"]],
+      "fail": [
+      [
+        {
+          "originalError": {
+            "issues": [
+              {
+                "code": "invalid_type",
+                "expected": "number",
+                "received": "string",
+                "path": [
+                  "right"
+                ],
+                "message": "Expected number, received string"
+              }
+            ],
+            "name": "ZodError"
+          },
+          "code": "BAD_REQUEST",
+          "name": "TRPCError"
+        }
+      ]
+    ],
+      "succeed": [],
     }
   `)
 })
