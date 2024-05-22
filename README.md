@@ -322,9 +322,9 @@ Usage:
   apply [flags...]
 
 Flags:
-  -h, --help                Show help
-      --step <value>        Mark this many migrations as executed; exclusiveMinimum: 0; Do not use with: --to
-      --to <string>         Mark migrations up to this one as exectued; Do not use with: --step
+  -h, --help                 Show help
+      --step <number>        Mark this many migrations as executed; exclusiveMinimum: 0; Do not use with: --to
+      --to <string>          Mark migrations up to this one as exectued; Do not use with: --step
 
 ```
 <!-- codegen:end -->

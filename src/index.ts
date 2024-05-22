@@ -73,17 +73,24 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
               )
             }
             if ('anyOf' in sch) {
+              const isExcluded = (v: typeof jsonSchema) => Object.keys(v).join(',') === 'not'
+              const entries = sch.anyOf!.flatMap(subSchema => {
+                const flattened = flattenedProperties(subSchema as typeof jsonSchema)
+                const excluded = Object.entries(flattened).flatMap(([name, propSchema]) => {
+                  return isExcluded(propSchema) ? [`--${name}`] : []
+                })
+                return Object.entries(flattened).map(([k, v]): [typeof k, typeof v] => {
+                  if (!isExcluded(v) && excluded.length > 0) {
+                    return [k, Object.assign({}, v, {'Do not use with': excluded}) as typeof v]
+                  }
+                  return [k, v]
+                })
+              })
+
               return Object.fromEntries(
-                sch.anyOf!.flatMap(subSchema => {
-                  const flattened = flattenedProperties(subSchema as typeof jsonSchema)
-                  const excluded = Object.entries(flattened).flatMap(([name, propSchema]) => {
-                    return Object.keys(propSchema || {}).join(',') === 'not' ? [`--${name}`] : []
-                  })
-                  return Object.entries(flattened)
-                    .filter(([k]) => !excluded.includes(`--${k}`))
-                    .map(([k, v]) => {
-                      return [k, {...v, 'Do not use with': excluded}]
-                    })
+                entries.sort((a, b) => {
+                  const scores = [a, b].map(([_k, v]) => (isExcluded(v) ? 0 : 1)) // Put the excluded ones first, so that `Object.fromEntries` will override them with the non-excluded ones (`Object.fromEntries([['a', 1], ['a', 2]])` => `{a: 2}`)
+                  return scores[0] - scores[1]
                 }),
               )
             }
@@ -98,13 +105,15 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
 
           const flags = Object.fromEntries(
             Object.entries(properties).map(([propertyKey, propertyValue]) => {
-              const type = 'type' in propertyValue ? propertyValue.type : null
+              const jsonSchemaType =
+                'type' in propertyValue && typeof propertyValue.type === 'string' ? propertyValue.type : null
               let cliType
-              switch (type) {
+              switch (jsonSchemaType) {
                 case 'string': {
                   cliType = String
                   break
                 }
+                case 'integer':
                 case 'number': {
                   cliType = Number
                   break
@@ -122,6 +131,7 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
                   break
                 }
                 default: {
+                  jsonSchemaType satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
                   cliType = (x: unknown) => x
                   break
                 }

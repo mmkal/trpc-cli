@@ -22,9 +22,9 @@ test('cli help', async () => {
   expect(output.replaceAll(/(commands:|flags:)/gi, s => s[0].toUpperCase() + s.slice(1).toLowerCase()))
     .toMatchInlineSnapshot(`
       "Commands:
-        add             
+        add             Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
         subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
-        multiply        
+        multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
         divide          Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
 
       Flags:
@@ -39,13 +39,15 @@ test('cli help add', async () => {
   expect(output).toMatchInlineSnapshot(`
     "add
 
+    Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+
     Usage:
       add [flags...]
 
     Flags:
       -h, --help                  Show help
-          --left <number>         
-          --right <number>        
+          --left <number>         The first number
+          --right <number>        The second number
     "
   `)
 })
@@ -83,13 +85,15 @@ test('cli add failure', async () => {
       - Expected number, received nan at "--right"
     add
 
+    Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+
     Usage:
       add [flags...]
 
     Flags:
       -h, --help                  Show help
-          --left <number>         
-          --right <number>        
+          --left <number>         The first number
+          --right <number>        The second number
     "
   `)
 })
@@ -146,8 +150,8 @@ test('migrations union type', async () => {
     "[
       'one: executed',
       'two: executed',
-      'three: pending',
-      'four: pending',
+      'three: executed',
+      'four: executed',
       'five: pending'
     ]"
   `)
