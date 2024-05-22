@@ -9,7 +9,7 @@
   "scripts": {
     "lint": "eslint .",
     "build": "tsc -p tsconfig.lib.json",
-    "test": "vitest run"
+    "test": "vitest run 2>&1 | tee -a vitest.log"
   },
   "repository": {
     "type": "git",
@@ -40,7 +40,11 @@
     "@trpc/server": "10.45.2",
     "@types/node": "20.12.12",
     "eslint-plugin-mmkal": "0.7.0",
+    "execa": "9.1.0",
+    "fs-syncer": "0.5.3",
     "np": "10.0.5",
+    "strip-ansi": "7.1.0",
+    "tsx": "4.10.5",
     "typescript": "5.4.5",
     "vitest": "1.6.0",
     "zod": "3.23.8"

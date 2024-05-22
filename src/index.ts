@@ -11,7 +11,22 @@ import * as zodValidationError from 'zod-validation-error'
 export type TrpcCliParams<R extends Router<any>> = {
   router: R
   context?: inferRouterContext<R>
-  alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string
+  alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined
+}
+
+/**
+ * Optional interface for describing procedures via meta - if your router conforms to this meta shape, it will contribute to the CLI help text.
+ * Based on @see `import('cleye').HelpOptions`
+ */
+export interface TrpcCliMeta {
+  /** Version of the script displayed in `--help` output. Use to avoid enabling `--version` flag. */
+  version?: string
+  /** Description of the script or command to display in `--help` output. */
+  description?: string
+  /** Usage code examples to display in `--help` output. */
+  usage?: false | string | string[]
+  /** Example code snippets to display in `--help` output. */
+  examples?: string | string[]
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -194,8 +209,9 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
 
     try {
       const {help, ...flags} = parsedArgv.flags
+      const procedureType = appRouter._def.procedures[command]._def.mutation ? 'mutation' : 'query'
       // @ts-expect-error cleye types are dynamic
-      const result = (await caller[parsedArgv.command](flags)) as unknown
+      const result = (await caller[procedureType](parsedArgv.command, flags)) as unknown
       if (result) logger.info?.(result)
       prcs.exit(0)
     } catch (err) {
