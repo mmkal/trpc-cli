@@ -90,7 +90,7 @@ Procedures can define [`meta`](https://trpc.io/docs/server/metadata#create-route
 const appRouter = trpc.router({
   divide: trpc.procedure
     .meta({
-      descript:
+      description:
         'Divide two numbers. Useful when you have a pizza and you want to share it equally between friends.',
     })
     .input(
