@@ -3,11 +3,6 @@ import {expect, test, vi} from 'vitest'
 import {z} from 'zod'
 import {trpcCli} from '../src'
 
-expect.addSnapshotSerializer({
-  test: val => vi.isMockFunction(val),
-  print: val => JSON.stringify((val as any).mock.calls, null, 2).replaceAll(process.cwd(), '[cwd]'),
-})
-
 const trpc = trpcServer.initTRPC.create()
 
 const sumRouter = trpc.router({
@@ -27,6 +22,20 @@ const sumRouter = trpc.router({
       }),
     )
     .query(({input}) => input.left / input.right),
+})
+
+expect.addSnapshotSerializer({
+  test: val => vi.isMockFunction(val),
+  print: val => JSON.stringify((val as any).mock.calls, null, 2).replaceAll(process.cwd(), '[cwd]'),
+})
+
+test.skip('help', async () => {
+  const {run} = trpcCli({router: sumRouter})
+
+  Object.assign(process, {exit: vi.fn()})
+
+  await run({argv: ['--help']})
+  await run({argv: ['divide', '--help']})
 })
 
 test('run', async () => {
