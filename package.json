@@ -1,6 +1,6 @@
 {
   "name": "trpc-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Strongly-typed CLI commands, using tRPC",
   "main": "dist/index.js",
   "files": [
