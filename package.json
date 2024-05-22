@@ -1,11 +1,16 @@
 {
   "name": "trpc-cli",
   "version": "0.1.2",
-  "description": "Strongly-typed CLI commands, using tRPC",
+  "description": "Turn a tRPC router into a type-safe, fully-functional, documented CLI",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@8.10.2",
   "scripts": {
     "prepare": "pnpm build",
     "lint": "eslint .",
