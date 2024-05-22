@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "description": "Strongly-typed CLI commands, using tRPC",
   "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "lint": "eslint .",
     "build": "tsc -p tsconfig.lib.json",
@@ -38,6 +41,7 @@
     "@types/node": "20.12.12",
     "eslint-plugin-mmkal": "0.7.0",
     "np": "10.0.5",
+    "typescript": "5.4.5",
     "vitest": "1.6.0",
     "zod": "3.23.8"
   }
