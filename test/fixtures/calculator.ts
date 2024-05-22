@@ -3,12 +3,17 @@ import {z} from 'zod'
 import {TrpcCliMeta, trpcCli} from '../../src'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
-const sumRouter = trpc.router({
+
+const router = trpc.router({
   add: trpc.procedure
+    .meta({
+      description:
+        'Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.',
+    })
     .input(
       z.object({
-        left: z.number(),
-        right: z.number(),
+        left: z.number().describe('The first number'),
+        right: z.number().describe('The second number'),
       }),
     )
     .query(({input}) => input.left + input.right),
@@ -18,16 +23,20 @@ const sumRouter = trpc.router({
     })
     .input(
       z.object({
-        left: z.number(),
-        right: z.number(),
+        left: z.number().describe('The first number'),
+        right: z.number().describe('The second number'),
       }),
     )
     .query(({input}) => input.left - input.right),
   multiply: trpc.procedure
+    .meta({
+      description:
+        'Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.',
+    })
     .input(
       z.object({
-        left: z.number(),
-        right: z.number(),
+        left: z.number().describe('The first number'),
+        right: z.number().describe('The second number'),
       }),
     )
     .query(({input}) => input.left * input.right),
@@ -50,4 +59,4 @@ const sumRouter = trpc.router({
     .mutation(({input}) => input.left / input.right),
 })
 
-void trpcCli({router: sumRouter}).run()
+void trpcCli({router: router}).run()

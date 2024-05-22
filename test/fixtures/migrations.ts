@@ -19,6 +19,7 @@ const searchProcedure = trpc.procedure
       },
     })
   })
+
 const router = trpc.router({
   apply: trpc.procedure
     .meta({description: 'Apply migrations. By default all pending migrations will be applied.'})
@@ -30,20 +31,17 @@ const router = trpc.router({
         }),
         z.object({
           to: z.never().optional(),
-          step: z.number().describe('Mark this many migrations as executed'),
+          step: z.number().int().positive().describe('Mark this many migrations as executed'),
         }),
       ]),
     )
     .query(async ({input}) => {
       let toBeApplied = migrations
-      if ('to' in input && typeof input.to === 'string') {
+      if (typeof input.to === 'string') {
         const index = migrations.findIndex(m => m.name === input.to)
-        if (index === -1) {
-          throw new Error(`Migration ${input.to} not found`)
-        }
         toBeApplied = migrations.slice(0, index + 1)
       }
-      if ('step' in input) {
+      if (typeof input.step === 'number') {
         const start = migrations.findIndex(m => m.status === 'pending')
         toBeApplied = migrations.slice(0, start + input.step)
       }
@@ -90,6 +88,7 @@ const cli = trpcCli({
     return undefined
   },
 })
+
 void cli.run()
 
 function getMigrations() {

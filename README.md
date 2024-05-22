@@ -5,13 +5,14 @@ Turn a [trpc](https://trpc.io) router into a type-safe, fully-functional, docume
 <!-- codegen:start {preset: markdownTOC} -->
 - [Installation](#installation)
 - [Usage](#usage)
-- [Features](#features)
-   - [Improving help docs](#improving-help-docs)
-   - [Other Features and Limitations](#other-features-and-limitations)
+- [Features and Limitations](#features-and-limitations)
 - [Examples](#examples)
    - [Migrator](#migrator)
+- [Programmatic usage](#programmatic-usage)
 - [Out of scope](#out-of-scope)
-- [Implementation](#implementation)
+- [Contributing](#contributing)
+   - [Implementation and dependencies](#implementation-and-dependencies)
+   - [Testing](#testing)
 <!-- codegen:end -->
 
 ## Installation
@@ -56,37 +57,51 @@ cli.run()
 
 Then run `node router.js --help` and you will see formatted help text for the `sum` and `divide` commands.
 
+<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator --help'} -->
+`node path/to/calculator --help` output:
+
 ```
 Commands:
-  sum           
-  divide        
+  add             Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+  subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
+  multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
+  divide          Divide two numbers. Useful if you have a number and you want to make it smaller and `subtract` isn't quite powerful enough for you.
 
 Flags:
       --full-errors        Throw unedited raw errors rather than summarising to make more human-readable.
   -h, --help               Show help
-```
-
-Running `node router.js sum --help` and `node router.js divide --help` will show help text for the corresponding procedures:
 
 ```
-sum
+<!-- codegen:end -->
+
+You can also show help text for the corresponding procedures (which become "commands" in the CLI):
+
+<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add --help'} -->
+`node path/to/calculator add --help` output:
+
+```
+add
+
+Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
 
 Usage:
-  sum [flags...]
+  add [flags...]
 
 Flags:
   -h, --help                  Show help
-      --left <number>         
-      --right <number>
+      --left <number>         The first number
+      --right <number>        The second number
+
 ```
+<!-- codegen:end -->
 
-## Features
-
-### Improving help docs
-
-Procedures can define [`meta`](https://trpc.io/docs/server/metadata#create-router-with-typed-metadata) value with `description`, `usage` and `help` props. Zod's [`describe`](https://zod.dev/?id=describe) method allows adding descriptions to individual flags.
+Note that procedures can define [`meta`](https://trpc.io/docs/server/metadata#create-router-with-typed-metadata) value with `description`, `usage` and `help` props. Zod's [`describe`](https://zod.dev/?id=describe) method allows adding descriptions to individual flags.
 
 ```ts
+import {type TrpcCliMeta} from 'trpc-cli'
+
+const trpc = initTRPC.meta<TrpcCliMeta>().create() // `TrpcCliMeta` is a helper interface with description, usage, and examples, but you can use your own `meta` interface, anything with a `description?: string` property will be fine
+
 const appRouter = trpc.router({
   divide: trpc.procedure
     .meta({
@@ -103,7 +118,7 @@ const appRouter = trpc.router({
 })
 ```
 
-### Other Features and Limitations
+## Features and Limitations
 
 - Nested subrouters ([example](./test/fixtures//migrations.ts)) - command will be dot separated e.g. `search.byId`
 - Middleware, `ctx`, multi-inputs work as normal
@@ -128,7 +143,7 @@ const appRouter = trpc.router({
 Given a migrator looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:c26d18de2d10e0b237b521dcb7045529 -->
+<!-- hash:3ea2e96cb52cb641cc4c47c300d15dbe -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {TrpcCliMeta, trpcCli} from 'trpc-cli'
@@ -155,6 +170,7 @@ const searchProcedure = trpc.procedure
       },
     })
   })
+
 const router = trpc.router({
   apply: trpc.procedure
     .meta({
@@ -172,20 +188,21 @@ const router = trpc.router({
         }),
         z.object({
           to: z.never().optional(),
-          step: z.number().describe('Mark this many migrations as executed'),
+          step: z
+            .number()
+            .int()
+            .positive()
+            .describe('Mark this many migrations as executed'),
         }),
       ]),
     )
     .query(async ({input}) => {
       let toBeApplied = migrations
-      if ('to' in input && typeof input.to === 'string') {
+      if (typeof input.to === 'string') {
         const index = migrations.findIndex(m => m.name === input.to)
-        if (index === -1) {
-          throw new Error(`Migration ${input.to} not found`)
-        }
         toBeApplied = migrations.slice(0, index + 1)
       }
-      if ('step' in input) {
+      if (typeof input.step === 'number') {
         const start = migrations.findIndex(m => m.status === 'pending')
         toBeApplied = migrations.slice(0, start + input.step)
       }
@@ -242,6 +259,7 @@ const cli = trpcCli({
     return undefined
   },
 })
+
 void cli.run()
 
 function getMigrations() {
@@ -304,9 +322,9 @@ Usage:
   apply [flags...]
 
 Flags:
-  -h, --help                 Show help
-      --step <number>        Mark this many migrations as executed; Do not use with: --to
-      --to <string>          Mark migrations up to this one as exectued; Do not use with: --step
+  -h, --help                Show help
+      --step <value>        Mark this many migrations as executed; exclusiveMinimum: 0; Do not use with: --to
+      --to <string>         Mark migrations up to this one as exectued; Do not use with: --step
 
 ```
 <!-- codegen:end -->
@@ -330,13 +348,51 @@ Flags:
 ```
 <!-- codegen:end -->
 
+## Programmatic usage
+
+This library should probably _not_ be used programmatically - the functionality all comes from a trpc router, which has [many other ways to be invoked](https://trpc.io/docs/community/awesome-trpc). But if you really need to for some reason, you could override the `console.error` and `process.exit` calls:
+
+```ts
+import {trpcCli} from 'trpc-cli'
+
+const cli = trpcCli({router: yourAppRouter})
+
+const runCli = async (argv: string[]) => {
+  return new Promise<void>((resolve, reject) => {
+    cli.run({
+      argv,
+      logger: yourLogger, // needs `info` and `error` methods, at least
+      process: {
+        exit: code => {
+          if (code === 0) {
+            resolve()
+          } else {
+            reject(`CLI failed with exit code ${code}`)
+          }
+        },
+      },
+    })
+  })
+}
+```
+
+Note that even if you do this, help text may get writted directly to stdout by `cleye`. If that's a problem, [raise an issue](https://github.com/mmkal/trpc-cli/issues) - it could be solved by exposing some `cleye` configuration to the `run` method.
+
 ## Out of scope
 
-- No input parsing - I'd recommend using [`@inquirer/prompts`](https://npmjs.com/package/@inquirer/prompts) which is type safe and easy to use
-- No special stdout prettiness other than help text - use [`tasuku`](https://npmjs.com/package/tasuku) or [`listr2`](https://npmjs.com/package/listr2)
+- No stdin reading - I'd recommend using [`@inquirer/prompts`](https://npmjs.com/package/@inquirer/prompts) which is type safe and easy to use
+- No stdout prettiness other than help text - use [`tasuku`](https://npmjs.com/package/tasuku) or [`listr2`](https://npmjs.com/package/listr2)
 
-## Implementation
+## Contributing
+
+### Implementation and dependencies
 
 - [cleye](https://npmjs.com/package/cleye) for parsing arguments before passing to trpc
-- [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod schemas to make them easier to recusive
+- [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod schemas to make them easier to recurse and format help text from
 - [zod-validation-error](https://npmjs.com/package/zod-validation-error) to make bad inputs have readable error messages
+
+`zod` and `@tprc/server` are peer dependencies - right now only zod 3 and @trpc/server v11 have been tested, but it may work with most versions of zod, and @trpc/server >= 10.
+
+### Testing
+
+[`vitest`](https://npmjs.com/package/vitest) is used for testing, but the tests consists of the example fixtures from this readme, executed as CLIs via a subprocess. Avoiding mocks this way ensures fully realistic outputs (the tradeoff being test-speed, but they're acceptably fast for now).
