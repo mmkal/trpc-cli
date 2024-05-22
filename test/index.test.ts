@@ -1,82 +1,59 @@
-import {cliAdapter} from '../src'
-import * as trpc from '@trpc/server'
+import * as trpcServer from '@trpc/server'
+import {expect, test, vi} from 'vitest'
 import {z} from 'zod'
+import {trpcCli} from '../src'
 
 expect.addSnapshotSerializer({
-  test: val => jest.isMockFunction(val),
-  print: val =>
-    JSON.stringify((val as jest.Mock).mock.calls, null, 2)
-      .split(process.cwd())
-      .join('[cwd]'),
+  test: val => vi.isMockFunction(val),
+  print: val => JSON.stringify((val as any).mock.calls, null, 2).replaceAll(process.cwd(), '[cwd]'),
 })
 
-const sumRouter = trpc
-  .router()
-  .mutation('sum', {
-    input: z.object({
-      left: z.number(),
-      right: z.number(),
-    }),
-    resolve: ({input}) => input.left + input.right,
-  })
-  .query('divide', {
-    input: z.object({left: z.number(), right: z.number().refine(n => n !== 0)}),
-    resolve: ({input}) => input.left / input.right,
-  })
+const trpc = trpcServer.initTRPC.create()
+
+const sumRouter = trpc.router({
+  sum: trpc.procedure
+    .input(
+      z.object({
+        left: z.number(),
+        right: z.number(),
+      }),
+    )
+    .mutation(({input}) => input.left + input.right),
+  divide: trpc.procedure
+    .input(
+      z.object({
+        left: z.number(),
+        right: z.number().refine(n => n !== 0),
+      }),
+    )
+    .query(({input}) => input.left / input.right),
+})
 
 test('run', async () => {
-  const {run} = cliAdapter({router: sumRouter})
+  const {run} = trpcCli({router: sumRouter})
 
-  expect(await run(['sum', '--left', '1.4', '--right', '4'])).toEqual(5.4)
-  expect(await run(['divide', '--left', '8', '--right', '4'])).toEqual(2)
+  expect(await run({argv: ['sum', '--left', '1.4', '--right', '4']})).toEqual(5.4)
+  expect(await run({argv: ['divide', '--left', '8', '--right', '4']})).toEqual(2)
 })
 
 test('cli success', async () => {
-  const {cli} = cliAdapter({router: sumRouter})
+  const {run} = trpcCli({router: sumRouter})
 
-  const succeed = jest.fn()
-  await cli({
-    argv: ['node', 'script.js', 'sum', '--left', '1', '--right', '2'],
-    succeed,
-  })
-  expect(succeed.mock.calls).toMatchObject([[3]])
+  const result = await run({argv: ['sum', '--left', '1', '--right', '2']})
+  expect(result).toMatchObject(3)
 })
 
 test('cli failure', async () => {
-  const {cli} = cliAdapter({router: sumRouter})
+  const {run} = trpcCli({router: sumRouter})
 
-  const succeed = jest.fn()
-  const fail = jest.fn()
-  await cli({
-    argv: ['node', 'script.js', 'sum', '--left', '1', '--right', 'notanumber'],
-    succeed,
-    fail,
+  const fail = vi.fn()
+  await run({
+    argv: ['sum', '--left', '1', '--right', 'notanumber'],
+    console: {error: fail},
+    process: {exit: vi.fn()},
   })
-  expect({succeed, fail}).toMatchInlineSnapshot(`
-    Object {
-      "fail": [
-      [
-        {
-          "originalError": {
-            "issues": [
-              {
-                "code": "invalid_type",
-                "expected": "number",
-                "received": "string",
-                "path": [
-                  "right"
-                ],
-                "message": "Expected number, received string"
-              }
-            ],
-            "name": "ZodError"
-          },
-          "code": "BAD_REQUEST",
-          "name": "TRPCError"
-        }
-      ]
-    ],
-      "succeed": [],
-    }
+  expect(fail.mock.calls[0][0]).toMatchInlineSnapshot(`
+    "[31mValidation error
+      - Expected number, received nan at "--right"[39m"
   `)
 })

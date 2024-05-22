@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+        "target": "es5",
+        "module": "commonjs",
+        "lib": ["ES2022"],
+        "esModuleInterop": true,
+        "strict": true,
+        "noEmit": true,
+        "skipLibCheck": true
+    },
+    "include": ["test/*.ts"]
+}

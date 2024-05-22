@@ -1,100 +1,232 @@
-import {z} from 'zod'
-import * as trpc from '@trpc/server'
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+import {Procedure, Router, TRPCError, inferRouterContext, initTRPC} from '@trpc/server'
+import * as cleye from 'cleye'
+import colors from 'picocolors'
+import {ZodError, z} from 'zod'
+import ztjs from 'zod-to-json-schema'
+import * as zodValidationError from 'zod-validation-error'
 
-export interface CliAdapterParams {
-  router: trpc.AnyRouter
+export type TrpcCliParams<R extends Router<any>> = {
+  router: R
+  context?: inferRouterContext<R>
+  alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string
 }
-export interface ProcessLike {
-  argv: string[]
-  exit: <T, U>(code: number, result?: T) => U
-  stdout: {
-    write: (msg: string) => void
-  }
-  stderr: {
-    write: (msg: string) => void
-  }
-}
-const defaultCliConfig = {
-  argv: process.argv,
-  succeed: (value: unknown): any => {
-    console.log(`Success:`, {value})
-    process.exit(0)
-  },
-  fail: (error: unknown): any => {
-    console.log('Failure:', {error})
-    process.exit(1)
-  }
-}
-export const cliAdapter = ({router}) => {
-  const run = ([path, ...argv]: string[]) => {
-    const type = path in router._def.queries ? 'query' : 'mutation'
-    const def: undefined | {inputParser: unknown} = router._def[type === 'query' ? 'queries' : 'mutations'][path]
-    if (!def) {
-      const defs = {...router._def.queries, ...router._def.mutations}
-      throw new Error(`Procedure ${path} not found. (Paths detected: ${Object.keys(defs).join(', ')})`)
-    }
-    const inputParser = def.inputParser || z.object({})
-    if (!(inputParser instanceof z.ZodObject)) {
-      throw new Error(`Only zod object input parsers are supported currently`)
-    }
-    const val = Object.fromEntries(
-      Object.entries(inputParser.shape)
-        .map(([k, v]) => {
-          return [k, coerce(v as z.ZodType, parseValues(argv, `--${k}`))]
-        })
-        .filter(e => typeof e[1] !== 'undefined'),
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const trpcCli = <R extends Router<any>>({router: appRouter, context, alias}: TrpcCliParams<R>) => {
+  async function run(props?: {
+    argv?: string[]
+    console?: {error: (message: string) => void}
+    process?: {exit: (code: number) => never}
+  }) {
+    const parsedArgv = cleye.cli(
+      {
+        flags: {
+          fullErrors: {
+            type: Boolean,
+            description: `Throw unedited raw errors rather than summarising to make more human-readable.`,
+            default: false,
+          },
+        },
+        commands: Object.entries(appRouter._def.procedures).map(([commandName, _value]) => {
+          const value = _value as Procedure<any, any>
+          value._def.inputs.forEach((input: unknown) => {
+            if (!(input instanceof z.ZodType)) {
+              throw new TypeError(`Only zod schemas are supported, got ${input?.constructor.name}`)
+            }
+          })
+          const zodSchema: z.ZodType<any> =
+            value._def.inputs.length === 1
+              ? (value._def.inputs[0] as never)
+              : (z.intersection(...(value._def.inputs as [never, never])) as never)
+
+          const jsonSchema = value._def.inputs.length > 0 ? ztjs(zodSchema) : {} // todo: inspect zod schema directly, don't convert to json-schema first
+
+          const objectProperties = (sch: typeof jsonSchema) => ('properties' in sch ? sch.properties : {})
+
+          const flattenedProperties = (sch: typeof jsonSchema): ReturnType<typeof objectProperties> => {
+            if ('properties' in sch) {
+              return sch.properties
+            }
+            if ('allOf' in sch) {
+              return Object.fromEntries(
+                sch.allOf!.flatMap(subSchema => Object.entries(flattenedProperties(subSchema as typeof jsonSchema))),
+              )
+            }
+            if ('anyOf' in sch) {
+              return Object.fromEntries(
+                sch.anyOf!.flatMap(subSchema => Object.entries(flattenedProperties(subSchema as typeof jsonSchema))),
+              )
+            }
+            return {}
+          }
+
+          const properties = flattenedProperties(jsonSchema)
+
+          if (Object.entries(properties).length === 0) {
+            //   throw new TypeError(`Schemas looking like ${Object.keys(jsonSchema).join(', ')} are not supported`)
+          }
+
+          const flags = Object.fromEntries(
+            Object.entries(properties).map(([propertyKey, propertyValue]) => {
+              const type = 'type' in propertyValue ? propertyValue.type : null
+              let cliType
+              switch (type) {
+                case 'string': {
+                  cliType = String
+                  break
+                }
+                case 'number': {
+                  cliType = Number
+                  break
+                }
+                case 'boolean': {
+                  cliType = Boolean
+                  break
+                }
+                case 'array': {
+                  cliType = [String]
+                  break
+                }
+                case 'object': {
+                  cliType = (s: string) => JSON.parse(s) as {}
+                  break
+                }
+                default: {
+                  cliType = (x: unknown) => x
+                  break
+                }
+              }
+
+              const getDescription = (v: typeof propertyValue): string => {
+                if ('items' in v) {
+                  return [getDescription(v.items as typeof propertyValue), '(list)'].filter(Boolean).join(' ')
+                }
+                return (
+                  Object.entries(v)
+                    .filter(([k, vv]) => {
+                      if (k === 'default' || k === 'additionalProperties') return false
+                      if (k === 'type' && typeof vv === 'string') return false
+                      return true
+                    })
+                    .sort(([a], [b]) => {
+                      const scores = [a, b].map(k => (k === 'description' ? 0 : 1))
+                      return scores[0] - scores[1]
+                    })
+                    .map(([k, vv], i) => {
+                      if (k === 'description' && i === 0) return String(vv)
+                      if (k === 'properties') return `Object (json formatted)`
+                      return `${k}: ${vv}`
+                    })
+                    .join('; ') || ''
+                )
+              }
+
+              let description: string | undefined = getDescription(propertyValue)
+              if ('required' in jsonSchema && !jsonSchema.required?.includes(propertyKey)) {
+                description = `${description} (optional)`.trim()
+              }
+              description ||= undefined
+
+              return [
+                propertyKey,
+                {
+                  type: cliType,
+                  description,
+                  default: propertyValue.default,
+                },
+              ]
+            }),
+          )
+
+          Object.entries(flags).forEach(([fullName, flag]) => {
+            const a = alias?.(fullName, {command: commandName, flags})
+            if (a) {
+              Object.assign(flag, {alias: a})
+            }
+          })
+
+          return cleye.command({
+            name: commandName,
+            help: value.meta,
+            flags: flags as {},
+          })
+        }) as cleye.Command[],
+      },
+      undefined,
+      props?.argv,
     )
-    return trpc.callProcedure({
-      ctx: {},
-      router: router,
-      input: val,
-      path,
-      type,
-    })
-  }
-  const cli = async (config?: Partial<typeof defaultCliConfig>) => {
-    const resolvedConfig = {...defaultCliConfig, ...config}
+
+    let {fullErrors, ...unknownFlags} = parsedArgv.unknownFlags
+    fullErrors ||= parsedArgv.flags.fullErrors
+
+    const caller = initTRPC.context<NonNullable<typeof context>>().create({}).createCallerFactory(appRouter)(context)
+
+    const die = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
+      if (fullErrors) {
+        throw (cause as Error) || new Error(message)
+      }
+      const cnsl = props?.console || console
+      cnsl.error(colors.red(message))
+      if (help) {
+        parsedArgv.showHelp()
+      }
+      const prcs = props?.process || process
+      return prcs.exit(1)
+    }
+
+    const command = parsedArgv.command as keyof typeof caller
+
+    if (!command && parsedArgv._.length === 0) {
+      return die('No command provided.')
+    }
+
+    if (!command) {
+      return die(`Command "${parsedArgv._.join(' ')}" not recognised.`)
+    }
+
+    if (Object.entries(unknownFlags).length > 0) {
+      const s = Object.entries(unknownFlags).length === 1 ? '' : 's'
+      return die(`Unexpected flag${s}: ${Object.keys(parsedArgv.unknownFlags).join(', ')}`)
+    }
+
     try {
-      const result = await run(resolvedConfig.argv.slice(2))
-      return resolvedConfig.succeed(result)
-    } catch (error) {
-      return resolvedConfig.fail(error)
+      const {help, ...flags} = parsedArgv.flags
+      // @ts-expect-error cleye types are dynamic
+      return (await caller[parsedArgv.command](flags)) as unknown
+    } catch (err) {
+      if (err instanceof TRPCError) {
+        const cause = err.cause
+        if (cause instanceof ZodError) {
+          const originalIssues = cause.issues
+          try {
+            cause.issues = cause.issues.map(issue => ({
+              ...issue,
+              path: ['--' + issue.path[0], ...issue.path.slice(1)],
+            }))
+
+            const prettyError = zodValidationError.fromError(cause, {
+              prefixSeparator: '\n  - ',
+              issueSeparator: '\n  - ',
+            })
+
+            return die(prettyError.message, {cause, help: true})
+          } finally {
+            cause.issues = originalIssues
+          }
+        }
+        if (err.code === 'INTERNAL_SERVER_ERROR') {
+          throw cause
+        }
+        if (err.code === 'BAD_REQUEST') {
+          return die(err.message, {cause: err})
+        }
+      }
+      throw err
     }
   }
-  return {run, cli}
-}
 
-const parseValues = (argv: string[], argName: string) => {
-  const positions = argv
-    .flatMap(a => a.split('=')) // e.g. --foo=bar -> --foo bar
-    .flatMap((a, i) => (a === argName ? [i] : []))
-  return positions.map(i => argv[i + 1])
-}
-
-const coerce = (type: z.ZodType, values: string[]) => {
-  if (type instanceof z.ZodEffects) {
-    return coerce(type._def.schema, values)
-  }
-  if (type instanceof z.ZodArray) {
-    return values.map(v => coerce(type._def.type, [v]))
-  }
-  if (values.length > 1) {
-    throw new Error(`Expected no more than 1 value, got ${values.length}`)
-  }
-
-  const [val] = values[0]
-  if (type instanceof z.ZodObject) {
-    return coerce(type, JSON.parse(val))
-  }
-  if (type instanceof z.ZodBoolean) {
-    return values.length > 0 && !['0', 'false', 'f'].includes(val.toLowerCase())
-  }
-  if (values.length === 0) {
-    return undefined
-  }
-  if (type instanceof z.ZodNumber) {
-    const num = Number(values[0])
-    return Number.isNaN(num) ? val : num
-  }
-  return values[0]
+  return {run}
 }
