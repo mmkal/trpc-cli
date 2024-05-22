@@ -18,9 +18,11 @@ export type TrpcCliParams<R extends Router<any>> = {
 export const trpcCli = <R extends Router<any>>({router: appRouter, context, alias}: TrpcCliParams<R>) => {
   async function run(props?: {
     argv?: string[]
-    console?: {error: (message: string) => void}
+    logger?: {info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void}
     process?: {exit: (code: number) => never}
   }) {
+    const logger = {...console, ...props?.logger}
+    const prcs = props?.process || process
     const parsedArgv = cleye.cli(
       {
         flags: {
@@ -168,12 +170,10 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
       if (fullErrors) {
         throw (cause as Error) || new Error(message)
       }
-      const cnsl = props?.console || console
-      cnsl.error(colors.red(message))
+      logger.error?.(colors.red(message))
       if (help) {
         parsedArgv.showHelp()
       }
-      const prcs = props?.process || process
       return prcs.exit(1)
     }
 
@@ -195,7 +195,9 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
     try {
       const {help, ...flags} = parsedArgv.flags
       // @ts-expect-error cleye types are dynamic
-      return (await caller[parsedArgv.command](flags)) as unknown
+      const result = (await caller[parsedArgv.command](flags)) as unknown
+      if (result) logger.info?.(result)
+      prcs.exit(0)
     } catch (err) {
       if (err instanceof TRPCError) {
         const cause = err.cause

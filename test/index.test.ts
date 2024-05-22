@@ -5,6 +5,8 @@ import {trpcCli} from '../src'
 
 const trpc = trpcServer.initTRPC.create()
 
+process.exit = code => code as never
+
 const sumRouter = trpc.router({
   sum: trpc.procedure
     .input(
@@ -58,7 +60,7 @@ test('cli failure', async () => {
   const fail = vi.fn()
   await run({
     argv: ['sum', '--left', '1', '--right', 'notanumber'],
-    console: {error: fail},
+    logger: {...console, error: fail},
     process: {exit: vi.fn()},
   })
   expect(fail.mock.calls[0][0]).toMatchInlineSnapshot(`
