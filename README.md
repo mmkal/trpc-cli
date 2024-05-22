@@ -500,7 +500,7 @@ Note that even if you do this, help text may get writted directly to stdout by `
 - [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod schemas to make them easier to recurse and format help text from
 - [zod-validation-error](https://npmjs.com/package/zod-validation-error) to make bad inputs have readable error messages
 
-`zod` and `@tprc/server` are peer dependencies - right now only zod 3 and @trpc/server v11 have been tested, but it may work with most versions of zod, and @trpc/server >= 10.
+`zod` and `@tprc/server` are peer dependencies - right now only zod 3+ and @trpc/server 10+ have been tested, but it may work with most versions of zod.
 
 ### Testing
 

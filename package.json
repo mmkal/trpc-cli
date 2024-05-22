@@ -33,7 +33,7 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
-    "@trpc/server": ">=11",
+    "@trpc/server": ">=10",
     "zod": ">=3"
   },
   "dependencies": {
