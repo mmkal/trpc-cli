@@ -9,7 +9,7 @@
   "scripts": {
     "lint": "eslint .",
     "build": "tsc -p tsconfig.lib.json",
-    "test": "vitest run 2>&1 | tee -a vitest.log"
+    "test": "vitest run"
   },
   "repository": {
     "type": "git",

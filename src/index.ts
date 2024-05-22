@@ -74,7 +74,17 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
             }
             if ('anyOf' in sch) {
               return Object.fromEntries(
-                sch.anyOf!.flatMap(subSchema => Object.entries(flattenedProperties(subSchema as typeof jsonSchema))),
+                sch.anyOf!.flatMap(subSchema => {
+                  const flattened = flattenedProperties(subSchema as typeof jsonSchema)
+                  const excluded = Object.entries(flattened).flatMap(([name, propSchema]) => {
+                    return Object.keys(propSchema || {}).join(',') === 'not' ? [`--${name}`] : []
+                  })
+                  return Object.entries(flattened)
+                    .filter(([k]) => !excluded.includes(`--${k}`))
+                    .map(([k, v]) => {
+                      return [k, {...v, 'Do not use with': excluded}]
+                    })
+                }),
               )
             }
             return {}

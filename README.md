@@ -105,13 +105,13 @@ const appRouter = trpc.router({
 
 ### Other Features and Limitations
 
-- Union types work
 - Nested subrouters ([example](./test/fixtures//migrations.ts)) - command will be dot separated e.g. `search.byId`
 - Middleware, `ctx`, multi-inputs work as normal
 - Return values are logged using `console.info` (can be configured to pass in a custom logger)
 - `process.exit(...)` called with either 0 or 1 depending on successful resolve
 - Help text shown on invalid inputs
 - Support flag aliases via `alias` callback (see migrations example below)
+- Union types work, but they should ideally be non-overlapping for best results
 - Limitation: Only zod types are supported right now
 - Limitaion: Onlly object types are allowed as input. No positional arguments supported
    - If there's interest, this could be added in future for inputs of type `z.string()` or `z.tuple([z.string(), ...])`
@@ -275,7 +275,7 @@ function getMigrations() {
 Here's how the CLI will work:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/migrations --help'} -->
-`node path/to//migrations --help` output:
+`node path/to/migrations --help` output:
 
 ```
 Commands:
@@ -293,7 +293,7 @@ Flags:
 <!-- codegen:end -->
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/migrations apply --help'} -->
-`node path/to//migrations apply --help` output:
+`node path/to/migrations apply --help` output:
 
 ```
 apply
@@ -305,14 +305,14 @@ Usage:
 
 Flags:
   -h, --help                 Show help
-      --step <number>        Mark this many migrations as executed
-      --to <value>           not: [object Object]
+      --step <number>        Mark this many migrations as executed; Do not use with: --to
+      --to <string>          Mark migrations up to this one as exectued; Do not use with: --step
 
 ```
 <!-- codegen:end -->
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/migrations search.byContent --help'} -->
-`node path/to//migrations search.byContent --help` output:
+`node path/to/migrations search.byContent --help` output:
 
 ```
 search.byContent

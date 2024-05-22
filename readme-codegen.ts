@@ -5,7 +5,7 @@ import stripAnsi from 'strip-ansi'
 export const command: import('eslint-plugin-mmkal').CodegenPreset<{command: string}> = ({options}) => {
   const result = execaCommandSync(options.command, {all: true, reject: false})
   return [
-    `\`${options.command.replace(/.* test\/fixtures/, 'node path/to/')}\` output:`,
+    `\`${options.command.replace(/.* test\/fixtures\//, 'node path/to/')}\` output:`,
     '',
     '```',
     stripAnsi(result.all), // includes stderr
