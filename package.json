@@ -7,6 +7,7 @@
     "dist"
   ],
   "scripts": {
+    "prepare": "pnpm build",
     "lint": "eslint .",
     "build": "tsc -p tsconfig.lib.json",
     "test": "vitest run"
