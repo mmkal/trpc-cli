@@ -59,4 +59,4 @@ const router = trpc.router({
     .mutation(({input}) => input.left / input.right),
 })
 
-void trpcCli({router: router}).run()
+void trpcCli({router}).run()

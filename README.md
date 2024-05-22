@@ -5,9 +5,10 @@ Turn a [trpc](https://trpc.io) router into a type-safe, fully-functional, docume
 <!-- codegen:start {preset: markdownTOC} -->
 - [Installation](#installation)
 - [Usage](#usage)
+   - [Calculator example](#calculator-example)
 - [Features and Limitations](#features-and-limitations)
-- [Examples](#examples)
-   - [Migrator](#migrator)
+- [More Examples](#more-examples)
+   - [Migrator example](#migrator-example)
 - [Programmatic usage](#programmatic-usage)
 - [Out of scope](#out-of-scope)
 - [Contributing](#contributing)
@@ -23,39 +24,112 @@ npm install trpc-cli @trpc/server zod
 
 ## Usage
 
+Start by writing a normal tRPC router:
+
 ```ts
-// router.js
-import * as trpcServer from '@trpc/server'
-import {trpcCli} from 'trpc-cli'
+import {initTRPC} from '@trpc/server'
 import {z} from 'zod'
 
-const trpc = trpcServer.initTRPC.create()
+const t = initTRPC.create()
 
-const appRouter = trpc.router({
-  sum: trpc.procedure
-    .input(
-      z.object({
-        left: z.number(),
-        right: z.number(),
-      }),
-    )
-    .mutation(({input}) => input.left + input.right),
-  divide: trpc.procedure
-    .input(
-      z.object({
-        left: z.number(),
-        right: z.number().refine(n => n !== 0),
-      }),
-    )
-    .query(({input}) => input.left / input.right),
+export const router = t.router({
+  add: t.procedure
+    .input(z.object({a: z.number(), b: z.number()}))
+    .query(({input}) => input.a + input.b),
 })
+```
 
-const cli = trpcCli({router: appRouter})
+Then you can turn it into a fully-functional CLI by passing it to `trpcCli`
 
+```ts
+import {trpcCli} from 'trpc-cli'
+import {router} from './router'
+
+const cli = trpcCli({router})
 cli.run()
 ```
 
-Then run `node router.js --help` and you will see formatted help text for the `sum` and `divide` commands.
+And that's it! Your tRPC router is now a CLI program with help text and input validation.
+
+You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
+
+### Calculator example
+
+Here's a more involved example, along with what it outputs:
+
+<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
+<!-- hash:1332520d177c0bcba82272013ea1dd65 -->
+```ts
+import * as trpcServer from '@trpc/server'
+import {TrpcCliMeta, trpcCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
+
+const router = trpc.router({
+  add: trpc.procedure
+    .meta({
+      description:
+        'Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.',
+    })
+    .input(
+      z.object({
+        left: z.number().describe('The first number'),
+        right: z.number().describe('The second number'),
+      }),
+    )
+    .query(({input}) => input.left + input.right),
+  subtract: trpc.procedure
+    .meta({
+      description:
+        'Subtract two numbers. Useful if you have a number and you want to make it smaller.',
+    })
+    .input(
+      z.object({
+        left: z.number().describe('The first number'),
+        right: z.number().describe('The second number'),
+      }),
+    )
+    .query(({input}) => input.left - input.right),
+  multiply: trpc.procedure
+    .meta({
+      description:
+        'Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.',
+    })
+    .input(
+      z.object({
+        left: z.number().describe('The first number'),
+        right: z.number().describe('The second number'),
+      }),
+    )
+    .query(({input}) => input.left * input.right),
+  divide: trpc.procedure
+    .meta({
+      version: '1.0.0',
+      description:
+        "Divide two numbers. Useful if you have a number and you want to make it smaller and `subtract` isn't quite powerful enough for you.",
+      examples: 'divide --left 8 --right 4',
+    })
+    .input(
+      z.object({
+        left: z.number().describe('The numerator of the division operation.'),
+        right: z
+          .number()
+          .refine(n => n !== 0)
+          .describe(
+            'The denominator of the division operation. Note: must not be zero.',
+          ),
+      }),
+    )
+    .mutation(({input}) => input.left / input.right),
+})
+
+void trpcCli({router}).run()
+```
+<!-- codegen:end -->
+
+
+Then run `node path/to/yourfile.js --help` and you will see formatted help text for the `sum` and `divide` commands.
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator --help'} -->
 `node path/to/calculator --help` output:
@@ -95,6 +169,41 @@ Flags:
 ```
 <!-- codegen:end -->
 
+When passing a command along with its flags, the return value will be logged to stdout:
+
+<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add --left 2 --right 3'} -->
+`node path/to/calculator add --left 2 --right 3` output:
+
+```
+5
+```
+
+<!-- codegen:end -->
+
+Invalid inputs are helpfully displayed, along with help text for the associated command:
+
+<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add --left 2 --right notanumber'} -->
+`node path/to/calculator add --left 2 --right notanumber` output:
+
+```
+add
+
+Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+
+Usage:
+  add [flags...]
+
+Flags:
+  -h, --help                  Show help
+      --left <number>         The first number
+      --right <number>        The second number
+
+Validation error
+  - Expected number, received nan at "--right"
+```
+<!-- codegen:end -->
+
+
 Note that procedures can define [`meta`](https://trpc.io/docs/server/metadata#create-router-with-typed-metadata) value with `description`, `usage` and `help` props. Zod's [`describe`](https://zod.dev/?id=describe) method allows adding descriptions to individual flags.
 
 ```ts
@@ -128,7 +237,7 @@ const appRouter = trpc.router({
 - Support flag aliases via `alias` callback (see migrations example below)
 - Union types work, but they should ideally be non-overlapping for best results
 - Limitation: Only zod types are supported right now
-- Limitaion: Onlly object types are allowed as input. No positional arguments supported
+- Limitation: Onlly object types are allowed as input. No positional arguments supported
    - If there's interest, this could be added in future for inputs of type `z.string()` or `z.tuple([z.string(), ...])`
 - Limitation: Nested-object input props must be passed as json
    - e.g. `z.object({ foo: z.object({ bar: z.number() }) }))` can be supplied via using `--foo '{"bar": 123}'`
@@ -136,11 +245,11 @@ const appRouter = trpc.router({
 - Limitation: No `subscription` support.
    - In theory, this might be supportable via `@inquirer/prompts`. Proposals welcome!
 
-## Examples
+## More Examples
 
-### Migrator
+### Migrator example
 
-Given a migrator looking like this:
+Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
 <!-- hash:3ea2e96cb52cb641cc4c47c300d15dbe -->
