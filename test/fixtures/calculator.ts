@@ -8,7 +8,7 @@ const router = trpc.router({
   add: trpc.procedure
     .meta({
       description:
-        'Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.',
+        'Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.',
     })
     .input(
       z.object({

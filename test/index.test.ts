@@ -3,33 +3,31 @@ import * as path from 'path'
 import stripAnsi from 'strip-ansi'
 import {expect, test} from 'vitest'
 
-const runner = (file: string) => async (args: string[]) => {
-  const {all} = await execa('./node_modules/.bin/tsx', [`test/fixtures/${file}`, ...args], {
+const tsx = (file: string) => async (args: string[]) => {
+  const {all} = await execa('./node_modules/.bin/tsx', [file, ...args], {
     all: true,
     reject: false,
     cwd: path.join(__dirname, '..'),
-  }).catch(e => {
-    throw new Error(`${file} ${args.join(' ')}\n${e}`)
   })
   return stripAnsi(all)
 }
 
-const calculator = runner('calculator.ts')
-const migrator = runner('migrations.ts')
+const calculator = tsx('test/fixtures/calculator.ts')
+const migrator = tsx('test/fixtures/migrations.ts')
 
 test('cli help', async () => {
   const output = await calculator(['--help'])
   expect(output.replaceAll(/(commands:|flags:)/gi, s => s[0].toUpperCase() + s.slice(1).toLowerCase()))
     .toMatchInlineSnapshot(`
       "Commands:
-        add             Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+        add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
         subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
         multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
         divide          Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
 
       Flags:
-            --full-errors        Throw unedited raw errors rather than summarising to make more human-readable.
-        -h, --help               Show help
+        -h, --help                  Show help
+            --verbose-errors        Throw raw errors (by default errors are summarised)
       "
     `)
 })
@@ -39,7 +37,7 @@ test('cli help add', async () => {
   expect(output).toMatchInlineSnapshot(`
     "add
 
-    Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+    Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
     Usage:
       add [flags...]
@@ -85,7 +83,7 @@ test('cli add failure', async () => {
       - Expected number, received nan at "--right"
     add
 
-    Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+    Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
     Usage:
       add [flags...]
@@ -137,8 +135,8 @@ test('migrations help', async () => {
       search.byContent        Look for migrations by their script content
 
     Flags:
-          --full-errors        Throw unedited raw errors rather than summarising to make more human-readable.
-      -h, --help               Show help
+      -h, --help                  Show help
+          --verbose-errors        Throw raw errors (by default errors are summarised)
     "
   `)
 })
@@ -181,7 +179,7 @@ test('migrations search.byName help', async () => {
     Flags:
       -h, --help                   Show help
           --name <string>          
-      -s, --status <string>        Filter to only show migrations with this status; enum: executed,pending
+      -s, --status <string>        Filter to only show migrations with this status; Enum: executed,pending
     "
   `)
 })

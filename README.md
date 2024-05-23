@@ -58,7 +58,7 @@ You can also pass an existing tRPC router that's primarily designed to be deploy
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:1332520d177c0bcba82272013ea1dd65 -->
+<!-- hash:efe19a66f7467160525f69c8ce4daef3 -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {TrpcCliMeta, trpcCli} from 'trpc-cli'
@@ -70,7 +70,7 @@ const router = trpc.router({
   add: trpc.procedure
     .meta({
       description:
-        'Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.',
+        'Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.',
     })
     .input(
       z.object({
@@ -129,21 +129,21 @@ void trpcCli({router}).run()
 <!-- codegen:end -->
 
 
-Then run `node path/to/yourfile.js --help` and you will see formatted help text for the `sum` and `divide` commands.
+Run `node path/to/yourfile.js --help` for formatted help text for the `sum` and `divide` commands.
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator --help'} -->
 `node path/to/calculator --help` output:
 
 ```
 Commands:
-  add             Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+  add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
   subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
   multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
   divide          Divide two numbers. Useful if you have a number and you want to make it smaller and `subtract` isn't quite powerful enough for you.
 
 Flags:
-      --full-errors        Throw unedited raw errors rather than summarising to make more human-readable.
-  -h, --help               Show help
+  -h, --help                  Show help
+      --verbose-errors        Throw raw errors (by default errors are summarised)
 
 ```
 <!-- codegen:end -->
@@ -156,7 +156,7 @@ You can also show help text for the corresponding procedures (which become "comm
 ```
 add
 
-Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
 Usage:
   add [flags...]
@@ -188,7 +188,7 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 ```
 add
 
-Add two numbers. Use this if you have apples, and someone else has some other apples, and you want to know how many apples in total you have.
+Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
 Usage:
   add [flags...]
@@ -234,10 +234,11 @@ const appRouter = trpc.router({
 - Return values are logged using `console.info` (can be configured to pass in a custom logger)
 - `process.exit(...)` called with either 0 or 1 depending on successful resolve
 - Help text shown on invalid inputs
+- Support kebab-case flag aliases
 - Support flag aliases via `alias` callback (see migrations example below)
 - Union types work, but they should ideally be non-overlapping for best results
 - Limitation: Only zod types are supported right now
-- Limitation: Onlly object types are allowed as input. No positional arguments supported
+- Limitation: Only object types are allowed as input. No positional arguments supported
    - If there's interest, this could be added in future for inputs of type `z.string()` or `z.tuple([z.string(), ...])`
 - Limitation: Nested-object input props must be passed as json
    - e.g. `z.object({ foo: z.object({ bar: z.number() }) }))` can be supplied via using `--foo '{"bar": 123}'`
@@ -413,8 +414,8 @@ Commands:
   search.byContent        Look for migrations by their script content
 
 Flags:
-      --full-errors        Throw unedited raw errors rather than summarising to make more human-readable.
-  -h, --help               Show help
+  -h, --help                  Show help
+      --verbose-errors        Throw raw errors (by default errors are summarised)
 
 ```
 <!-- codegen:end -->
@@ -432,7 +433,7 @@ Usage:
 
 Flags:
   -h, --help                 Show help
-      --step <number>        Mark this many migrations as executed; exclusiveMinimum: 0; Do not use with: --to
+      --step <number>        Mark this many migrations as executed; Exclusive minimum: 0; Do not use with: --to
       --to <string>          Mark migrations up to this one as exectued; Do not use with: --step
 
 ```
@@ -452,7 +453,7 @@ Usage:
 Flags:
   -h, --help                        Show help
   -q, --search-term <string>        Only show migrations whose `content` value contains this string
-  -s, --status <string>             Filter to only show migrations with this status; enum: executed,pending
+  -s, --status <string>             Filter to only show migrations with this status; Enum: executed,pending
 
 ```
 <!-- codegen:end -->

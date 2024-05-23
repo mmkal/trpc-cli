@@ -5,7 +5,7 @@ import {Procedure, Router, TRPCError, inferRouterContext, initTRPC} from '@trpc/
 import * as cleye from 'cleye'
 import colors from 'picocolors'
 import {ZodError, z} from 'zod'
-import ztjs from 'zod-to-json-schema'
+import ztjs, {JsonSchema7ObjectType, type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 
 export type TrpcCliParams<R extends Router<any>> = {
@@ -41,9 +41,9 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
     const parsedArgv = cleye.cli(
       {
         flags: {
-          fullErrors: {
+          verboseErrors: {
             type: Boolean,
-            description: `Throw unedited raw errors rather than summarising to make more human-readable.`,
+            description: `Throw raw errors (by default errors are summarised)`,
             default: false,
           },
         },
@@ -54,112 +54,18 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
               throw new TypeError(`Only zod schemas are supported, got ${input?.constructor.name}`)
             }
           })
-          const zodSchema: z.ZodType<any> =
-            value._def.inputs.length === 1
-              ? (value._def.inputs[0] as never)
-              : (z.intersection(...(value._def.inputs as [never, never])) as never)
-
-          const jsonSchema = value._def.inputs.length > 0 ? ztjs(zodSchema) : {} // todo: inspect zod schema directly, don't convert to json-schema first
-
-          const objectProperties = (sch: typeof jsonSchema) => ('properties' in sch ? sch.properties : {})
-
-          const flattenedProperties = (sch: typeof jsonSchema): ReturnType<typeof objectProperties> => {
-            if ('properties' in sch) {
-              return sch.properties
-            }
-            if ('allOf' in sch) {
-              return Object.fromEntries(
-                sch.allOf!.flatMap(subSchema => Object.entries(flattenedProperties(subSchema as typeof jsonSchema))),
-              )
-            }
-            if ('anyOf' in sch) {
-              const isExcluded = (v: typeof jsonSchema) => Object.keys(v).join(',') === 'not'
-              const entries = sch.anyOf!.flatMap(subSchema => {
-                const flattened = flattenedProperties(subSchema as typeof jsonSchema)
-                const excluded = Object.entries(flattened).flatMap(([name, propSchema]) => {
-                  return isExcluded(propSchema) ? [`--${name}`] : []
-                })
-                return Object.entries(flattened).map(([k, v]): [typeof k, typeof v] => {
-                  if (!isExcluded(v) && excluded.length > 0) {
-                    return [k, Object.assign({}, v, {'Do not use with': excluded}) as typeof v]
-                  }
-                  return [k, v]
-                })
-              })
-
-              return Object.fromEntries(
-                entries.sort((a, b) => {
-                  const scores = [a, b].map(([_k, v]) => (isExcluded(v) ? 0 : 1)) // Put the excluded ones first, so that `Object.fromEntries` will override them with the non-excluded ones (`Object.fromEntries([['a', 1], ['a', 2]])` => `{a: 2}`)
-                  return scores[0] - scores[1]
-                }),
-              )
-            }
-            return {}
-          }
+          const jsonSchema = procedureInputsToJsonSchema(value) // todo: inspect zod schema directly, don't convert to json-schema first
 
           const properties = flattenedProperties(jsonSchema)
 
           if (Object.entries(properties).length === 0) {
-            //   throw new TypeError(`Schemas looking like ${Object.keys(jsonSchema).join(', ')} are not supported`)
+            // todo: disallow non-object schemas, while still allowing for no schema
+            // throw new TypeError(`Schemas looking like ${Object.keys(jsonSchema).join(', ')} are not supported`)
           }
 
           const flags = Object.fromEntries(
             Object.entries(properties).map(([propertyKey, propertyValue]) => {
-              const jsonSchemaType =
-                'type' in propertyValue && typeof propertyValue.type === 'string' ? propertyValue.type : null
-              let cliType
-              switch (jsonSchemaType) {
-                case 'string': {
-                  cliType = String
-                  break
-                }
-                case 'integer':
-                case 'number': {
-                  cliType = Number
-                  break
-                }
-                case 'boolean': {
-                  cliType = Boolean
-                  break
-                }
-                case 'array': {
-                  cliType = [String]
-                  break
-                }
-                case 'object': {
-                  cliType = (s: string) => JSON.parse(s) as {}
-                  break
-                }
-                default: {
-                  jsonSchemaType satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
-                  cliType = (x: unknown) => x
-                  break
-                }
-              }
-
-              const getDescription = (v: typeof propertyValue): string => {
-                if ('items' in v) {
-                  return [getDescription(v.items as typeof propertyValue), '(list)'].filter(Boolean).join(' ')
-                }
-                return (
-                  Object.entries(v)
-                    .filter(([k, vv]) => {
-                      if (k === 'default' || k === 'additionalProperties') return false
-                      if (k === 'type' && typeof vv === 'string') return false
-                      return true
-                    })
-                    .sort(([a], [b]) => {
-                      const scores = [a, b].map(k => (k === 'description' ? 0 : 1))
-                      return scores[0] - scores[1]
-                    })
-                    .map(([k, vv], i) => {
-                      if (k === 'description' && i === 0) return String(vv)
-                      if (k === 'properties') return `Object (json formatted)`
-                      return `${k}: ${vv}`
-                    })
-                    .join('; ') || ''
-                )
-              }
+              const cleyeType = getCleyeType(propertyValue)
 
               let description: string | undefined = getDescription(propertyValue)
               if ('required' in jsonSchema && !jsonSchema.required?.includes(propertyKey)) {
@@ -170,7 +76,7 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
               return [
                 propertyKey,
                 {
-                  type: cliType,
+                  type: cleyeType,
                   description,
                   default: propertyValue.default,
                 },
@@ -196,13 +102,13 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
       props?.argv,
     )
 
-    let {fullErrors, ...unknownFlags} = parsedArgv.unknownFlags
-    fullErrors ||= parsedArgv.flags.fullErrors
+    let {verboseErrors, ...unknownFlags} = parsedArgv.unknownFlags
+    verboseErrors ||= parsedArgv.flags.verboseErrors
 
     const caller = initTRPC.context<NonNullable<typeof context>>().create({}).createCallerFactory(appRouter)(context)
 
     const die = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
-      if (fullErrors) {
+      if (verboseErrors) {
         throw (cause as Error) || new Error(message)
       }
       logger.error?.(colors.red(message))
@@ -267,4 +173,106 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
   }
 
   return {run}
+}
+
+const capitaliseFromCamelCase = (camel: string) => {
+  const parts = camel.split(/(?=[A-Z])/)
+  return capitalise(parts.map(p => p.toLowerCase()).join(' '))
+}
+
+const capitalise = (s: string) => s.slice(0, 1).toUpperCase() + s.slice(1)
+
+const flattenedProperties = (sch: JsonSchema7Type): JsonSchema7ObjectType['properties'] => {
+  if ('properties' in sch) {
+    return sch.properties
+  }
+  if ('allOf' in sch) {
+    return Object.fromEntries(
+      sch.allOf!.flatMap(subSchema => Object.entries(flattenedProperties(subSchema as JsonSchema7Type))),
+    )
+  }
+  if ('anyOf' in sch) {
+    const isExcluded = (v: JsonSchema7Type) => Object.keys(v).join(',') === 'not'
+    const entries = sch.anyOf!.flatMap(subSchema => {
+      const flattened = flattenedProperties(subSchema as JsonSchema7Type)
+      const excluded = Object.entries(flattened).flatMap(([name, propSchema]) => {
+        return isExcluded(propSchema) ? [`--${name}`] : []
+      })
+      return Object.entries(flattened).map(([k, v]): [typeof k, typeof v] => {
+        if (!isExcluded(v) && excluded.length > 0) {
+          return [k, Object.assign({}, v, {'Do not use with': excluded}) as typeof v]
+        }
+        return [k, v]
+      })
+    })
+
+    return Object.fromEntries(
+      entries.sort((a, b) => {
+        const scores = [a, b].map(([_k, v]) => (isExcluded(v) ? 0 : 1)) // Put the excluded ones first, so that `Object.fromEntries` will override them with the non-excluded ones (`Object.fromEntries([['a', 1], ['a', 2]])` => `{a: 2}`)
+        return scores[0] - scores[1]
+      }),
+    )
+  }
+  return {}
+}
+
+const getDescription = (v: JsonSchema7Type): string => {
+  if ('items' in v) {
+    return [getDescription(v.items as JsonSchema7Type), '(list)'].filter(Boolean).join(' ')
+  }
+  return (
+    Object.entries(v)
+      .filter(([k, vv]) => {
+        if (k === 'default' || k === 'additionalProperties') return false
+        if (k === 'type' && typeof vv === 'string') return false
+        return true
+      })
+      .sort(([a], [b]) => {
+        const scores = [a, b].map(k => (k === 'description' ? 0 : 1))
+        return scores[0] - scores[1]
+      })
+      .map(([k, vv], i) => {
+        if (k === 'description' && i === 0) return String(vv)
+        if (k === 'properties') return `Object (json formatted)`
+        return `${capitaliseFromCamelCase(k)}: ${vv}`
+      })
+      .join('; ') || ''
+  )
+}
+
+export function procedureInputsToJsonSchema(value: Procedure<any, any>): JsonSchema7Type {
+  if (value._def.inputs.length === 0) return {}
+
+  const zodSchema: z.ZodType<any> =
+    value._def.inputs.length === 1
+      ? (value._def.inputs[0] as never)
+      : (z.intersection(...(value._def.inputs as [never, never])) as never)
+
+  return ztjs(zodSchema)
+}
+
+function getCleyeType(schema: JsonSchema7Type) {
+  const _type = 'type' in schema && typeof schema.type === 'string' ? schema.type : null
+  switch (_type) {
+    case 'string': {
+      return String
+    }
+    case 'integer':
+    case 'number': {
+      return Number
+    }
+    case 'boolean': {
+      return Boolean
+    }
+    case 'array': {
+      return [String]
+    }
+    case 'object': {
+      return (s: string) => JSON.parse(s) as {}
+    }
+    default: {
+      _type satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
+      return (x: unknown) => x
+    }
+  }
 }
