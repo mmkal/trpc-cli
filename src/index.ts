@@ -31,13 +31,27 @@ export interface TrpcCliMeta {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const trpcCli = <R extends Router<any>>({router: appRouter, context, alias}: TrpcCliParams<R>) => {
-  async function run(props?: {
+  async function run(params?: {
     argv?: string[]
     logger?: {info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void}
     process?: {exit: (code: number) => never}
   }) {
-    const logger = {...console, ...props?.logger}
-    const prcs = props?.process || process
+    const logger = {...console, ...params?.logger}
+    const _process = params?.process || process
+
+    const procedureEntries = Object.entries(appRouter._def.procedures)
+    const procedureMap = Object.fromEntries(
+      procedureEntries.map(([commandName, value]) => {
+        const procedure = value as Procedure<any, any>
+        const jsonSchema = procedureInputsToJsonSchema(procedure)
+        const properties = flattenedProperties(jsonSchema)
+        const incompatiblePairs = incompatiblePropertyPairs(jsonSchema)
+        const type = appRouter._def.procedures[commandName]._def.mutation ? 'mutation' : 'query'
+
+        return [commandName, {procedure, jsonSchema, properties, incompatiblePairs, type}]
+      }),
+    )
+
     const parsedArgv = cleye.cli(
       {
         flags: {
@@ -47,21 +61,9 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
             default: false,
           },
         },
-        commands: Object.entries(appRouter._def.procedures).map(([commandName, _value]) => {
-          const value = _value as Procedure<any, any>
-          value._def.inputs.forEach((input: unknown) => {
-            if (!(input instanceof z.ZodType)) {
-              throw new TypeError(`Only zod schemas are supported, got ${input?.constructor.name}`)
-            }
-          })
-          const jsonSchema = procedureInputsToJsonSchema(value) // todo: inspect zod schema directly, don't convert to json-schema first
-
+        commands: procedureEntries.map(([commandName]) => {
+          const {procedure, jsonSchema} = procedureMap[commandName]
           const properties = flattenedProperties(jsonSchema)
-
-          if (Object.entries(properties).length === 0) {
-            // todo: disallow non-object schemas, while still allowing for no schema
-            // throw new TypeError(`Schemas looking like ${Object.keys(jsonSchema).join(', ')} are not supported`)
-          }
 
           const flags = Object.fromEntries(
             Object.entries(properties).map(([propertyKey, propertyValue]) => {
@@ -93,13 +95,13 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
 
           return cleye.command({
             name: commandName,
-            help: value.meta,
+            help: procedure.meta,
             flags: flags as {},
           })
         }) as cleye.Command[],
       },
       undefined,
-      props?.argv,
+      params?.argv,
     )
 
     let {verboseErrors, ...unknownFlags} = parsedArgv.unknownFlags
@@ -115,10 +117,10 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
       if (help) {
         parsedArgv.showHelp()
       }
-      return prcs.exit(1)
+      return _process.exit(1)
     }
 
-    const command = parsedArgv.command as keyof typeof caller
+    const command = parsedArgv.command as string
 
     if (!command && parsedArgv._.length === 0) {
       return die('No command provided.')
@@ -128,18 +130,32 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
       return die(`Command "${parsedArgv._.join(' ')}" not recognised.`)
     }
 
+    const procedureInfo = procedureMap[command]
+    if (!procedureInfo) {
+      return die(`Command "${command}" not found. Available commands: ${Object.keys(procedureMap).join(', ')}.`)
+    }
+
     if (Object.entries(unknownFlags).length > 0) {
       const s = Object.entries(unknownFlags).length === 1 ? '' : 's'
       return die(`Unexpected flag${s}: ${Object.keys(parsedArgv.unknownFlags).join(', ')}`)
     }
 
+    let {help, ...flags} = parsedArgv.flags
+
+    flags = Object.fromEntries(Object.entries(flags).filter(([_k, v]) => v !== undefined)) // cleye returns undefined for flags which didn't receive a value
+
+    const incompatibleMessages = procedureInfo.incompatiblePairs
+      .filter(([a, b]) => a in flags && b in flags)
+      .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
+
+    if (incompatibleMessages?.length) {
+      return die(incompatibleMessages.join('\n'))
+    }
+
     try {
-      const {help, ...flags} = parsedArgv.flags
-      const procedureType = appRouter._def.procedures[command]._def.mutation ? 'mutation' : 'query'
-      // @ts-expect-error cleye types are dynamic
-      const result = (await caller[procedureType](parsedArgv.command, flags)) as unknown
+      const result = (await caller[procedureInfo.type as 'mutation'](parsedArgv.command, flags)) as unknown
       if (result) logger.info?.(result)
-      prcs.exit(0)
+      _process.exit(0)
     } catch (err) {
       if (err instanceof TRPCError) {
         const cause = err.cause
@@ -214,6 +230,30 @@ const flattenedProperties = (sch: JsonSchema7Type): JsonSchema7ObjectType['prope
     )
   }
   return {}
+}
+
+const incompatiblePropertyPairs = (sch: JsonSchema7Type): Array<[string, string]> => {
+  const isUnion = 'anyOf' in sch
+  if (!isUnion) return []
+
+  const sets = sch.anyOf!.map(subSchema => {
+    const keys = Object.keys(flattenedProperties(subSchema as JsonSchema7Type))
+    return {keys, set: new Set(keys)}
+  })
+
+  const compatiblityEntries = sets.flatMap(({keys}) => {
+    return keys.map(key => {
+      return [key, new Set(sets.filter(other => other.set.has(key)).flatMap(other => other.keys))] as const
+    })
+  })
+  const allKeys = sets.flatMap(({keys}) => keys)
+
+  return compatiblityEntries.flatMap(([key, compatibleWith]) => {
+    const incompatibleEntries = allKeys
+      .filter(other => key < other && !compatibleWith.has(other))
+      .map((other): [string, string] => [key, other])
+    return incompatibleEntries
+  })
 }
 
 const getDescription = (v: JsonSchema7Type): string => {

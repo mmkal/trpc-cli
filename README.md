@@ -6,6 +6,7 @@ Turn a [trpc](https://trpc.io) router into a type-safe, fully-functional, docume
 - [Installation](#installation)
 - [Usage](#usage)
    - [Calculator example](#calculator-example)
+- [Output and lifecycle](#output-and-lifecycle)
 - [Features and Limitations](#features-and-limitations)
 - [More Examples](#more-examples)
    - [Migrator example](#migrator-example)
@@ -227,6 +228,29 @@ const appRouter = trpc.router({
 })
 ```
 
+## Output and lifecycle
+
+The output of the command will be logged via `console.info`. The process will exit with code 0 if the command was successful, or 1 otherwise. If you don't want to rely on this logging, you can always log inside your procedures and avoid returning a value. You can also override the `logger` and `process` properties of the `run` method:
+
+<!-- eslint-disable unicorn/no-process-exit -->
+```ts
+import {trpcCli} from 'trpc-cli'
+
+const cli = trpcCli({router: yourRouter})
+
+cli.run({
+  logger: yourLogger, // needs `.info` and `.error` methods
+  process: {
+    exit: code => {
+      if (code === 0) process.exit(0)
+      else process.exit(123)
+    },
+  },
+})
+```
+
+You could also override `process.exit` to avoid killing the process at all - see [programmatic usage](#programmatic-usage) for an example.
+
 ## Features and Limitations
 
 - Nested subrouters ([example](./test/fixtures//migrations.ts)) - command will be dot separated e.g. `search.byId`
@@ -253,7 +277,7 @@ const appRouter = trpc.router({
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:3ea2e96cb52cb641cc4c47c300d15dbe -->
+<!-- hash:ecb45f308d36ff6594396ebd189c9f31 -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {TrpcCliMeta, trpcCli} from 'trpc-cli'
@@ -289,15 +313,11 @@ const router = trpc.router({
     })
     .input(
       z.union([
+        z.object({}).strict(), // use strict here to make sure `{step: 1}` doesn't "match" this first, just by having an ignore `step` property
         z.object({
-          to: z
-            .string()
-            .optional()
-            .describe('Mark migrations up to this one as exectued'),
-          step: z.never().optional(),
+          to: z.string().describe('Mark migrations up to this one as exectued'),
         }),
         z.object({
-          to: z.never().optional(),
           step: z
             .number()
             .int()
@@ -308,11 +328,11 @@ const router = trpc.router({
     )
     .query(async ({input}) => {
       let toBeApplied = migrations
-      if (typeof input.to === 'string') {
+      if ('to' in input) {
         const index = migrations.findIndex(m => m.name === input.to)
         toBeApplied = migrations.slice(0, index + 1)
       }
-      if (typeof input.step === 'number') {
+      if ('step' in input) {
         const start = migrations.findIndex(m => m.status === 'pending')
         toBeApplied = migrations.slice(0, start + input.step)
       }
@@ -433,8 +453,8 @@ Usage:
 
 Flags:
   -h, --help                 Show help
-      --step <number>        Mark this many migrations as executed; Exclusive minimum: 0; Do not use with: --to
-      --to <string>          Mark migrations up to this one as exectued; Do not use with: --step
+      --step <number>        Mark this many migrations as executed; Exclusive minimum: 0
+      --to <string>          Mark migrations up to this one as exectued
 
 ```
 <!-- codegen:end -->

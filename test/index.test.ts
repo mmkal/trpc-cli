@@ -155,6 +155,7 @@ test('migrations union type', async () => {
   `)
 
   output = await migrator(['apply', '--step', '1'])
+  expect(output).toContain('four: pending') // <-- this sometimes goes wrong when I mess with union type handling
   expect(output).toMatchInlineSnapshot(`
     "[
       'one: executed',
@@ -217,5 +218,25 @@ test('migrations search.byContent', async () => {
         status: 'pending'
       }
     ]"
+  `)
+})
+
+test('migrations incompatible flags', async () => {
+  const output = await migrator(['apply', '--to', 'four', '--step', '1'])
+  expect(output).toContain('--step and --to are incompatible')
+  expect(output).toMatchInlineSnapshot(`
+    "--step and --to are incompatible and cannot be used together
+    apply
+
+    Apply migrations. By default all pending migrations will be applied.
+
+    Usage:
+      apply [flags...]
+
+    Flags:
+      -h, --help                 Show help
+          --step <number>        Mark this many migrations as executed; Exclusive minimum: 0
+          --to <string>          Mark migrations up to this one as exectued
+    "
   `)
 })

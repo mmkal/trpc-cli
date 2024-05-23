@@ -25,23 +25,22 @@ const router = trpc.router({
     .meta({description: 'Apply migrations. By default all pending migrations will be applied.'})
     .input(
       z.union([
+        z.object({}).strict(), // use strict here to make sure `{step: 1}` doesn't "match" this first, just by having an ignore `step` property
         z.object({
-          to: z.string().optional().describe('Mark migrations up to this one as exectued'),
-          step: z.never().optional(),
+          to: z.string().describe('Mark migrations up to this one as exectued'),
         }),
         z.object({
-          to: z.never().optional(),
           step: z.number().int().positive().describe('Mark this many migrations as executed'),
         }),
       ]),
     )
     .query(async ({input}) => {
       let toBeApplied = migrations
-      if (typeof input.to === 'string') {
+      if ('to' in input) {
         const index = migrations.findIndex(m => m.name === input.to)
         toBeApplied = migrations.slice(0, index + 1)
       }
-      if (typeof input.step === 'number') {
+      if ('step' in input) {
         const start = migrations.findIndex(m => m.status === 'pending')
         toBeApplied = migrations.slice(0, start + input.step)
       }
