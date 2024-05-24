@@ -13,7 +13,7 @@
   "packageManager": "pnpm@8.10.2",
   "scripts": {
     "prepare": "pnpm build",
-    "lint": "eslint .",
+    "lint": "eslint --max-warnings=0 .",
     "build": "tsc -p tsconfig.lib.json",
     "dev": "cd test/fixtures && tsx",
     "test": "vitest run"

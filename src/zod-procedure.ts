@@ -1,13 +1,9 @@
-import {Procedure} from '@trpc/server'
 import {z} from 'zod'
 import zodToJsonSchema from 'zod-to-json-schema'
 import type {Result, ParsedProcedure} from './types'
 
 function getInnerType(zodType: z.ZodType): z.ZodType {
-  if (zodType instanceof z.ZodOptional) {
-    return getInnerType(zodType._def.innerType as z.ZodType)
-  }
-  if (zodType instanceof z.ZodNullable) {
+  if (zodType instanceof z.ZodOptional || zodType instanceof z.ZodNullable) {
     return getInnerType(zodType._def.innerType as z.ZodType)
   }
   if (zodType instanceof z.ZodEffects) {
