@@ -92,11 +92,11 @@ test('cli divide', async () => {
   expect(output).toMatchInlineSnapshot(`"2"`)
 })
 
-test.skip('cli divide failure', async () => {
+test('cli divide failure', async () => {
   const output = await tsx('calculator', ['divide', '8', '0'])
   expect(output).toMatchInlineSnapshot(`
     "Validation error
-      - Invalid input at index 1
+      - Expected number, received string at index 1
     divide v1.0.0
 
     Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.

@@ -111,7 +111,9 @@ export const trpcCli = <R extends AnyRouter>({router, context, alias, default: d
           },
         },
         ...defaultCommand,
-        commands: cleyeCommands.map(cmd => cleye.command(cmd)) as cleye.Command[],
+        commands: cleyeCommands
+          .filter(cmd => cmd.name !== defaultCommandName)
+          .map(cmd => cleye.command(cmd)) as cleye.Command[],
       },
       undefined,
       params?.argv,
