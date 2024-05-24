@@ -5,7 +5,7 @@ import {Procedure, Router, TRPCError, inferRouterContext, initTRPC} from '@trpc/
 import * as cleye from 'cleye'
 import colors from 'picocolors'
 import {ZodError, z} from 'zod'
-import ztjs, {JsonSchema7ObjectType, type JsonSchema7Type} from 'zod-to-json-schema'
+import zodToJsonSchema, {JsonSchema7ObjectType, type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 
 export type TrpcCliParams<R extends Router<any>> = {
@@ -30,7 +30,32 @@ export interface TrpcCliMeta {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const trpcCli = <R extends Router<any>>({router: appRouter, context, alias}: TrpcCliParams<R>) => {
+export const trpcCli = <R extends Router<any>>({router, context, alias}: TrpcCliParams<R>) => {
+  const procedures = Object.entries(router._def.procedures).map(([commandName, value]) => {
+    const procedure = value as Procedure<any, any>
+    const procedureResult = parseProcedureInputs(procedure)
+    if (!procedureResult.success) {
+      return [commandName, procedureResult.error] as const
+    }
+
+    const jsonSchema = procedureResult.value
+    const properties = flattenedProperties(jsonSchema.flagsSchema)
+    const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
+    const type = router._def.procedures[commandName]._def.mutation ? 'mutation' : 'query'
+
+    return [commandName, {procedure, jsonSchema, properties, incompatiblePairs, type}] as const
+  })
+
+  const procedureEntries = procedures.flatMap(([k, v]) => {
+    return typeof v === 'string' ? [] : [[k, v] as const]
+  })
+
+  const procedureMap = Object.fromEntries(procedureEntries)
+
+  const ignoredProcedures = Object.fromEntries(
+    procedures.flatMap(([k, v]) => (typeof v === 'string' ? [[k, v] as const] : [])),
+  )
+
   async function run(params?: {
     argv?: string[]
     logger?: {info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void}
@@ -38,19 +63,7 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
   }) {
     const logger = {...console, ...params?.logger}
     const _process = params?.process || process
-
-    const procedureEntries = Object.entries(appRouter._def.procedures)
-    const procedureMap = Object.fromEntries(
-      procedureEntries.map(([commandName, value]) => {
-        const procedure = value as Procedure<any, any>
-        const jsonSchema = procedureInputsToJsonSchema(procedure)
-        const properties = flattenedProperties(jsonSchema)
-        const incompatiblePairs = incompatiblePropertyPairs(jsonSchema)
-        const type = appRouter._def.procedures[commandName]._def.mutation ? 'mutation' : 'query'
-
-        return [commandName, {procedure, jsonSchema, properties, incompatiblePairs, type}]
-      }),
-    )
+    let verboseErrors: boolean = false
 
     const parsedArgv = cleye.cli(
       {
@@ -61,16 +74,13 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
             default: false,
           },
         },
-        commands: procedureEntries.map(([commandName]) => {
-          const {procedure, jsonSchema} = procedureMap[commandName]
-          const properties = flattenedProperties(jsonSchema)
-
+        commands: procedureEntries.map(([commandName, {procedure, jsonSchema, properties}]) => {
           const flags = Object.fromEntries(
             Object.entries(properties).map(([propertyKey, propertyValue]) => {
               const cleyeType = getCleyeType(propertyValue)
 
               let description: string | undefined = getDescription(propertyValue)
-              if ('required' in jsonSchema && !jsonSchema.required?.includes(propertyKey)) {
+              if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
                 description = `${description} (optional)`.trim()
               }
               description ||= undefined
@@ -96,6 +106,7 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
           return cleye.command({
             name: commandName,
             help: procedure.meta,
+            parameters: jsonSchema.parameters,
             flags: flags as {},
           })
         }) as cleye.Command[],
@@ -104,13 +115,13 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
       params?.argv,
     )
 
-    let {verboseErrors, ...unknownFlags} = parsedArgv.unknownFlags
-    verboseErrors ||= parsedArgv.flags.verboseErrors
+    const {verboseErrors: _verboseErrors, ...unknownFlags} = parsedArgv.unknownFlags
+    verboseErrors = _verboseErrors || parsedArgv.flags.verboseErrors
 
-    const caller = initTRPC.context<NonNullable<typeof context>>().create({}).createCallerFactory(appRouter)(context)
+    const caller = initTRPC.context<NonNullable<typeof context>>().create({}).createCallerFactory(router)(context)
 
-    const die = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
-      if (verboseErrors) {
+    function die(message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) {
+      if (verboseErrors !== undefined && verboseErrors) {
         throw (cause as Error) || new Error(message)
       }
       logger.error?.(colors.red(message))
@@ -152,8 +163,10 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
       return die(incompatibleMessages.join('\n'))
     }
 
+    const input = procedureInfo.jsonSchema.getInput({_: parsedArgv._, flags}) as never
+
     try {
-      const result = (await caller[procedureInfo.type as 'mutation'](parsedArgv.command, flags)) as unknown
+      const result: unknown = await caller[procedureInfo.type as 'mutation'](parsedArgv.command, input)
       if (result) logger.info?.(result)
       _process.exit(0)
     } catch (err) {
@@ -162,10 +175,13 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
         if (cause instanceof ZodError) {
           const originalIssues = cause.issues
           try {
-            cause.issues = cause.issues.map(issue => ({
-              ...issue,
-              path: ['--' + issue.path[0], ...issue.path.slice(1)],
-            }))
+            cause.issues = cause.issues.map(issue => {
+              if (typeof issue.path[0] !== 'string') return issue
+              return {
+                ...issue,
+                path: ['--' + issue.path[0], ...issue.path.slice(1)],
+              }
+            })
 
             const prettyError = zodValidationError.fromError(cause, {
               prefixSeparator: '\n  - ',
@@ -188,7 +204,7 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
     }
   }
 
-  return {run}
+  return {run, ignoredProcedures}
 }
 
 const capitaliseFromCamelCase = (camel: string) => {
@@ -232,6 +248,7 @@ const flattenedProperties = (sch: JsonSchema7Type): JsonSchema7ObjectType['prope
   return {}
 }
 
+/** For a union type, returns a list of pairs of properties which *shouldn't* be used together (because they don't appear in the same type variant) */
 const incompatiblePropertyPairs = (sch: JsonSchema7Type): Array<[string, string]> => {
   const isUnion = 'anyOf' in sch
   if (!isUnion) return []
@@ -256,9 +273,13 @@ const incompatiblePropertyPairs = (sch: JsonSchema7Type): Array<[string, string]
   })
 }
 
+/**
+ * Tries fairly hard to build a roughly human-readable description of a json-schema type.
+ * A few common properties are given special treatment, most others are just stringified and output in `key: value` format.
+ */
 const getDescription = (v: JsonSchema7Type): string => {
   if ('items' in v) {
-    return [getDescription(v.items as JsonSchema7Type), '(list)'].filter(Boolean).join(' ')
+    return [getDescription(v.items as JsonSchema7Type), '(array)'].filter(Boolean).join(' ')
   }
   return (
     Object.entries(v)
@@ -280,15 +301,128 @@ const getDescription = (v: JsonSchema7Type): string => {
   )
 }
 
-export function procedureInputsToJsonSchema(value: Procedure<any, any>): JsonSchema7Type {
-  if (value._def.inputs.length === 0) return {}
+function getInnerType(zodType: z.ZodType): z.ZodType {
+  if (zodType instanceof z.ZodOptional) {
+    return getInnerType(zodType._def.innerType)
+  }
+  if (zodType instanceof z.ZodNullable) {
+    return getInnerType(zodType._def.innerType)
+  }
+  if (zodType instanceof z.ZodEffects) {
+    return getInnerType(zodType.innerType())
+  }
+  return zodType
+}
+
+function acceptsStrings(zodType: z.ZodType): boolean {
+  const innerType = getInnerType(zodType)
+  if (innerType instanceof z.ZodString) return true
+  if (innerType instanceof z.ZodEnum) return (innerType.options as unknown[]).some(o => typeof o === 'string')
+  if (innerType instanceof z.ZodLiteral) return typeof innerType.value === 'string'
+  if (innerType instanceof z.ZodUnion) return (innerType.options as z.ZodType[]).some(acceptsStrings)
+  if (innerType instanceof z.ZodIntersection)
+    return acceptsStrings(innerType._def.left) && acceptsStrings(innerType._def.right)
+
+  return false
+}
+
+function acceptsObject(zodType: z.ZodType): boolean {
+  const innerType = getInnerType(zodType)
+  if (innerType instanceof z.ZodObject) return true
+  if (innerType instanceof z.ZodEffects) return acceptsObject(innerType.innerType())
+  if (innerType instanceof z.ZodUnion) return (innerType.options as z.ZodType[]).some(acceptsObject)
+  if (innerType instanceof z.ZodIntersection)
+    return acceptsObject(innerType._def.left) && acceptsObject(innerType._def.right)
+  return false
+}
+
+type Result<T> = {success: true; value: T} | {success: false; error: string}
+
+interface ParsedProcedure {
+  /** positional parameters */
+  parameters: string[]
+  /** JSON Schema type describing the flags for the procedure */
+  flagsSchema: JsonSchema7Type
+  /**
+   * Function for taking cleye parsed argv output and transforming it so it can be passed into the procedure
+   * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
+   */
+  getInput: (argv: {_: string[]; flags: {}}) => unknown
+}
+
+export function parseProcedureInputs(value: Procedure<any, any>): Result<ParsedProcedure> {
+  if (value._def.inputs.length === 0) {
+    return {
+      success: true,
+      value: {parameters: [], flagsSchema: {}, getInput: () => ({})},
+    }
+  }
 
   const zodSchema: z.ZodType<any> =
     value._def.inputs.length === 1
       ? (value._def.inputs[0] as never)
       : (z.intersection(...(value._def.inputs as [never, never])) as never)
 
-  return ztjs(zodSchema)
+  if (zodSchema instanceof z.ZodTuple) {
+    const tuple = zodSchema as z.ZodTuple<z.ZodTupleItems>
+    const nonStringIndex = tuple.items.findIndex(item => !acceptsStrings(item))
+    const types = `[${tuple.items.map(s => getInnerType(s).constructor.name).join(', ')}]`
+
+    if (nonStringIndex > -1 && nonStringIndex !== tuple.items.length - 1) {
+      return {
+        success: false,
+        error: `Invalid input type ${types}. Positional parameters must be strings.`,
+      }
+    }
+
+    const positionalSchemas = nonStringIndex === -1 ? tuple.items : tuple.items.slice(0, nonStringIndex)
+
+    const parameters = positionalSchemas.map((item, i) => parameterName(item, i + 1))
+    const getParameters = (argv: {_: string[]; flags: {}}) => positionalSchemas.map((_, i) => argv._[i])
+
+    if (positionalSchemas.length === tuple.items.length) {
+      // all schemas were positional - no object at the end
+      return {
+        success: true,
+        value: {parameters, flagsSchema: {}, getInput: getParameters},
+      }
+    }
+
+    const last = tuple.items.at(-1)!
+
+    if (!acceptsObject(last)) {
+      return {
+        success: false,
+        error: `Invalid input type ${types}. The last type must accept object inputs.`,
+      }
+    }
+
+    return {
+      success: true,
+      value: {
+        parameters,
+        flagsSchema: zodToJsonSchema(last),
+        getInput: argv => [...getParameters(argv), argv.flags],
+      },
+    }
+  }
+
+  if (!acceptsObject(zodSchema)) {
+    return {
+      success: false,
+      error: `Invalid input type ${getInnerType(zodSchema).constructor.name}, expected object or tuple`,
+    }
+  }
+
+  return {
+    success: true,
+    value: {parameters: [], flagsSchema: zodToJsonSchema(zodSchema), getInput: argv => argv.flags},
+  }
+}
+
+const parameterName = (s: z.ZodType, position: number) => {
+  const name = s.description || `parameter ${position}`
+  return s instanceof z.ZodOptional ? `[${name}]` : `<${name}>`
 }
 
 function getCleyeType(schema: JsonSchema7Type) {
@@ -312,7 +446,7 @@ function getCleyeType(schema: JsonSchema7Type) {
     }
     default: {
       _type satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
-      return (x: unknown) => x
+      return (value: unknown) => value
     }
   }
 }

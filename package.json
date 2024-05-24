@@ -15,6 +15,7 @@
     "prepare": "pnpm build",
     "lint": "eslint .",
     "build": "tsc -p tsconfig.lib.json",
+    "dev": "cd test/fixtures && tsx",
     "test": "vitest run"
   },
   "repository": {
