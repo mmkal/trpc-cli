@@ -207,6 +207,32 @@ export const trpcCli = <R extends Router<any>>({router, context, alias}: TrpcCli
   return {run, ignoredProcedures}
 }
 
+function getCleyeType(schema: JsonSchema7Type) {
+  const _type = 'type' in schema && typeof schema.type === 'string' ? schema.type : null
+  switch (_type) {
+    case 'string': {
+      return String
+    }
+    case 'integer':
+    case 'number': {
+      return Number
+    }
+    case 'boolean': {
+      return Boolean
+    }
+    case 'array': {
+      return [String]
+    }
+    case 'object': {
+      return (s: string) => JSON.parse(s) as {}
+    }
+    default: {
+      _type satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
+      return (value: unknown) => value
+    }
+  }
+}
+
 const capitaliseFromCamelCase = (camel: string) => {
   const parts = camel.split(/(?=[A-Z])/)
   return capitalise(parts.map(p => p.toLowerCase()).join(' '))
@@ -326,6 +352,18 @@ function acceptsStrings(zodType: z.ZodType): boolean {
   return false
 }
 
+function acceptsNumbers(zodType: z.ZodType): boolean {
+  const innerType = getInnerType(zodType)
+  if (innerType instanceof z.ZodNumber) return true
+  if (innerType instanceof z.ZodEnum) return (innerType.options as unknown[]).some(o => typeof o === 'number')
+  if (innerType instanceof z.ZodLiteral) return typeof innerType.value === 'number'
+  if (innerType instanceof z.ZodUnion) return (innerType.options as z.ZodType[]).some(acceptsNumbers)
+  if (innerType instanceof z.ZodIntersection)
+    return acceptsNumbers(innerType._def.left) && acceptsNumbers(innerType._def.right)
+
+  return false
+}
+
 function acceptsObject(zodType: z.ZodType): boolean {
   const innerType = getInnerType(zodType)
   if (innerType instanceof z.ZodObject) return true
@@ -338,7 +376,7 @@ function acceptsObject(zodType: z.ZodType): boolean {
 
 type Result<T> = {success: true; value: T} | {success: false; error: string}
 
-interface ParsedProcedure {
+export interface ParsedProcedure {
   /** positional parameters */
   parameters: string[]
   /** JSON Schema type describing the flags for the procedure */
@@ -365,26 +403,31 @@ export function parseProcedureInputs(value: Procedure<any, any>): Result<ParsedP
 
   if (zodSchema instanceof z.ZodTuple) {
     const tuple = zodSchema as z.ZodTuple<z.ZodTupleItems>
-    const nonStringIndex = tuple.items.findIndex(item => !acceptsStrings(item))
+    const nonPositionalIndex = tuple.items.findIndex(item => !acceptsStrings(item) && !acceptsNumbers(item))
     const types = `[${tuple.items.map(s => getInnerType(s).constructor.name).join(', ')}]`
 
-    if (nonStringIndex > -1 && nonStringIndex !== tuple.items.length - 1) {
+    if (nonPositionalIndex > -1 && nonPositionalIndex !== tuple.items.length - 1) {
       return {
         success: false,
-        error: `Invalid input type ${types}. Positional parameters must be strings.`,
+        error: `Invalid input type ${types}. Positional parameters must be strings or numbers.`,
       }
     }
 
-    const positionalSchemas = nonStringIndex === -1 ? tuple.items : tuple.items.slice(0, nonStringIndex)
+    const positionalSchemas = nonPositionalIndex === -1 ? tuple.items : tuple.items.slice(0, nonPositionalIndex)
 
-    const parameters = positionalSchemas.map((item, i) => parameterName(item, i + 1))
-    const getParameters = (argv: {_: string[]; flags: {}}) => positionalSchemas.map((_, i) => argv._[i])
+    const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
+    const getParameters = (argv: {_: string[]; flags: {}}) => {
+      return positionalSchemas.map((schema, i) => {
+        if (acceptsNumbers(schema)) return Number(argv._[i])
+        return argv._[i]
+      })
+    }
 
     if (positionalSchemas.length === tuple.items.length) {
       // all schemas were positional - no object at the end
       return {
         success: true,
-        value: {parameters, flagsSchema: {}, getInput: getParameters},
+        value: {parameters: parameterNames, flagsSchema: {}, getInput: getParameters},
       }
     }
 
@@ -400,7 +443,7 @@ export function parseProcedureInputs(value: Procedure<any, any>): Result<ParsedP
     return {
       success: true,
       value: {
-        parameters,
+        parameters: parameterNames,
         flagsSchema: zodToJsonSchema(last),
         getInput: argv => [...getParameters(argv), argv.flags],
       },
@@ -423,30 +466,4 @@ export function parseProcedureInputs(value: Procedure<any, any>): Result<ParsedP
 const parameterName = (s: z.ZodType, position: number) => {
   const name = s.description || `parameter ${position}`
   return s instanceof z.ZodOptional ? `[${name}]` : `<${name}>`
-}
-
-function getCleyeType(schema: JsonSchema7Type) {
-  const _type = 'type' in schema && typeof schema.type === 'string' ? schema.type : null
-  switch (_type) {
-    case 'string': {
-      return String
-    }
-    case 'integer':
-    case 'number': {
-      return Number
-    }
-    case 'boolean': {
-      return Boolean
-    }
-    case 'array': {
-      return [String]
-    }
-    case 'object': {
-      return (s: string) => JSON.parse(s) as {}
-    }
-    default: {
-      _type satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
-      return (value: unknown) => value
-    }
-  }
 }

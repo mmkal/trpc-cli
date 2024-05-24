@@ -1,10 +1,14 @@
 # trpc-cli
 
-Turn a [trpc](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
+Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
 
 <!-- codegen:start {preset: markdownTOC} -->
 - [Installation](#installation)
 - [Usage](#usage)
+   - [Parameters and flags](#parameters-and-flags)
+      - [Positional parameters](#positional-parameters)
+      - [Flags](#flags)
+      - [Both](#both)
    - [Calculator example](#calculator-example)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Features and Limitations](#features-and-limitations)
@@ -35,8 +39,8 @@ const t = initTRPC.create()
 
 export const router = t.router({
   add: t.procedure
-    .input(z.object({a: z.number(), b: z.number()}))
-    .query(({input}) => input.a + input.b),
+    .input(z.object({left: z.number(), right: z.number()}))
+    .query(({input}) => input.left + input.right),
 })
 ```
 
@@ -54,12 +58,100 @@ And that's it! Your tRPC router is now a CLI program with help text and input va
 
 You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
 
+### Parameters and flags
+
+CLI positional parameters and flags are derived from each procedure's input type. Inputs should use a `zod` object or tuple type for the procedure to be mapped to a CLI command.
+
+#### Positional parameters
+
+Positional parameters passed to the CLI can be declared with a `z.tuple(...)` input type:
+
+```ts
+t.router({
+  add: t.procedure
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] + input[1]),
+})
+```
+
+Which is invoked like `path/to/cli add 2 3` (outputting `5`).
+
+>Note: positional parameters can use `.optional()` or `.nullish()`, but not `.nullable()`.
+
+>Note: positional parameters can be named using `.describe('name of parameter')`, but names can not include any special characters.
+
+#### Flags
+
+`z.object(...)` inputs become flags (passed with `--foo bar` or `--foo=bar`) syntax. Values are accepted in either `--camelCase` or `--kebab-case`, and are parsed like in most CLI programs:
+
+Strings:
+
+- `z.object({foo: z.string()})` will map:
+  - `--foo bar` or `--foo=bar` to `{foo: 'bar'}`
+
+Booleans:
+
+- `z.object({foo: z.boolean()})` will map:
+   - `--foo` or `--foo=true` to `{foo: true}`
+   - `--foo=false` to `{foo: false}`
+
+>Note: it's usually better to use `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false`.
+
+Numbers:
+
+- `z.object({foo: z.number()})` will map:
+   - `--foo 1` or `--foo=1` to `{foo: 1}`
+
+Other types:
+- `z.object({ foo: z.object({ bar: z.number() }) })` will parse inputs as JSON:
+   - `--foo '{"bar": 1}'` maps to `{foo: {bar: 1}}`
+
+Unions and intersections should also work as expected, but please test them thoroughly, especially if they are deeply-nested.
+
+#### Both
+
+To use positional parameters _and_ flags, use a tuple with an object at the end:
+
+```ts
+t.router({
+  copy: t.procedure
+    .input(
+      z.tuple([
+        z.string().describe('source'),
+        z.string().describe('target'),
+        z.object({
+          mkdirp: z
+            .boolean()
+            .optional()
+            .describe("Ensure target's parent directory exists before copying"),
+        }),
+      ]),
+    )
+    .mutation(async ({input: [source, target, opts]}) => {
+      if (opts.mkdirp) {
+        await fs.mkdir(path.dirname(target, {recursive: true}))
+      }
+      await fs.copyFile(source, target)
+    }),
+})
+```
+
+You might use the above with a command like:
+
+```
+path/to/cli copy a.txt b.txt --mkdirp
+```
+
+>Note: object types for flags must appear _last_ in the `.input` tuple, when being used with positional parameters. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would be allowed.
+
+Procedures with incompatible inputs will be returned in the `ignoredProcedures` property.
+
 ### Calculator example
 
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:efe19a66f7467160525f69c8ce4daef3 -->
+<!-- hash:b63bdbb21d0708bc6ce34e408c58f249 -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {TrpcCliMeta, trpcCli} from 'trpc-cli'
@@ -73,37 +165,22 @@ const router = trpc.router({
       description:
         'Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left + input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] + input[1]),
   subtract: trpc.procedure
     .meta({
       description:
         'Subtract two numbers. Useful if you have a number and you want to make it smaller.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left - input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] - input[1]),
   multiply: trpc.procedure
     .meta({
       description:
         'Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left * input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] * input[1]),
   divide: trpc.procedure
     .meta({
       version: '1.0.0',
@@ -112,17 +189,15 @@ const router = trpc.router({
       examples: 'divide --left 8 --right 4',
     })
     .input(
-      z.object({
-        left: z.number().describe('The numerator of the division operation.'),
-        right: z
+      z.tuple([
+        z.number().describe('numerator'),
+        z
           .number()
           .refine(n => n !== 0)
-          .describe(
-            'The denominator of the division operation. Note: must not be zero.',
-          ),
-      }),
+          .describe('denominator'),
+      ]),
     )
-    .mutation(({input}) => input.left / input.right),
+    .mutation(({input}) => input[0] / input[1]),
 })
 
 void trpcCli({router}).run()
@@ -130,7 +205,7 @@ void trpcCli({router}).run()
 <!-- codegen:end -->
 
 
-Run `node path/to/yourfile.js --help` for formatted help text for the `sum` and `divide` commands.
+Run `node path/to/cli --help` for formatted help text for the `sum` and `divide` commands.
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator --help'} -->
 `node path/to/calculator --help` output:
@@ -160,12 +235,10 @@ add
 Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
 Usage:
-  add [flags...]
+  add [flags...] <parameter 1> <parameter 2>
 
 Flags:
-  -h, --help                  Show help
-      --left <number>         The first number
-      --right <number>        The second number
+  -h, --help        Show help
 
 ```
 <!-- codegen:end -->
@@ -176,9 +249,18 @@ When passing a command along with its flags, the return value will be logged to 
 `node path/to/calculator add --left 2 --right 3` output:
 
 ```
-5
-```
+add
 
+Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+
+Usage:
+  add [flags...] <parameter 1> <parameter 2>
+
+Flags:
+  -h, --help        Show help
+
+Unexpected flags: left, right
+```
 <!-- codegen:end -->
 
 Invalid inputs are helpfully displayed, along with help text for the associated command:
@@ -192,15 +274,12 @@ add
 Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
 Usage:
-  add [flags...]
+  add [flags...] <parameter 1> <parameter 2>
 
 Flags:
-  -h, --help                  Show help
-      --left <number>         The first number
-      --right <number>        The second number
+  -h, --help        Show help
 
-Validation error
-  - Expected number, received nan at "--right"
+Unexpected flags: left, right
 ```
 <!-- codegen:end -->
 
@@ -277,7 +356,7 @@ You could also override `process.exit` to avoid killing the process at all - see
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:ecb45f308d36ff6594396ebd189c9f31 -->
+<!-- hash:57e812de50ced6dc1150ebe5498d5ecd -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {TrpcCliMeta, trpcCli} from 'trpc-cli'
@@ -342,7 +421,7 @@ const router = trpc.router({
   create: trpc.procedure
     .meta({description: 'Create a new migration'})
     .input(
-      z.object({name: z.string(), content: z.string()}), //
+      z.object({name: z.string(), content: z.string(), bb: z.boolean()}), //
     )
     .mutation(async ({input}) => {
       migrations.push({...input, status: 'pending'})

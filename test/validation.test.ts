@@ -7,14 +7,14 @@ const t = initTRPC.meta<TrpcCliMeta>().create()
 
 test('validation', async () => {
   const router = t.router({
-    okTuple: t.procedure
+    tupleOfStrings: t.procedure
       .input(z.tuple([z.string().describe('The first string'), z.string().describe('The second string')]))
       .query(() => 'ok'),
-    tupleWithNumber: t.procedure
-      .input(z.tuple([z.string(), z.number()])) //
+    tupleWithBoolean: t.procedure
+      .input(z.tuple([z.string(), z.boolean()])) //
       .query(() => 'ok'),
-    tupleWithNumberThenObject: t.procedure
-      .input(z.tuple([z.string(), z.number(), z.object({foo: z.string()})]))
+    tupleWithBooleanThenObject: t.procedure
+      .input(z.tuple([z.string(), z.boolean(), z.object({foo: z.string()})]))
       .query(() => 'ok'),
     tupleWithObjectInTheMiddle: t.procedure
       .input(z.tuple([z.string(), z.object({foo: z.string()}), z.string()]))
@@ -27,10 +27,10 @@ test('validation', async () => {
 
   expect(cli.ignoredProcedures).toMatchInlineSnapshot(`
     {
-      "tupleWithNumber": "Invalid input type [ZodString, ZodNumber]. Type following positionals must accept object inputs.",
-      "tupleWithNumberThenObject": "Invalid input type [ZodString, ZodNumber, ZodObject]. Positional parameters must be strings.",
-      "tupleWithObjectInTheMiddle": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings.",
-      "tupleWithRecord": "Invalid input type [ZodString, ZodRecord]. Type following positionals must accept object inputs.",
+      "tupleWithBoolean": "Invalid input type [ZodString, ZodBoolean]. The last type must accept object inputs.",
+      "tupleWithBooleanThenObject": "Invalid input type [ZodString, ZodBoolean, ZodObject]. Positional parameters must be strings or numbers.",
+      "tupleWithObjectInTheMiddle": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings or numbers.",
+      "tupleWithRecord": "Invalid input type [ZodString, ZodRecord]. The last type must accept object inputs.",
     }
   `)
 })

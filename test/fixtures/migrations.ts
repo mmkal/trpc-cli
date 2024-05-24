@@ -50,7 +50,7 @@ const router = trpc.router({
   create: trpc.procedure
     .meta({description: 'Create a new migration'})
     .input(
-      z.object({name: z.string(), content: z.string()}), //
+      z.object({name: z.string(), content: z.string(), bb: z.boolean()}), //
     )
     .mutation(async ({input}) => {
       migrations.push({...input, status: 'pending'})

@@ -69,12 +69,12 @@ test('cli help divide', async () => {
 })
 
 test('cli add', async () => {
-  const output = await tsx('calculator', ['add', '--left', '1', '--right', '2'])
+  const output = await tsx('calculator', ['add', '1', '2'])
   expect(output).toMatchInlineSnapshot(`"3"`)
 })
 
 test('cli add failure', async () => {
-  const output = await tsx('calculator', ['add', '--left', '1', '--right', 'notanumber'])
+  const output = await tsx('calculator', ['add', '1', 'notanumber'])
   expect(output).toMatchInlineSnapshot(`
     "Validation error
       - Expected number, received nan at "--right"
@@ -94,12 +94,12 @@ test('cli add failure', async () => {
 })
 
 test('cli divide', async () => {
-  const output = await tsx('calculator', ['divide', '--left', '8', '--right', '4'])
+  const output = await tsx('calculator', ['divide', '8', '4'])
   expect(output).toMatchInlineSnapshot(`"2"`)
 })
 
 test('cli divide failure', async () => {
-  const output = await tsx('calculator', ['divide', '--left', '8', '--right', '0'])
+  const output = await tsx('calculator', ['divide', '8', '0'])
   expect(output).toMatchInlineSnapshot(`
     "Validation error
       - Invalid input at "--right"
