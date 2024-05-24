@@ -26,7 +26,7 @@ type AnyProcedure = Procedure<any, any>
  */
 export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliParams<R>) => {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([commandName, procedure]) => {
-    const procedureResult = parseProcedureInputs(procedure)
+    const procedureResult = parseProcedureInputs(procedure._def.inputs as unknown[])
     if (!procedureResult.success) {
       return [commandName, procedureResult.error] as const
     }

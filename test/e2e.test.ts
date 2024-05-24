@@ -73,7 +73,7 @@ test('cli add failure', async () => {
   const output = await tsx('calculator', ['add', '1', 'notanumber'])
   expect(output).toMatchInlineSnapshot(`
     "Validation error
-      - Expected number, received nan at index 1
+      - Expected number, received string at index 1
     add
 
     Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.

@@ -25,6 +25,9 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Testing](#testing)
 <!-- codegen:end -->
 
+[![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)
+[![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli)
+
 ## Installation
 
 ```
@@ -61,6 +64,8 @@ cli.run()
 And that's it! Your tRPC router is now a CLI program with help text and input validation.
 
 You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
+
+>Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though!
 
 ### Parameters and flags
 
@@ -583,7 +588,9 @@ Flags:
 
 ## Programmatic usage
 
-This library should probably _not_ be used programmatically - the functionality all comes from a trpc router, which has [many other ways to be invoked](https://trpc.io/docs/community/awesome-trpc). But if you really need to for some reason, you could override the `console.error` and `process.exit` calls:
+This library should probably _not_ be used programmatically - the functionality all comes from a trpc router, which has [many other ways to be invoked](https://trpc.io/docs/community/awesome-trpc) (including the built-in `createCaller` helper bundled with `@trpc/server`).
+
+The `.run()` function does return a value, but it's typed as `unknown` since the input is just `argv: string[]` . But if you really need to for some reason, you could override the `console.error` and `process.exit` calls:
 
 ```ts
 import {trpcCli} from 'trpc-cli'
@@ -609,7 +616,7 @@ const runCli = async (argv: string[]) => {
 }
 ```
 
-Note that even if you do this, help text may get writted directly to stdout by `cleye`. If that's a problem, [raise an issue](https://github.com/mmkal/trpc-cli/issues) - it could be solved by exposing some `cleye` configuration to the `run` method.
+>Note that even if you do this, help text is handled by [cleye](https://npmjs.com/package/cleye) which prints directly to stdout and exits the process. In a future version this will be solved by either exposing some `cleye` configuration to the `run` method, or controlling the help text rendering directly.
 
 ## Out of scope
 
