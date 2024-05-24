@@ -9,6 +9,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
       - [Positional parameters](#positional-parameters)
       - [Flags](#flags)
       - [Both](#both)
+   - [Default procedure](#default-procedure)
    - [API docs](#api-docs)
       - [trpcCli](#trpccli)
          - [Params](#params)
@@ -111,7 +112,7 @@ Booleans:
    - `--foo` or `--foo=true` to `{foo: true}`
    - `--foo=false` to `{foo: false}`
 
->Note: it's usually better to use `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false`.
+>Note: it's usually better to use `z.boolean().default(false)` or `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false` explicitly.
 
 Numbers:
 
@@ -166,10 +167,30 @@ Procedures with incompatible inputs will be returned in the `ignoredProcedures` 
 
 >Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though!
 
+### Default procedure
+
+You can define a default command for your CLI - set this to the procedure that should be invoked directly when calling your CLI. Useful for simple CLIs that only do one thing, or when you want to make the most common command very quick to type (e.g. `yarn` being an alias for `yarn install`):
+
+```ts
+#!/usr/bin/env node
+// filename: yarn
+const router = t.router({
+  install: t.procedure //
+    .mutation(() => console.log('installing...')),
+})
+
+trpcCli({
+  router,
+  default: {procedure: 'install'},
+})
+```
+
+The above can be invoked with either `yarn` or `yarn install`.
+
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: trpcCli} -->
-#### [trpcCli](./src/index.ts#L27)
+#### [trpcCli](./src/index.ts#L28)
 
 Run a trpc router as a CLI.
 
@@ -180,6 +201,7 @@ Run a trpc router as a CLI.
 |router |A trpc router                                                                            |
 |context|The context to use when calling the procedures - needed if your router requires a context|
 |alias  |A function that can be used to provide aliases for flags.                                |
+|default|A procedure to use as the default command when the user doesn't specify one.             |
 
 ##### Returns
 

@@ -2,7 +2,7 @@ import {Router, initTRPC} from '@trpc/server'
 import stripAnsi from 'strip-ansi'
 import {expect, test} from 'vitest'
 import {z} from 'zod'
-import {trpcCli, TrpcCliMeta} from '../src'
+import {trpcCli, TrpcCliMeta, TrpcCliParams} from '../src'
 
 expect.addSnapshotSerializer({
   test: (val): val is Error => val instanceof Error,
@@ -19,8 +19,11 @@ expect.addSnapshotSerializer({
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
-const run = (router: Router<any>, argv: string[]) => {
-  const cli = trpcCli({router})
+const run = <R extends Router<any>>(router: R, argv: string[]) => {
+  return runWith({router}, argv)
+}
+const runWith = <R extends Router<any>>(params: TrpcCliParams<R>, argv: string[]) => {
+  const cli = trpcCli(params)
   return new Promise<string>((resolve, reject) => {
     const logs: unknown[][] = []
     const addLogs = (...args: unknown[]) => logs.push(args)
@@ -278,6 +281,25 @@ test('single character flag', async () => {
   await expect(run(router, ['foo', 'hello', '123', '--a', 'b'])).rejects.toMatchInlineSnapshot(
     `Flag name "a" must be longer than a character`,
   )
+})
+
+test('custom default procedure', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {
+    router: yarn,
+    default: {procedure: 'install'},
+  }
+
+  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
+  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+
+  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
+  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('validation', async () => {
