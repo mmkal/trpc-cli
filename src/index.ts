@@ -12,23 +12,32 @@ import {parseProcedureInputs} from './zod-procedure'
 export * from './types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const trpcCli = <R extends Router<any>>({router, context, alias}: TrpcCliParams<R>) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const procedures = Object.entries<Procedure<any, any>>(router._def.procedures as {}).map(
-    ([commandName, procedure]) => {
-      const procedureResult = parseProcedureInputs(procedure)
-      if (!procedureResult.success) {
-        return [commandName, procedureResult.error] as const
-      }
+type AnyRouter = Router<any>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyProcedure = Procedure<any, any>
 
-      const jsonSchema = procedureResult.value
-      const properties = flattenedProperties(jsonSchema.flagsSchema)
-      const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
-      const type = router._def.procedures[commandName]._def.mutation ? 'mutation' : 'query'
+/**
+ * Run a trpc router as a CLI.
+ *
+ * @param router A trpc router
+ * @param context The context to use when calling the procedures - needed if your router requires a context
+ * @param alias A function that can be used to provide aliases for flags.
+ * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+ */
+export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliParams<R>) => {
+  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([commandName, procedure]) => {
+    const procedureResult = parseProcedureInputs(procedure)
+    if (!procedureResult.success) {
+      return [commandName, procedureResult.error] as const
+    }
 
-      return [commandName, {procedure, jsonSchema, properties, incompatiblePairs, type}] as const
-    },
-  )
+    const jsonSchema = procedureResult.value
+    const properties = flattenedProperties(jsonSchema.flagsSchema)
+    const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
+    const type = router._def.procedures[commandName]._def.mutation ? 'mutation' : 'query'
+
+    return [commandName, {procedure, jsonSchema, properties, incompatiblePairs, type}] as const
+  })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
     return typeof v === 'string' ? [] : [[k, v] as const]

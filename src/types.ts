@@ -3,8 +3,17 @@ import {type JsonSchema7Type} from 'zod-to-json-schema'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TrpcCliParams<R extends Router<any>> = {
+  /** A tRPC router. Procedures will become CLI commands. */
   router: R
+  /** Context to be supplied when invoking the router. */
   context?: inferRouterContext<R>
+  /**
+   * A function that will be called for every flag, for every command. Used to provide single-character aliases for flags.
+   * Return a single-character string to alias a flag to that character.
+   * @param fullName The full-length name of the flag
+   * @param meta Metadata about the command and flags. Includes the command name and all the other flags for the command (so you can avoid clashes you might get with `return fullName[0]`).
+   * @returns A single-letter string to alias the flag to that character, or `void`/`undefined` to not alias the flag.
+   */
   alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined
 }
 /**

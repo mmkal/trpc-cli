@@ -9,6 +9,10 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
       - [Positional parameters](#positional-parameters)
       - [Flags](#flags)
       - [Both](#both)
+   - [API docs](#api-docs)
+      - [trpcCli](#trpccli)
+         - [Params](#params)
+         - [Returns](#returns)
    - [Calculator example](#calculator-example)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Features and Limitations](#features-and-limitations)
@@ -145,6 +149,26 @@ path/to/cli copy a.txt b.txt --mkdirp
 >Note: object types for flags must appear _last_ in the `.input` tuple, when being used with positional parameters. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would be allowed.
 
 Procedures with incompatible inputs will be returned in the `ignoredProcedures` property.
+
+### API docs
+
+<!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: trpcCli} -->
+#### [trpcCli](./src/index.ts#L27)
+
+Run a trpc router as a CLI.
+
+##### Params
+
+|name   |description                                                                              |
+|-------|-----------------------------------------------------------------------------------------|
+|router |A trpc router                                                                            |
+|context|The context to use when calling the procedures - needed if your router requires a context|
+|alias  |A function that can be used to provide aliases for flags.                                |
+
+##### Returns
+
+A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+<!-- codegen:end -->
 
 ### Calculator example
 
@@ -356,7 +380,7 @@ You could also override `process.exit` to avoid killing the process at all - see
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:99a33a561c51e15dddf7c57da43d3b72 -->
+<!-- hash:8635f80f9309a63813b659a227270b73 -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {trpcCli, type TrpcCliMeta} from 'trpc-cli'
@@ -421,7 +445,7 @@ const router = trpc.router({
   create: trpc.procedure
     .meta({description: 'Create a new migration'})
     .input(
-      z.object({name: z.string(), content: z.string(), bb: z.boolean()}), //
+      z.object({name: z.string(), content: z.string()}), //
     )
     .mutation(async ({input}) => {
       migrations.push({...input, status: 'pending'})
