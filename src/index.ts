@@ -22,21 +22,22 @@ type AnyProcedure = Procedure<any, any>
  * @param router A trpc router
  * @param context The context to use when calling the procedures - needed if your router requires a context
  * @param alias A function that can be used to provide aliases for flags.
+ * @param default The name of the "default" command @default 'default'
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
-export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliParams<R>) => {
-  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([commandName, procedure]) => {
+export const trpcCli = <R extends AnyRouter>({router, context, alias, default: defaultProcedure}: TrpcCliParams<R>) => {
+  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([name, procedure]) => {
     const procedureResult = parseProcedureInputs(procedure._def.inputs as unknown[])
     if (!procedureResult.success) {
-      return [commandName, procedureResult.error] as const
+      return [name, procedureResult.error] as const
     }
 
     const jsonSchema = procedureResult.value
     const properties = flattenedProperties(jsonSchema.flagsSchema)
     const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
-    const type = router._def.procedures[commandName]._def.mutation ? 'mutation' : 'query'
+    const type = router._def.procedures[name]._def.mutation ? 'mutation' : 'query'
 
-    return [commandName, {procedure, jsonSchema, properties, incompatiblePairs, type}] as const
+    return [name, {name, procedure, jsonSchema, properties, incompatiblePairs, type}] as const
   })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
@@ -58,6 +59,48 @@ export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliPa
     const _process = params?.process || process
     let verboseErrors: boolean = false
 
+    const cleyeCommands = procedureEntries.map(
+      ([commandName, {procedure, jsonSchema, properties}]): CleyeCommandOptions => {
+        const flags = Object.fromEntries(
+          Object.entries(properties).map(([propertyKey, propertyValue]) => {
+            const cleyeType = getCleyeType(propertyValue)
+
+            let description: string | undefined = getDescription(propertyValue)
+            if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
+              description = `${description} (optional)`.trim()
+            }
+            description ||= undefined
+
+            return [
+              propertyKey,
+              {
+                type: cleyeType,
+                description,
+                default: propertyValue.default as {},
+              },
+            ]
+          }),
+        )
+
+        Object.entries(flags).forEach(([fullName, flag]) => {
+          const a = alias?.(fullName, {command: commandName, flags})
+          if (a) {
+            Object.assign(flag, {alias: a})
+          }
+        })
+
+        return {
+          name: commandName,
+          help: procedure.meta as {},
+          parameters: jsonSchema.parameters,
+          flags: flags as {},
+        }
+      },
+    )
+
+    const defaultCommandName = defaultProcedure === false ? {} : defaultProcedure || 'default'
+    const defaultCommand = cleyeCommands.find(({name}) => name === defaultCommandName)
+
     const parsedArgv = cleye.cli(
       {
         flags: {
@@ -67,42 +110,8 @@ export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliPa
             default: false,
           },
         },
-        commands: procedureEntries.map(([commandName, {procedure, jsonSchema, properties}]) => {
-          const flags = Object.fromEntries(
-            Object.entries(properties).map(([propertyKey, propertyValue]) => {
-              const cleyeType = getCleyeType(propertyValue)
-
-              let description: string | undefined = getDescription(propertyValue)
-              if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
-                description = `${description} (optional)`.trim()
-              }
-              description ||= undefined
-
-              return [
-                propertyKey,
-                {
-                  type: cleyeType,
-                  description,
-                  default: propertyValue.default as {},
-                },
-              ]
-            }),
-          )
-
-          Object.entries(flags).forEach(([fullName, flag]) => {
-            const a = alias?.(fullName, {command: commandName, flags})
-            if (a) {
-              Object.assign(flag, {alias: a})
-            }
-          })
-
-          return cleye.command({
-            name: commandName,
-            help: procedure.meta as {},
-            parameters: jsonSchema.parameters,
-            flags: flags as {},
-          })
-        }) as cleye.Command[],
+        ...defaultCommand,
+        commands: cleyeCommands.map(cmd => cleye.command(cmd)) as cleye.Command[],
       },
       undefined,
       params?.argv,
@@ -113,7 +122,7 @@ export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliPa
 
     const caller = initTRPC.context<NonNullable<typeof context>>().create({}).createCallerFactory(router)(context)
 
-    function die(message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) {
+    const die: Fail = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
       if (verboseErrors !== undefined && verboseErrors) {
         throw (cause as Error) || new Error(message)
       }
@@ -124,19 +133,15 @@ export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliPa
       return _process.exit(1)
     }
 
-    const command = parsedArgv.command as string
+    const command = parsedArgv.command as string | undefined
 
-    if (!command && parsedArgv._.length === 0) {
-      return die('No command provided.')
-    }
-
-    if (!command) {
-      return die(`Command "${parsedArgv._.join(' ')}" not recognised.`)
-    }
-
-    const procedureInfo = procedureMap[command]
-    if (!procedureInfo) {
-      return die(`Command "${command}" not found. Available commands: ${Object.keys(procedureMap).join(', ')}.`)
+    let procedureInfo: (typeof procedureMap)[string]
+    if (command) {
+      procedureInfo = procedureMap[command]
+    } else if (typeof defaultCommandName === 'string') {
+      procedureInfo = procedureMap[defaultCommandName]
+    } else {
+      die('No command provided.')
     }
 
     if (Object.entries(unknownFlags).length > 0) {
@@ -159,48 +164,56 @@ export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliPa
     const input = procedureInfo.jsonSchema.getInput({_: parsedArgv._, flags}) as never
 
     try {
-      const result: unknown = await caller[procedureInfo.type as 'mutation'](parsedArgv.command, input)
+      const result: unknown = await caller[procedureInfo.type as 'mutation'](procedureInfo.name, input)
       if (result) logger.info?.(result)
       _process.exit(0)
     } catch (err) {
-      if (err instanceof TRPCError) {
-        const cause = err.cause
-        if (cause instanceof ZodError) {
-          const originalIssues = cause.issues
-          try {
-            cause.issues = cause.issues.map(issue => {
-              if (typeof issue.path[0] !== 'string') return issue
-              return {
-                ...issue,
-                path: ['--' + issue.path[0], ...issue.path.slice(1)],
-              }
-            })
-
-            const prettyError = zodValidationError.fromError(cause, {
-              prefixSeparator: '\n  - ',
-              issueSeparator: '\n  - ',
-            })
-
-            return die(prettyError.message, {cause, help: true})
-          } finally {
-            cause.issues = originalIssues
-          }
-        }
-        if (err.code === 'INTERNAL_SERVER_ERROR') {
-          throw cause
-        }
-        if (err.code === 'BAD_REQUEST') {
-          return die(err.message, {cause: err})
-        }
-      }
-      throw err
+      throw transformError(err, die)
     }
   }
 
   return {run, ignoredProcedures}
 }
 
-function getCleyeType(schema: JsonSchema7Type) {
+type Fail = (message: string, options?: {cause?: unknown; help?: boolean}) => never
+
+function transformError(err: unknown, fail: Fail): unknown {
+  if (err instanceof TRPCError) {
+    const cause = err.cause
+    if (cause instanceof ZodError) {
+      const originalIssues = cause.issues
+      try {
+        cause.issues = cause.issues.map(issue => {
+          if (typeof issue.path[0] !== 'string') return issue
+          return {
+            ...issue,
+            path: ['--' + issue.path[0], ...issue.path.slice(1)],
+          }
+        })
+
+        const prettyError = zodValidationError.fromError(cause, {
+          prefixSeparator: '\n  - ',
+          issueSeparator: '\n  - ',
+        })
+
+        return fail(prettyError.message, {cause, help: true})
+      } finally {
+        cause.issues = originalIssues
+      }
+    }
+    if (err.code === 'INTERNAL_SERVER_ERROR') {
+      throw cause
+    }
+    if (err.code === 'BAD_REQUEST') {
+      return fail(err.message, {cause: err})
+    }
+  }
+}
+
+type CleyeCommandOptions = cleye.Command['options']
+type CleyeFlag = NonNullable<CleyeCommandOptions['flags']>[string]
+
+function getCleyeType(schema: JsonSchema7Type): Extract<CleyeFlag, {type: unknown}>['type'] {
   const _type = 'type' in schema && typeof schema.type === 'string' ? schema.type : null
   switch (_type) {
     case 'string': {

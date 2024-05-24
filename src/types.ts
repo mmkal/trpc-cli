@@ -15,6 +15,11 @@ export type TrpcCliParams<R extends Router<any>> = {
    * @returns A single-letter string to alias the flag to that character, or `void`/`undefined` to not alias the flag.
    */
   alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined
+  /**
+   * The name of the "default" command - this procedure will be run if no command is specified. Default value is `default`, if such a procedure exists. Otherwise there is no default procedure.
+   * Set to `false` to disable the default command, even when there's a procedure named `'default'`.
+   */
+  default?: keyof R['_def']['procedures'] | false
 }
 /**
  * Optional interface for describing procedures via meta - if your router conforms to this meta shape, it will contribute to the CLI help text.

@@ -9,6 +9,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
       - [Positional parameters](#positional-parameters)
       - [Flags](#flags)
       - [Both](#both)
+   - [Default procedure](#default-procedure)
    - [API docs](#api-docs)
       - [trpcCli](#trpccli)
          - [Params](#params)
@@ -166,10 +167,40 @@ Procedures with incompatible inputs will be returned in the `ignoredProcedures` 
 
 >Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though!
 
+### Default procedure
+
+If you have a procedure named `default` it will be used as the default procedure for your CLI:
+
+```ts
+t.router({
+  default: t.procedure
+    .input(z.number())
+    .mutation(({input}) => console.log(input)),
+})
+```
+
+The above could be invoked with `path/to/cli 123`.
+
+You can specify a different command using the `default` parameter:
+
+```ts
+const router = t.router({
+  install: t.procedure
+    .input(z.string().describe('package name'))
+    .mutation(({input}) => ___),
+})
+
+trpcCli({router, default: 'install'})
+```
+
+This can be run either with `path/to/cli foo` or `path/to/cli install foo`.
+
+Use `default: false` to ensure there's no default command, even if you have a router procedure named `default`.
+
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: trpcCli} -->
-#### [trpcCli](./src/index.ts#L27)
+#### [trpcCli](./src/index.ts#L28)
 
 Run a trpc router as a CLI.
 
@@ -180,6 +211,7 @@ Run a trpc router as a CLI.
 |router |A trpc router                                                                            |
 |context|The context to use when calling the procedures - needed if your router requires a context|
 |alias  |A function that can be used to provide aliases for flags.                                |
+|default|The name of the "default" command @default 'default'                                     |
 
 ##### Returns
 
