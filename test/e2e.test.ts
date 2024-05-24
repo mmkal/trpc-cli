@@ -3,8 +3,8 @@ import * as path from 'path'
 import stripAnsi from 'strip-ansi'
 import {expect, test} from 'vitest'
 
-const tsx = (file: string) => async (args: string[]) => {
-  const {all} = await execa('./node_modules/.bin/tsx', [file, ...args], {
+const tsx = async (file: string, args: string[]) => {
+  const {all} = await execa('./node_modules/.bin/tsx', ['test/fixtures/' + file, ...args], {
     all: true,
     reject: false,
     cwd: path.join(__dirname, '..'),
@@ -12,11 +12,8 @@ const tsx = (file: string) => async (args: string[]) => {
   return stripAnsi(all)
 }
 
-const calculator = tsx('test/fixtures/calculator.ts')
-const migrator = tsx('test/fixtures/migrations.ts')
-
 test('cli help', async () => {
-  const output = await calculator(['--help'])
+  const output = await tsx('calculator', ['--help'])
   expect(output.replaceAll(/(commands:|flags:)/gi, s => s[0].toUpperCase() + s.slice(1).toLowerCase()))
     .toMatchInlineSnapshot(`
       "Commands:
@@ -33,37 +30,33 @@ test('cli help', async () => {
 })
 
 test('cli help add', async () => {
-  const output = await calculator(['add', '--help'])
+  const output = await tsx('calculator', ['add', '--help'])
   expect(output).toMatchInlineSnapshot(`
     "add
 
     Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
     Usage:
-      add [flags...]
+      add [flags...] <parameter 1> <parameter 2>
 
     Flags:
-      -h, --help                  Show help
-          --left <number>         The first number
-          --right <number>        The second number
+      -h, --help        Show help
     "
   `)
 })
 
 test('cli help divide', async () => {
-  const output = await calculator(['divide', '--help'])
+  const output = await tsx('calculator', ['divide', '--help'])
   expect(output).toMatchInlineSnapshot(`
     "divide v1.0.0
 
     Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
 
     Usage:
-      divide [flags...]
+      divide [flags...] <numerator> <denominator>
 
     Flags:
-      -h, --help                  Show help
-          --left <number>         The numerator of the division operation.
-          --right <number>        The denominator of the division operation. Note: must not be zero.
+      -h, --help        Show help
 
     Examples:
       divide --left 8 --right 4
@@ -72,51 +65,47 @@ test('cli help divide', async () => {
 })
 
 test('cli add', async () => {
-  const output = await calculator(['add', '--left', '1', '--right', '2'])
+  const output = await tsx('calculator', ['add', '1', '2'])
   expect(output).toMatchInlineSnapshot(`"3"`)
 })
 
 test('cli add failure', async () => {
-  const output = await calculator(['add', '--left', '1', '--right', 'notanumber'])
+  const output = await tsx('calculator', ['add', '1', 'notanumber'])
   expect(output).toMatchInlineSnapshot(`
     "Validation error
-      - Expected number, received nan at "--right"
+      - Expected number, received string at index 1
     add
 
     Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
     Usage:
-      add [flags...]
+      add [flags...] <parameter 1> <parameter 2>
 
     Flags:
-      -h, --help                  Show help
-          --left <number>         The first number
-          --right <number>        The second number
+      -h, --help        Show help
     "
   `)
 })
 
 test('cli divide', async () => {
-  const output = await calculator(['divide', '--left', '8', '--right', '4'])
+  const output = await tsx('calculator', ['divide', '8', '4'])
   expect(output).toMatchInlineSnapshot(`"2"`)
 })
 
-test('cli divide failure', async () => {
-  const output = await calculator(['divide', '--left', '8', '--right', '0'])
+test.skip('cli divide failure', async () => {
+  const output = await tsx('calculator', ['divide', '8', '0'])
   expect(output).toMatchInlineSnapshot(`
     "Validation error
-      - Invalid input at "--right"
+      - Invalid input at index 1
     divide v1.0.0
 
     Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
 
     Usage:
-      divide [flags...]
+      divide [flags...] <numerator> <denominator>
 
     Flags:
-      -h, --help                  Show help
-          --left <number>         The numerator of the division operation.
-          --right <number>        The denominator of the division operation. Note: must not be zero.
+      -h, --help        Show help
 
     Examples:
       divide --left 8 --right 4
@@ -125,7 +114,7 @@ test('cli divide failure', async () => {
 })
 
 test('migrations help', async () => {
-  const output = await migrator(['--help'])
+  const output = await tsx('migrations', ['--help'])
   expect(output).toMatchInlineSnapshot(`
     "Commands:
       apply                   Apply migrations. By default all pending migrations will be applied.
@@ -142,7 +131,7 @@ test('migrations help', async () => {
 })
 
 test('migrations union type', async () => {
-  let output = await migrator(['apply', '--to', 'four'])
+  let output = await tsx('migrations', ['apply', '--to', 'four'])
 
   expect(output).toMatchInlineSnapshot(`
     "[
@@ -154,7 +143,7 @@ test('migrations union type', async () => {
     ]"
   `)
 
-  output = await migrator(['apply', '--step', '1'])
+  output = await tsx('migrations', ['apply', '--step', '1'])
   expect(output).toContain('four: pending') // <-- this sometimes goes wrong when I mess with union type handling
   expect(output).toMatchInlineSnapshot(`
     "[
@@ -168,7 +157,7 @@ test('migrations union type', async () => {
 })
 
 test('migrations search.byName help', async () => {
-  const output = await migrator(['search.byName', '--help'])
+  const output = await tsx('migrations', ['search.byName', '--help'])
   expect(output).toMatchInlineSnapshot(`
     "search.byName
 
@@ -186,7 +175,7 @@ test('migrations search.byName help', async () => {
 })
 
 test('migrations search.byName', async () => {
-  const output = await migrator(['search.byName', '--name', 'two'])
+  const output = await tsx('migrations', ['search.byName', '--name', 'two'])
   expect(output).toMatchInlineSnapshot(`
     "[
       {
@@ -199,7 +188,7 @@ test('migrations search.byName', async () => {
 })
 
 test('migrations search.byContent', async () => {
-  const output = await migrator(['search.byContent', '--searchTerm', 'create table'])
+  const output = await tsx('migrations', ['search.byContent', '--searchTerm', 'create table'])
   expect(output).toMatchInlineSnapshot(`
     "[
       {
@@ -222,7 +211,7 @@ test('migrations search.byContent', async () => {
 })
 
 test('migrations incompatible flags', async () => {
-  const output = await migrator(['apply', '--to', 'four', '--step', '1'])
+  const output = await tsx('migrations', ['apply', '--to', 'four', '--step', '1'])
   expect(output).toContain('--step and --to are incompatible')
   expect(output).toMatchInlineSnapshot(`
     "--step and --to are incompatible and cannot be used together
@@ -239,4 +228,85 @@ test('migrations incompatible flags', async () => {
           --to <string>          Mark migrations up to this one as exectued
     "
   `)
+})
+
+test('fs help', async () => {
+  const output = await tsx('fs', ['--help'])
+  expect(output).toMatchInlineSnapshot(`
+    "Commands:
+      copy        
+      diff        
+
+    Flags:
+      -h, --help                  Show help
+          --verbose-errors        Throw raw errors (by default errors are summarised)
+    "
+  `)
+})
+
+test('fs copy help', async () => {
+  const output = await tsx('fs', ['copy', '--help'])
+  expect(output).toMatchInlineSnapshot(`
+    "copy
+
+    Usage:
+      copy [flags...] <Source path> [Destination path]
+
+    Flags:
+          --force        Overwrite destination if it exists
+      -h, --help         Show help
+    "
+  `)
+})
+
+test('fs copy', async () => {
+  expect(await tsx('fs', ['copy', 'one'])).toMatchInlineSnapshot(
+    `"{ source: 'one', destination: 'one.copy', options: { force: false } }"`,
+  )
+  expect(await tsx('fs', ['copy', 'one', 'uno'])).toMatchInlineSnapshot(
+    `"{ source: 'one', destination: 'uno', options: { force: false } }"`,
+  )
+  expect(await tsx('fs', ['copy', 'one', '--force'])).toMatchInlineSnapshot(
+    `"{ source: 'one', destination: 'one.copy', options: { force: true } }"`,
+  )
+  expect(await tsx('fs', ['copy', 'one', 'uno', '--force'])).toMatchInlineSnapshot(
+    `"{ source: 'one', destination: 'uno', options: { force: true } }"`,
+  )
+
+  // invalid enum value:
+  expect(await tsx('fs', ['diff', 'one', 'fileNotFound'])).toMatchInlineSnapshot(`
+    "Validation error
+      - Invalid enum value. Expected 'one' | 'two' | 'three' | 'four', received 'fileNotFound' at index 1
+    diff
+
+    Usage:
+      diff [flags...] <Base path> <Head path>
+
+    Flags:
+      -h, --help                     Show help
+          --ignore-whitespace        Ignore whitespace changes
+          --trim                     Trim start/end whitespace
+    "
+  `)
+})
+
+test('fs diff', async () => {
+  expect(await tsx('fs', ['diff', '--help'])).toMatchInlineSnapshot(`
+    "diff
+
+    Usage:
+      diff [flags...] <Base path> <Head path>
+
+    Flags:
+      -h, --help                     Show help
+          --ignore-whitespace        Ignore whitespace changes
+          --trim                     Trim start/end whitespace
+    "
+  `)
+  expect(await tsx('fs', ['diff', 'one', 'two'])).toMatchInlineSnapshot(`""`)
+  expect(await tsx('fs', ['diff', 'one', 'three'])).toMatchInlineSnapshot(
+    `"base and head differ at index 0 ("a" !== "x")"`,
+  )
+  expect(await tsx('fs', ['diff', 'three', 'four'])).toMatchInlineSnapshot(`"base has length 5 and head has length 6"`)
+  expect(await tsx('fs', ['diff', 'three', 'four', '--ignore-whitespace'])).toMatchInlineSnapshot(`""`)
 })

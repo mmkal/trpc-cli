@@ -1,36 +1,54 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import {Procedure, Router, TRPCError, inferRouterContext, initTRPC} from '@trpc/server'
+import {Procedure, Router, TRPCError, initTRPC} from '@trpc/server'
 import * as cleye from 'cleye'
 import colors from 'picocolors'
-import {ZodError, z} from 'zod'
-import ztjs, {JsonSchema7ObjectType, type JsonSchema7Type} from 'zod-to-json-schema'
+import {ZodError} from 'zod'
+import {type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
+import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
+import {TrpcCliParams} from './types'
+import {parseProcedureInputs} from './zod-procedure'
 
-export type TrpcCliParams<R extends Router<any>> = {
-  router: R
-  context?: inferRouterContext<R>
-  alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined
-}
-
-/**
- * Optional interface for describing procedures via meta - if your router conforms to this meta shape, it will contribute to the CLI help text.
- * Based on @see `import('cleye').HelpOptions`
- */
-export interface TrpcCliMeta {
-  /** Version of the script displayed in `--help` output. Use to avoid enabling `--version` flag. */
-  version?: string
-  /** Description of the script or command to display in `--help` output. */
-  description?: string
-  /** Usage code examples to display in `--help` output. */
-  usage?: false | string | string[]
-  /** Example code snippets to display in `--help` output. */
-  examples?: string | string[]
-}
+export * from './types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const trpcCli = <R extends Router<any>>({router: appRouter, context, alias}: TrpcCliParams<R>) => {
+type AnyRouter = Router<any>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyProcedure = Procedure<any, any>
+
+/**
+ * Run a trpc router as a CLI.
+ *
+ * @param router A trpc router
+ * @param context The context to use when calling the procedures - needed if your router requires a context
+ * @param alias A function that can be used to provide aliases for flags.
+ * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+ */
+export const trpcCli = <R extends AnyRouter>({router, context, alias}: TrpcCliParams<R>) => {
+  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([commandName, procedure]) => {
+    const procedureResult = parseProcedureInputs(procedure._def.inputs as unknown[])
+    if (!procedureResult.success) {
+      return [commandName, procedureResult.error] as const
+    }
+
+    const jsonSchema = procedureResult.value
+    const properties = flattenedProperties(jsonSchema.flagsSchema)
+    const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
+    const type = router._def.procedures[commandName]._def.mutation ? 'mutation' : 'query'
+
+    return [commandName, {procedure, jsonSchema, properties, incompatiblePairs, type}] as const
+  })
+
+  const procedureEntries = procedures.flatMap(([k, v]) => {
+    return typeof v === 'string' ? [] : [[k, v] as const]
+  })
+
+  const procedureMap = Object.fromEntries(procedureEntries)
+
+  const ignoredProcedures = Object.fromEntries(
+    procedures.flatMap(([k, v]) => (typeof v === 'string' ? [[k, v] as const] : [])),
+  )
+
   async function run(params?: {
     argv?: string[]
     logger?: {info?: (...args: unknown[]) => void; error?: (...args: unknown[]) => void}
@@ -38,19 +56,7 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
   }) {
     const logger = {...console, ...params?.logger}
     const _process = params?.process || process
-
-    const procedureEntries = Object.entries(appRouter._def.procedures)
-    const procedureMap = Object.fromEntries(
-      procedureEntries.map(([commandName, value]) => {
-        const procedure = value as Procedure<any, any>
-        const jsonSchema = procedureInputsToJsonSchema(procedure)
-        const properties = flattenedProperties(jsonSchema)
-        const incompatiblePairs = incompatiblePropertyPairs(jsonSchema)
-        const type = appRouter._def.procedures[commandName]._def.mutation ? 'mutation' : 'query'
-
-        return [commandName, {procedure, jsonSchema, properties, incompatiblePairs, type}]
-      }),
-    )
+    let verboseErrors: boolean = false
 
     const parsedArgv = cleye.cli(
       {
@@ -61,16 +67,13 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
             default: false,
           },
         },
-        commands: procedureEntries.map(([commandName]) => {
-          const {procedure, jsonSchema} = procedureMap[commandName]
-          const properties = flattenedProperties(jsonSchema)
-
+        commands: procedureEntries.map(([commandName, {procedure, jsonSchema, properties}]) => {
           const flags = Object.fromEntries(
             Object.entries(properties).map(([propertyKey, propertyValue]) => {
               const cleyeType = getCleyeType(propertyValue)
 
               let description: string | undefined = getDescription(propertyValue)
-              if ('required' in jsonSchema && !jsonSchema.required?.includes(propertyKey)) {
+              if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
                 description = `${description} (optional)`.trim()
               }
               description ||= undefined
@@ -80,7 +83,7 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
                 {
                   type: cleyeType,
                   description,
-                  default: propertyValue.default,
+                  default: propertyValue.default as {},
                 },
               ]
             }),
@@ -95,7 +98,8 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
 
           return cleye.command({
             name: commandName,
-            help: procedure.meta,
+            help: procedure.meta as {},
+            parameters: jsonSchema.parameters,
             flags: flags as {},
           })
         }) as cleye.Command[],
@@ -104,13 +108,13 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
       params?.argv,
     )
 
-    let {verboseErrors, ...unknownFlags} = parsedArgv.unknownFlags
-    verboseErrors ||= parsedArgv.flags.verboseErrors
+    const {verboseErrors: _verboseErrors, ...unknownFlags} = parsedArgv.unknownFlags as Record<string, unknown>
+    verboseErrors = _verboseErrors || parsedArgv.flags.verboseErrors
 
-    const caller = initTRPC.context<NonNullable<typeof context>>().create({}).createCallerFactory(appRouter)(context)
+    const caller = initTRPC.context<NonNullable<typeof context>>().create({}).createCallerFactory(router)(context)
 
-    const die = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
-      if (verboseErrors) {
+    function die(message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) {
+      if (verboseErrors !== undefined && verboseErrors) {
         throw (cause as Error) || new Error(message)
       }
       logger.error?.(colors.red(message))
@@ -137,12 +141,12 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
 
     if (Object.entries(unknownFlags).length > 0) {
       const s = Object.entries(unknownFlags).length === 1 ? '' : 's'
-      return die(`Unexpected flag${s}: ${Object.keys(parsedArgv.unknownFlags).join(', ')}`)
+      return die(`Unexpected flag${s}: ${Object.keys(unknownFlags).join(', ')}`)
     }
 
     let {help, ...flags} = parsedArgv.flags
 
-    flags = Object.fromEntries(Object.entries(flags).filter(([_k, v]) => v !== undefined)) // cleye returns undefined for flags which didn't receive a value
+    flags = Object.fromEntries(Object.entries(flags as {}).filter(([_k, v]) => v !== undefined)) // cleye returns undefined for flags which didn't receive a value
 
     const incompatibleMessages = procedureInfo.incompatiblePairs
       .filter(([a, b]) => a in flags && b in flags)
@@ -152,8 +156,10 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
       return die(incompatibleMessages.join('\n'))
     }
 
+    const input = procedureInfo.jsonSchema.getInput({_: parsedArgv._, flags}) as never
+
     try {
-      const result = (await caller[procedureInfo.type as 'mutation'](parsedArgv.command, flags)) as unknown
+      const result: unknown = await caller[procedureInfo.type as 'mutation'](parsedArgv.command, input)
       if (result) logger.info?.(result)
       _process.exit(0)
     } catch (err) {
@@ -162,10 +168,13 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
         if (cause instanceof ZodError) {
           const originalIssues = cause.issues
           try {
-            cause.issues = cause.issues.map(issue => ({
-              ...issue,
-              path: ['--' + issue.path[0], ...issue.path.slice(1)],
-            }))
+            cause.issues = cause.issues.map(issue => {
+              if (typeof issue.path[0] !== 'string') return issue
+              return {
+                ...issue,
+                path: ['--' + issue.path[0], ...issue.path.slice(1)],
+              }
+            })
 
             const prettyError = zodValidationError.fromError(cause, {
               prefixSeparator: '\n  - ',
@@ -188,107 +197,7 @@ export const trpcCli = <R extends Router<any>>({router: appRouter, context, alia
     }
   }
 
-  return {run}
-}
-
-const capitaliseFromCamelCase = (camel: string) => {
-  const parts = camel.split(/(?=[A-Z])/)
-  return capitalise(parts.map(p => p.toLowerCase()).join(' '))
-}
-
-const capitalise = (s: string) => s.slice(0, 1).toUpperCase() + s.slice(1)
-
-const flattenedProperties = (sch: JsonSchema7Type): JsonSchema7ObjectType['properties'] => {
-  if ('properties' in sch) {
-    return sch.properties
-  }
-  if ('allOf' in sch) {
-    return Object.fromEntries(
-      sch.allOf!.flatMap(subSchema => Object.entries(flattenedProperties(subSchema as JsonSchema7Type))),
-    )
-  }
-  if ('anyOf' in sch) {
-    const isExcluded = (v: JsonSchema7Type) => Object.keys(v).join(',') === 'not'
-    const entries = sch.anyOf!.flatMap(subSchema => {
-      const flattened = flattenedProperties(subSchema as JsonSchema7Type)
-      const excluded = Object.entries(flattened).flatMap(([name, propSchema]) => {
-        return isExcluded(propSchema) ? [`--${name}`] : []
-      })
-      return Object.entries(flattened).map(([k, v]): [typeof k, typeof v] => {
-        if (!isExcluded(v) && excluded.length > 0) {
-          return [k, Object.assign({}, v, {'Do not use with': excluded}) as typeof v]
-        }
-        return [k, v]
-      })
-    })
-
-    return Object.fromEntries(
-      entries.sort((a, b) => {
-        const scores = [a, b].map(([_k, v]) => (isExcluded(v) ? 0 : 1)) // Put the excluded ones first, so that `Object.fromEntries` will override them with the non-excluded ones (`Object.fromEntries([['a', 1], ['a', 2]])` => `{a: 2}`)
-        return scores[0] - scores[1]
-      }),
-    )
-  }
-  return {}
-}
-
-const incompatiblePropertyPairs = (sch: JsonSchema7Type): Array<[string, string]> => {
-  const isUnion = 'anyOf' in sch
-  if (!isUnion) return []
-
-  const sets = sch.anyOf!.map(subSchema => {
-    const keys = Object.keys(flattenedProperties(subSchema as JsonSchema7Type))
-    return {keys, set: new Set(keys)}
-  })
-
-  const compatiblityEntries = sets.flatMap(({keys}) => {
-    return keys.map(key => {
-      return [key, new Set(sets.filter(other => other.set.has(key)).flatMap(other => other.keys))] as const
-    })
-  })
-  const allKeys = sets.flatMap(({keys}) => keys)
-
-  return compatiblityEntries.flatMap(([key, compatibleWith]) => {
-    const incompatibleEntries = allKeys
-      .filter(other => key < other && !compatibleWith.has(other))
-      .map((other): [string, string] => [key, other])
-    return incompatibleEntries
-  })
-}
-
-const getDescription = (v: JsonSchema7Type): string => {
-  if ('items' in v) {
-    return [getDescription(v.items as JsonSchema7Type), '(list)'].filter(Boolean).join(' ')
-  }
-  return (
-    Object.entries(v)
-      .filter(([k, vv]) => {
-        if (k === 'default' || k === 'additionalProperties') return false
-        if (k === 'type' && typeof vv === 'string') return false
-        return true
-      })
-      .sort(([a], [b]) => {
-        const scores = [a, b].map(k => (k === 'description' ? 0 : 1))
-        return scores[0] - scores[1]
-      })
-      .map(([k, vv], i) => {
-        if (k === 'description' && i === 0) return String(vv)
-        if (k === 'properties') return `Object (json formatted)`
-        return `${capitaliseFromCamelCase(k)}: ${vv}`
-      })
-      .join('; ') || ''
-  )
-}
-
-export function procedureInputsToJsonSchema(value: Procedure<any, any>): JsonSchema7Type {
-  if (value._def.inputs.length === 0) return {}
-
-  const zodSchema: z.ZodType<any> =
-    value._def.inputs.length === 1
-      ? (value._def.inputs[0] as never)
-      : (z.intersection(...(value._def.inputs as [never, never])) as never)
-
-  return ztjs(zodSchema)
+  return {run, ignoredProcedures}
 }
 
 function getCleyeType(schema: JsonSchema7Type) {
@@ -312,7 +221,7 @@ function getCleyeType(schema: JsonSchema7Type) {
     }
     default: {
       _type satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
-      return (x: unknown) => x
+      return (value: unknown) => value
     }
   }
 }

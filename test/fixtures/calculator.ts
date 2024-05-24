@@ -1,6 +1,6 @@
 import * as trpcServer from '@trpc/server'
 import {z} from 'zod'
-import {TrpcCliMeta, trpcCli} from '../../src'
+import {trpcCli, type TrpcCliMeta} from '../../src'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -10,36 +10,21 @@ const router = trpc.router({
       description:
         'Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left + input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] + input[1]),
   subtract: trpc.procedure
     .meta({
       description: 'Subtract two numbers. Useful if you have a number and you want to make it smaller.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left - input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] - input[1]),
   multiply: trpc.procedure
     .meta({
       description:
         'Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left * input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] * input[1]),
   divide: trpc.procedure
     .meta({
       version: '1.0.0',
@@ -48,15 +33,15 @@ const router = trpc.router({
       examples: 'divide --left 8 --right 4',
     })
     .input(
-      z.object({
-        left: z.number().describe('The numerator of the division operation.'),
-        right: z
+      z.tuple([
+        z.number().describe('numerator'),
+        z
           .number()
           .refine(n => n !== 0)
-          .describe('The denominator of the division operation. Note: must not be zero.'),
-      }),
+          .describe('denominator'),
+      ]),
     )
-    .mutation(({input}) => input.left / input.right),
+    .mutation(({input}) => input[0] / input[1]),
 })
 
 void trpcCli({router}).run()

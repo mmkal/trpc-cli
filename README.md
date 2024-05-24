@@ -1,10 +1,18 @@
 # trpc-cli
 
-Turn a [trpc](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
+Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
 
 <!-- codegen:start {preset: markdownTOC} -->
 - [Installation](#installation)
 - [Usage](#usage)
+   - [Parameters and flags](#parameters-and-flags)
+      - [Positional parameters](#positional-parameters)
+      - [Flags](#flags)
+      - [Both](#both)
+   - [API docs](#api-docs)
+      - [trpcCli](#trpccli)
+         - [Params](#params)
+         - [Returns](#returns)
    - [Calculator example](#calculator-example)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Features and Limitations](#features-and-limitations)
@@ -16,6 +24,9 @@ Turn a [trpc](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Implementation and dependencies](#implementation-and-dependencies)
    - [Testing](#testing)
 <!-- codegen:end -->
+
+[![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)
+[![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli)
 
 ## Installation
 
@@ -35,8 +46,8 @@ const t = initTRPC.create()
 
 export const router = t.router({
   add: t.procedure
-    .input(z.object({a: z.number(), b: z.number()}))
-    .query(({input}) => input.a + input.b),
+    .input(z.object({left: z.number(), right: z.number()}))
+    .query(({input}) => input.left + input.right),
 })
 ```
 
@@ -54,15 +65,139 @@ And that's it! Your tRPC router is now a CLI program with help text and input va
 
 You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
 
+>Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though!
+
+### Parameters and flags
+
+CLI positional parameters and flags are derived from each procedure's input type. Inputs should use a `zod` object or tuple type for the procedure to be mapped to a CLI command.
+
+#### Positional parameters
+
+Positional parameters passed to the CLI can be declared with types representing strings, numbers or booleans:
+
+```ts
+t.router({
+  double: t.procedure
+    .input(z.number()) //
+    .query(({input}) => input * 2),
+})
+```
+
+You can also use anything that accepts string, number, or boolean inputs, like `z.enum(['up', 'down'])`, `z.literal(123)`, `z.string().regex(/^\w+$/)` etc.
+
+Multiple positional parameters can use a `z.tuple(...)` input type:
+
+```ts
+t.router({
+  add: t.procedure
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] + input[1]),
+})
+```
+
+Which is invoked like `path/to/cli add 2 3` (outputting `5`).
+
+>Note: positional parameters can use `.optional()` or `.nullish()`, but not `.nullable()`.
+
+>Note: positional parameters can be named using `.describe('name of parameter')`, but names can not include any special characters.
+
+>Note: positional parameters are parsed based on the expected target type. Booleans must be written as `true` or `false`, spelled out. In most cases, though, you'd be better off using [flags](#flags) for boolean inputs.
+
+#### Flags
+
+`z.object(...)` inputs become flags (passed with `--foo bar` or `--foo=bar`) syntax. Values are accepted in either `--camelCase` or `--kebab-case`, and are parsed like in most CLI programs:
+
+Strings:
+
+- `z.object({foo: z.string()})` will map:
+  - `--foo bar` or `--foo=bar` to `{foo: 'bar'}`
+
+Booleans:
+
+- `z.object({foo: z.boolean()})` will map:
+   - `--foo` or `--foo=true` to `{foo: true}`
+   - `--foo=false` to `{foo: false}`
+
+>Note: it's usually better to use `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false`.
+
+Numbers:
+
+- `z.object({foo: z.number()})` will map:
+   - `--foo 1` or `--foo=1` to `{foo: 1}`
+
+Other types:
+- `z.object({ foo: z.object({ bar: z.number() }) })` will parse inputs as JSON:
+   - `--foo '{"bar": 1}'` maps to `{foo: {bar: 1}}`
+
+Unions and intersections should also work as expected, but please test them thoroughly, especially if they are deeply-nested.
+
+#### Both
+
+To use positional parameters _and_ flags, use a tuple with an object at the end:
+
+```ts
+t.router({
+  copy: t.procedure
+    .input(
+      z.tuple([
+        z.string().describe('source'),
+        z.string().describe('target'),
+        z.object({
+          mkdirp: z
+            .boolean()
+            .optional()
+            .describe("Ensure target's parent directory exists before copying"),
+        }),
+      ]),
+    )
+    .mutation(async ({input: [source, target, opts]}) => {
+      if (opts.mkdirp) {
+        await fs.mkdir(path.dirname(target, {recursive: true}))
+      }
+      await fs.copyFile(source, target)
+    }),
+})
+```
+
+You might use the above with a command like:
+
+```
+path/to/cli copy a.txt b.txt --mkdirp
+```
+
+>Note: object types for flags must appear _last_ in the `.input(...)` tuple, when being used with positional parameters. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed.
+
+Procedures with incompatible inputs will be returned in the `ignoredProcedures` property.
+
+### API docs
+
+<!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: trpcCli} -->
+#### [trpcCli](./src/index.ts#L27)
+
+Run a trpc router as a CLI.
+
+##### Params
+
+|name   |description                                                                              |
+|-------|-----------------------------------------------------------------------------------------|
+|router |A trpc router                                                                            |
+|context|The context to use when calling the procedures - needed if your router requires a context|
+|alias  |A function that can be used to provide aliases for flags.                                |
+
+##### Returns
+
+A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+<!-- codegen:end -->
+
 ### Calculator example
 
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:efe19a66f7467160525f69c8ce4daef3 -->
+<!-- hash:ae42f01a6ea72021b5bc7f4823803c9f -->
 ```ts
 import * as trpcServer from '@trpc/server'
-import {TrpcCliMeta, trpcCli} from 'trpc-cli'
+import {trpcCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
@@ -73,37 +208,22 @@ const router = trpc.router({
       description:
         'Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left + input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] + input[1]),
   subtract: trpc.procedure
     .meta({
       description:
         'Subtract two numbers. Useful if you have a number and you want to make it smaller.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left - input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] - input[1]),
   multiply: trpc.procedure
     .meta({
       description:
         'Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.',
     })
-    .input(
-      z.object({
-        left: z.number().describe('The first number'),
-        right: z.number().describe('The second number'),
-      }),
-    )
-    .query(({input}) => input.left * input.right),
+    .input(z.tuple([z.number(), z.number()]))
+    .query(({input}) => input[0] * input[1]),
   divide: trpc.procedure
     .meta({
       version: '1.0.0',
@@ -112,17 +232,15 @@ const router = trpc.router({
       examples: 'divide --left 8 --right 4',
     })
     .input(
-      z.object({
-        left: z.number().describe('The numerator of the division operation.'),
-        right: z
+      z.tuple([
+        z.number().describe('numerator'),
+        z
           .number()
           .refine(n => n !== 0)
-          .describe(
-            'The denominator of the division operation. Note: must not be zero.',
-          ),
-      }),
+          .describe('denominator'),
+      ]),
     )
-    .mutation(({input}) => input.left / input.right),
+    .mutation(({input}) => input[0] / input[1]),
 })
 
 void trpcCli({router}).run()
@@ -130,7 +248,7 @@ void trpcCli({router}).run()
 <!-- codegen:end -->
 
 
-Run `node path/to/yourfile.js --help` for formatted help text for the `sum` and `divide` commands.
+Run `node path/to/cli --help` for formatted help text for the `sum` and `divide` commands.
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator --help'} -->
 `node path/to/calculator --help` output:
@@ -160,12 +278,10 @@ add
 Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
 Usage:
-  add [flags...]
+  add [flags...] <parameter 1> <parameter 2>
 
 Flags:
-  -h, --help                  Show help
-      --left <number>         The first number
-      --right <number>        The second number
+  -h, --help        Show help
 
 ```
 <!-- codegen:end -->
@@ -176,9 +292,18 @@ When passing a command along with its flags, the return value will be logged to 
 `node path/to/calculator add --left 2 --right 3` output:
 
 ```
-5
-```
+add
 
+Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+
+Usage:
+  add [flags...] <parameter 1> <parameter 2>
+
+Flags:
+  -h, --help        Show help
+
+Unexpected flags: left, right
+```
 <!-- codegen:end -->
 
 Invalid inputs are helpfully displayed, along with help text for the associated command:
@@ -192,15 +317,12 @@ add
 Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
 Usage:
-  add [flags...]
+  add [flags...] <parameter 1> <parameter 2>
 
 Flags:
-  -h, --help                  Show help
-      --left <number>         The first number
-      --right <number>        The second number
+  -h, --help        Show help
 
-Validation error
-  - Expected number, received nan at "--right"
+Unexpected flags: left, right
 ```
 <!-- codegen:end -->
 
@@ -277,10 +399,10 @@ You could also override `process.exit` to avoid killing the process at all - see
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:ecb45f308d36ff6594396ebd189c9f31 -->
+<!-- hash:8635f80f9309a63813b659a227270b73 -->
 ```ts
 import * as trpcServer from '@trpc/server'
-import {TrpcCliMeta, trpcCli} from 'trpc-cli'
+import {trpcCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
@@ -480,7 +602,9 @@ Flags:
 
 ## Programmatic usage
 
-This library should probably _not_ be used programmatically - the functionality all comes from a trpc router, which has [many other ways to be invoked](https://trpc.io/docs/community/awesome-trpc). But if you really need to for some reason, you could override the `console.error` and `process.exit` calls:
+This library should probably _not_ be used programmatically - the functionality all comes from a trpc router, which has [many other ways to be invoked](https://trpc.io/docs/community/awesome-trpc) (including the built-in `createCaller` helper bundled with `@trpc/server`).
+
+The `.run()` function does return a value, but it's typed as `unknown` since the input is just `argv: string[]` . But if you really need to for some reason, you could override the `console.error` and `process.exit` calls:
 
 ```ts
 import {trpcCli} from 'trpc-cli'
@@ -506,7 +630,7 @@ const runCli = async (argv: string[]) => {
 }
 ```
 
-Note that even if you do this, help text may get writted directly to stdout by `cleye`. If that's a problem, [raise an issue](https://github.com/mmkal/trpc-cli/issues) - it could be solved by exposing some `cleye` configuration to the `run` method.
+>Note that even if you do this, help text is handled by [cleye](https://npmjs.com/package/cleye) which prints directly to stdout and exits the process. In a future version this will be solved by either exposing some `cleye` configuration to the `run` method, or controlling the help text rendering directly.
 
 ## Out of scope
 
