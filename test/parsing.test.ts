@@ -283,16 +283,6 @@ test('single character flag', async () => {
   )
 })
 
-test('default procedure', async () => {
-  const router = t.router({
-    default: t.procedure
-      .input(z.tuple([z.string(), z.number()])) //
-      .query(({input}) => JSON.stringify(input)),
-  })
-
-  expect(await run(router, ['hello', '1'])).toMatchInlineSnapshot(`"["hello",1]"`)
-})
-
 test('custom default procedure', async () => {
   const yarn = t.router({
     install: t.procedure
@@ -302,7 +292,7 @@ test('custom default procedure', async () => {
 
   const params: TrpcCliParams<typeof yarn> = {
     router: yarn,
-    default: 'install',
+    default: {procedure: 'install'},
   }
 
   const yarnOutput = await runWith(params, ['--frozen-lockfile'])

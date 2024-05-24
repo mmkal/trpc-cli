@@ -112,7 +112,7 @@ Booleans:
    - `--foo` or `--foo=true` to `{foo: true}`
    - `--foo=false` to `{foo: false}`
 
->Note: it's usually better to use `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false`.
+>Note: it's usually better to use `z.boolean().default(false)` or `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false` explicitly.
 
 Numbers:
 
@@ -169,33 +169,23 @@ Procedures with incompatible inputs will be returned in the `ignoredProcedures` 
 
 ### Default procedure
 
-If you have a procedure named `default` it will be used as the default procedure for your CLI:
+You can define a default command for your CLI - set this to the procedure that should be invoked directly when calling your CLI. Useful for simple CLIs that only do one thing, or when you want to make the most common command very quick to type (e.g. `yarn` being an alias for `yarn install`):
 
 ```ts
-t.router({
-  default: t.procedure
-    .input(z.number())
-    .mutation(({input}) => console.log(input)),
-})
-```
-
-The above could be invoked with `path/to/cli 123`.
-
-You can specify a different command using the `default` parameter:
-
-```ts
+#!/usr/bin/env node
+// filename: yarn
 const router = t.router({
-  install: t.procedure
-    .input(z.string().describe('package name'))
-    .mutation(({input}) => ___),
+  install: t.procedure //
+    .mutation(() => console.log('installing...')),
 })
 
-trpcCli({router, default: 'install'})
+trpcCli({
+  router,
+  default: {procedure: 'install'},
+})
 ```
 
-This can be run either with `path/to/cli foo` or `path/to/cli install foo`.
-
-Use `default: false` to ensure there's no default command, even if you have a router procedure named `default`.
+The above can be invoked with either `yarn` or `yarn install`.
 
 ### API docs
 
