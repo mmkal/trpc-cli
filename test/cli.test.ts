@@ -37,12 +37,10 @@ test('cli help add', async () => {
     Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
     Usage:
-      add [flags...]
+      add [flags...] <parameter 1> <parameter 2>
 
     Flags:
-      -h, --help                  Show help
-          --left <number>         The first number
-          --right <number>        The second number
+      -h, --help        Show help
     "
   `)
 })
@@ -55,12 +53,10 @@ test('cli help divide', async () => {
     Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
 
     Usage:
-      divide [flags...]
+      divide [flags...] <numerator> <denominator>
 
     Flags:
-      -h, --help                  Show help
-          --left <number>         The numerator of the division operation.
-          --right <number>        The denominator of the division operation. Note: must not be zero.
+      -h, --help        Show help
 
     Examples:
       divide --left 8 --right 4
@@ -77,18 +73,16 @@ test('cli add failure', async () => {
   const output = await tsx('calculator', ['add', '1', 'notanumber'])
   expect(output).toMatchInlineSnapshot(`
     "Validation error
-      - Expected number, received nan at "--right"
+      - Expected number, received nan at index 1
     add
 
     Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
 
     Usage:
-      add [flags...]
+      add [flags...] <parameter 1> <parameter 2>
 
     Flags:
-      -h, --help                  Show help
-          --left <number>         The first number
-          --right <number>        The second number
+      -h, --help        Show help
     "
   `)
 })
@@ -102,18 +96,16 @@ test('cli divide failure', async () => {
   const output = await tsx('calculator', ['divide', '8', '0'])
   expect(output).toMatchInlineSnapshot(`
     "Validation error
-      - Invalid input at "--right"
+      - Invalid input at index 1
     divide v1.0.0
 
     Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
 
     Usage:
-      divide [flags...]
+      divide [flags...] <numerator> <denominator>
 
     Flags:
-      -h, --help                  Show help
-          --left <number>         The numerator of the division operation.
-          --right <number>        The denominator of the division operation. Note: must not be zero.
+      -h, --help        Show help
 
     Examples:
       divide --left 8 --right 4
@@ -258,7 +250,7 @@ test('fs copy help', async () => {
     "copy
 
     Usage:
-      copy [flags...] [Source path] [Destination path]
+      copy [flags...] <Source path> [Destination path]
 
     Flags:
           --force        Overwrite destination if it exists
@@ -282,17 +274,18 @@ test('fs copy', async () => {
   )
 
   // invalid enum value:
-  expect(await tsx('fs', ['copy', 'fileNotFound'])).toMatchInlineSnapshot(`
+  expect(await tsx('fs', ['diff', 'one', 'fileNotFound'])).toMatchInlineSnapshot(`
     "Validation error
-      - Invalid enum value. Expected 'one' | 'two' | 'three' | 'four', received 'fileNotFound' at index 0
-    copy
+      - Invalid enum value. Expected 'one' | 'two' | 'three' | 'four', received 'fileNotFound' at index 1
+    diff
 
     Usage:
-      copy [flags...] [Source path] [Destination path]
+      diff [flags...] <Base path> <Head path>
 
     Flags:
-          --force        Overwrite destination if it exists
-      -h, --help         Show help
+      -h, --help                     Show help
+          --ignore-whitespace        Ignore whitespace changes
+          --trim                     Trim start/end whitespace
     "
   `)
 })

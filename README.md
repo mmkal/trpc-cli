@@ -151,10 +151,10 @@ Procedures with incompatible inputs will be returned in the `ignoredProcedures` 
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:b63bdbb21d0708bc6ce34e408c58f249 -->
+<!-- hash:ae42f01a6ea72021b5bc7f4823803c9f -->
 ```ts
 import * as trpcServer from '@trpc/server'
-import {TrpcCliMeta, trpcCli} from 'trpc-cli'
+import {trpcCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
@@ -356,10 +356,10 @@ You could also override `process.exit` to avoid killing the process at all - see
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:57e812de50ced6dc1150ebe5498d5ecd -->
+<!-- hash:99a33a561c51e15dddf7c57da43d3b72 -->
 ```ts
 import * as trpcServer from '@trpc/server'
-import {TrpcCliMeta, trpcCli} from 'trpc-cli'
+import {trpcCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()

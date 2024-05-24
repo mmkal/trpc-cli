@@ -1,7 +1,8 @@
 import {initTRPC} from '@trpc/server'
 import {test, expect} from 'vitest'
 import {z} from 'zod'
-import {TrpcCliMeta, trpcCli} from '../src'
+import {trpcCli} from '../src'
+import {TrpcCliMeta} from '../src/types'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
