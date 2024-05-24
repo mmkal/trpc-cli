@@ -30,6 +30,20 @@ test('accepts numbers', async () => {
   expect(acceptsNumber(z.intersection(z.number(), z.number().max(10)))).toBe(true)
 })
 
+test('accepts booleans', async () => {
+  const acceptsBoolean = accepts(z.boolean())
+
+  expect(acceptsBoolean(z.boolean())).toBe(true)
+  expect(acceptsBoolean(z.boolean().nullable())).toBe(true)
+  expect(acceptsBoolean(z.boolean().optional())).toBe(true)
+  expect(acceptsBoolean(z.boolean().nullish())).toBe(true)
+  expect(acceptsBoolean(z.string())).toBe(false)
+  expect(acceptsBoolean(z.union([z.boolean(), z.string()]))).toBe(true)
+  expect(acceptsBoolean(z.union([z.string(), z.number()]))).toBe(false)
+  expect(acceptsBoolean(z.intersection(z.boolean(), z.string()))).toBe(false)
+  expect(acceptsBoolean(z.intersection(z.boolean(), z.boolean()))).toBe(true)
+})
+
 test('accepts objects', async () => {
   const acceptsObject = accepts(z.object({}))
 

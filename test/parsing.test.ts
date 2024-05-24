@@ -101,6 +101,22 @@ test('number input', async () => {
   `)
 })
 
+test('boolean input', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.boolean()) //
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['foo', 'true'])).toMatchInlineSnapshot(`"true"`)
+  expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"true"`)
+  await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Logs: Validation error
+      - Expected boolean, received string
+  `)
+})
+
 test('literal input', async () => {
   const router = t.router({
     foo: t.procedure
@@ -152,6 +168,24 @@ test('regex input', async () => {
       Caused by: Logs: Validation error
       - Invalid
   `)
+})
+
+test('boolean, number, string input', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(
+        z.union([
+          z.string(),
+          z.number(),
+          z.boolean(), //
+        ]),
+      )
+      .query(({input}) => JSON.stringify(input || null)),
+  })
+
+  expect(await run(router, ['foo', 'true'])).toMatchInlineSnapshot(`"true"`)
+  expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
+  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
 })
 
 test('tuple input', async () => {
@@ -236,8 +270,6 @@ test('validation', async () => {
 
   expect(cli.ignoredProcedures).toMatchInlineSnapshot(`
     {
-      "tupleWithBoolean": "Invalid input type [ZodString, ZodBoolean]. The last type must accept object inputs.",
-      "tupleWithBooleanThenObject": "Invalid input type [ZodString, ZodBoolean, ZodObject]. Positional parameters must be strings or numbers.",
       "tupleWithObjectInTheMiddle": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings or numbers.",
       "tupleWithRecord": "Invalid input type [ZodString, ZodRecord]. The last type must accept object inputs.",
     }

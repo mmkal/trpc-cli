@@ -73,7 +73,19 @@ CLI positional parameters and flags are derived from each procedure's input type
 
 #### Positional parameters
 
-Positional parameters passed to the CLI can be declared with a `z.tuple(...)` input type:
+Positional parameters passed to the CLI can be declared with types representing strings, numbers or booleans:
+
+```ts
+t.router({
+  double: t.procedure
+    .input(z.number()) //
+    .query(({input}) => input * 2),
+})
+```
+
+You can also use anything that accepts string, number, or boolean inputs, like `z.enum(['up', 'down'])`, `z.literal(123)`, `z.string().regex(/^\w+$/)` etc.
+
+Multiple positional parameters can use a `z.tuple(...)` input type:
 
 ```ts
 t.router({
@@ -88,6 +100,8 @@ Which is invoked like `path/to/cli add 2 3` (outputting `5`).
 >Note: positional parameters can use `.optional()` or `.nullish()`, but not `.nullable()`.
 
 >Note: positional parameters can be named using `.describe('name of parameter')`, but names can not include any special characters.
+
+>Note: positional parameters are parsed based on the expected target type. Booleans must be written as `true` or `false`, spelled out. In most cases, though, you'd be better off using [flags](#flags) for boolean inputs.
 
 #### Flags
 
@@ -151,7 +165,7 @@ You might use the above with a command like:
 path/to/cli copy a.txt b.txt --mkdirp
 ```
 
->Note: object types for flags must appear _last_ in the `.input` tuple, when being used with positional parameters. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would be allowed.
+>Note: object types for flags must appear _last_ in the `.input(...)` tuple, when being used with positional parameters. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed.
 
 Procedures with incompatible inputs will be returned in the `ignoredProcedures` property.
 

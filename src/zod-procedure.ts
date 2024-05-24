@@ -34,7 +34,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 
   const mergedSchema = inputs[0] as z.ZodType
 
-  if (acceptsString(mergedSchema) || acceptsNumber(mergedSchema)) {
+  if (expectedLiteralTypes(mergedSchema).length > 0) {
     return parseLiteralInput(mergedSchema)
   }
 
@@ -56,8 +56,8 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 }
 
 function parseLiteralInput(schema: z.ZodType<string> | z.ZodType<number>): Result<ParsedProcedure> {
-  const type = acceptsNumber(schema) ? 'number' : 'string'
-  const name = schema.description || type
+  const type = expectedLiteralTypes(schema).at(0)
+  const name = schema.description || type || 'value'
   return {
     success: true,
     value: {
@@ -66,6 +66,14 @@ function parseLiteralInput(schema: z.ZodType<string> | z.ZodType<number>): Resul
       getInput: argv => convertPositional(schema, argv._[0]),
     },
   }
+}
+
+function expectedLiteralTypes(schema: z.ZodType) {
+  const types: Array<'string' | 'number' | 'boolean'> = []
+  if (acceptsBoolean(schema)) types.push('boolean')
+  if (acceptsNumber(schema)) types.push('number')
+  if (acceptsString(schema)) types.push('string')
+  return types
 }
 
 function parseMultiInputs(inputs: z.ZodType[]): Result<ParsedProcedure> {
@@ -100,7 +108,7 @@ function parseMultiInputs(inputs: z.ZodType[]): Result<ParsedProcedure> {
 }
 
 function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result<ParsedProcedure> {
-  const nonPositionalIndex = tuple.items.findIndex(item => !acceptsString(item) && !acceptsNumber(item))
+  const nonPositionalIndex = tuple.items.findIndex(item => expectedLiteralTypes(item).length === 0)
   const types = `[${tuple.items.map(s => getInnerType(s).constructor.name).join(', ')}]`
 
   if (nonPositionalIndex > -1 && nonPositionalIndex !== tuple.items.length - 1) {
@@ -153,13 +161,17 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
  * If the target schema accepts numbers but it's *not* a valid number, just return a string - zod will handle the validation.
  */
 const convertPositional = (schema: z.ZodType, value: string) => {
-  if (acceptsNumber(schema)) {
-    const number = Number(value)
-    // if `schema` accepts numbers, we still need to check that the passed value is a valid number - otherwise `z.union([z.string(), z.number()])` wouldn't work
-    if (Number.isFinite(number)) return number
-    // the `value` wasn't a valid number then `number` will be `NaN` - just return the original string, zod will handle the validation
+  let safeParsed: {success?: boolean; data?: unknown} = {}
+  const literalTypes = new Set(expectedLiteralTypes(schema))
+  if (literalTypes.has('boolean')) {
+    if (value === 'true') safeParsed = schema.safeParse(true)
+    if (value === 'false') safeParsed = schema.safeParse(true)
   }
-  return value
+  if (!safeParsed.success && literalTypes.has('number')) {
+    safeParsed = schema.safeParse(Number(value))
+  }
+  // if we successfully parsed the value, use the parsed value; otherwise, just use the input value - trpc+zod will handle the validation
+  return safeParsed?.success ? safeParsed.data : value
 }
 
 const parameterName = (s: z.ZodType, position: number) => {
@@ -201,4 +213,5 @@ export function accepts(target: z.ZodType) {
 
 const acceptsString = accepts(z.string())
 const acceptsNumber = accepts(z.number())
+const acceptsBoolean = accepts(z.boolean())
 const acceptsObject = accepts(z.object({}))
