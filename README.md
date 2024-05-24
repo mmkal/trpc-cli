@@ -1,4 +1,4 @@
-# trpc-cli
+# trpc-cli [![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg) [![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli)
 
 Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
 
@@ -24,9 +24,6 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Implementation and dependencies](#implementation-and-dependencies)
    - [Testing](#testing)
 <!-- codegen:end -->
-
-[![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)
-[![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli)
 
 ## Installation
 
@@ -61,11 +58,7 @@ const cli = trpcCli({router})
 cli.run()
 ```
 
-And that's it! Your tRPC router is now a CLI program with help text and input validation.
-
-You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
-
->Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though!
+And that's it! Your tRPC router is now a CLI program with help text and input validation. You can run it with `node path/to/script.js add --left 2 --right 3`.
 
 ### Parameters and flags
 
@@ -168,6 +161,10 @@ path/to/cli copy a.txt b.txt --mkdirp
 >Note: object types for flags must appear _last_ in the `.input(...)` tuple, when being used with positional parameters. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed.
 
 Procedures with incompatible inputs will be returned in the `ignoredProcedures` property.
+
+>You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
+
+>Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though!
 
 ### API docs
 
