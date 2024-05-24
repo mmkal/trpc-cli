@@ -34,7 +34,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 
   const mergedSchema = inputs[0] as z.ZodType
 
-  if (acceptsStrings(mergedSchema) || acceptsNumbers(mergedSchema)) {
+  if (acceptsString(mergedSchema) || acceptsNumber(mergedSchema)) {
     return parseLiteralInput(mergedSchema)
   }
 
@@ -56,7 +56,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 }
 
 function parseLiteralInput(schema: z.ZodType<string> | z.ZodType<number>): Result<ParsedProcedure> {
-  const type = acceptsNumbers(schema) ? 'number' : 'string'
+  const type = acceptsNumber(schema) ? 'number' : 'string'
   const name = schema.description || type
   return {
     success: true,
@@ -100,7 +100,7 @@ function parseMultiInputs(inputs: z.ZodType[]): Result<ParsedProcedure> {
 }
 
 function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result<ParsedProcedure> {
-  const nonPositionalIndex = tuple.items.findIndex(item => !acceptsStrings(item) && !acceptsNumbers(item))
+  const nonPositionalIndex = tuple.items.findIndex(item => !acceptsString(item) && !acceptsNumber(item))
   const types = `[${tuple.items.map(s => getInnerType(s).constructor.name).join(', ')}]`
 
   if (nonPositionalIndex > -1 && nonPositionalIndex !== tuple.items.length - 1) {
@@ -153,7 +153,7 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
  * If the target schema accepts numbers but it's *not* a valid number, just return a string - zod will handle the validation.
  */
 const convertPositional = (schema: z.ZodType, value: string) => {
-  if (acceptsNumbers(schema)) {
+  if (acceptsNumber(schema)) {
     const number = Number(value)
     // if `schema` accepts numbers, we still need to check that the passed value is a valid number - otherwise `z.union([z.string(), z.number()])` wouldn't work
     if (Number.isFinite(number)) return number
@@ -168,34 +168,37 @@ const parameterName = (s: z.ZodType, position: number) => {
   return s.isOptional() ? `[${name}]` : `<${name}>`
 }
 
-function acceptsStrings(zodType: z.ZodType): zodType is z.ZodType<string> {
-  const innerType = getInnerType(zodType)
-  if (innerType instanceof z.ZodString) return true
-  if (innerType instanceof z.ZodEnum) return (innerType.options as unknown[]).some(o => typeof o === 'string')
-  if (innerType instanceof z.ZodLiteral) return typeof innerType.value === 'string'
-  if (innerType instanceof z.ZodUnion) return (innerType.options as z.ZodType[]).some(acceptsStrings)
-  if (innerType instanceof z.ZodIntersection)
-    return acceptsStrings(innerType._def.left as z.ZodType) && acceptsStrings(innerType._def.right as z.ZodType)
+/**
+ * Curried function which tells you whether a given zod type accepts any inputs of a given target type.
+ * Useful for static validation, and for deciding whether to preprocess a string input before passing it to a zod schema.
+ * @example
+ * const acceptsString = accepts(z.string())
+ *
+ * acceptsString(z.string()) // true
+ * acceptsString(z.string().nullable()) // true
+ * acceptsString(z.string().optional()) // true
+ * acceptsString(z.string().nullish()) // true
+ * acceptsString(z.number()) // false
+ * acceptsString(z.union([z.string(), z.number()])) // true
+ * acceptsString(z.union([z.number(), z.boolean()])) // false
+ * acceptsString(z.intersection(z.string(), z.number())) // false
+ * acceptsString(z.intersection(z.string(), z.string().max(10))) // true
+ */
+export function accepts(target: z.ZodType) {
+  const test = (zodType: z.ZodType): boolean => {
+    const innerType = getInnerType(zodType)
+    if (innerType instanceof target.constructor) return true
+    if (innerType instanceof z.ZodLiteral) return target.safeParse(innerType.value).success
+    if (innerType instanceof z.ZodEnum) return (innerType.options as unknown[]).some(o => target.safeParse(o).success)
+    if (innerType instanceof z.ZodUnion) return (innerType.options as z.ZodType[]).some(test)
+    if (innerType instanceof z.ZodIntersection)
+      return test(innerType._def.left as z.ZodType) && test(innerType._def.right as z.ZodType)
+    if (innerType instanceof z.ZodEffects) return test(innerType.innerType() as z.ZodType)
+    return false
+  }
+  return test
+}
 
-  return false
-}
-function acceptsNumbers(zodType: z.ZodType): zodType is z.ZodType<number> {
-  const innerType = getInnerType(zodType)
-  if (innerType instanceof z.ZodNumber) return true
-  if (innerType instanceof z.ZodEnum) return (innerType.options as unknown[]).some(o => typeof o === 'number')
-  if (innerType instanceof z.ZodLiteral) return typeof innerType.value === 'number'
-  if (innerType instanceof z.ZodUnion) return (innerType.options as z.ZodType[]).some(acceptsNumbers)
-  if (innerType instanceof z.ZodIntersection)
-    return acceptsNumbers(innerType._def.left as z.ZodType) && acceptsNumbers(innerType._def.right as z.ZodType)
-
-  return false
-}
-function acceptsObject(zodType: z.ZodType): boolean {
-  const innerType = getInnerType(zodType)
-  if (innerType instanceof z.ZodObject) return true
-  if (innerType instanceof z.ZodEffects) return acceptsObject(innerType.innerType() as z.ZodType)
-  if (innerType instanceof z.ZodUnion) return (innerType.options as z.ZodType[]).some(acceptsObject)
-  if (innerType instanceof z.ZodIntersection)
-    return acceptsObject(innerType._def.left as z.ZodType) && acceptsObject(innerType._def.right as z.ZodType)
-  return false
-}
+const acceptsString = accepts(z.string())
+const acceptsNumber = accepts(z.number())
+const acceptsObject = accepts(z.object({}))
