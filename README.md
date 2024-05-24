@@ -201,7 +201,7 @@ Run a trpc router as a CLI.
 |router |A trpc router                                                                            |
 |context|The context to use when calling the procedures - needed if your router requires a context|
 |alias  |A function that can be used to provide aliases for flags.                                |
-|default|The name of the "default" command @default 'default'                                     |
+|default|A procedure to use as the default command when the user doesn't specify one.             |
 
 ##### Returns
 
