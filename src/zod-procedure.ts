@@ -161,17 +161,27 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
  * If the target schema accepts numbers but it's *not* a valid number, just return a string - zod will handle the validation.
  */
 const convertPositional = (schema: z.ZodType, value: string) => {
-  let safeParsed: {success?: boolean; data?: unknown} = {}
+  let preprocessed: string | number | boolean | null = null
+
   const literalTypes = new Set(expectedLiteralTypes(schema))
+
   if (literalTypes.has('boolean')) {
-    if (value === 'true') safeParsed = schema.safeParse(true)
-    if (value === 'false') safeParsed = schema.safeParse(true)
+    if (value === 'true') preprocessed = true
+    else if (value === 'false') preprocessed = false
   }
-  if (!safeParsed.success && literalTypes.has('number')) {
-    safeParsed = schema.safeParse(Number(value))
+
+  if (literalTypes.has('number') && !schema.safeParse(preprocessed).success) {
+    preprocessed = Number(value)
   }
-  // if we successfully parsed the value, use the parsed value; otherwise, just use the input value - trpc+zod will handle the validation
-  return safeParsed?.success ? safeParsed.data : value
+
+  if (literalTypes.has('string') && !schema.safeParse(preprocessed).success) {
+    // it's possible we converted to a number prematurely - need to account for `z.union([z.string(), z.number().int()])`, where 1.2 should be a string, not a number
+    // in that case, we would have set preprocessed to a number, but it would fail validation, so we need to reset it to a string here
+    preprocessed = value
+  }
+
+  // if we've successfully preprocessed, use the *input* value - zod will re-parse, so we shouldn't return the parsed value - that would break if there's a `.transform(...)`
+  return preprocessed !== null && schema.safeParse(preprocessed).success ? preprocessed : value
 }
 
 const parameterName = (s: z.ZodType, position: number) => {

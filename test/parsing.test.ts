@@ -109,12 +109,44 @@ test('boolean input', async () => {
   })
 
   expect(await run(router, ['foo', 'true'])).toMatchInlineSnapshot(`"true"`)
-  expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"true"`)
+  expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: Logs: Validation error
       - Expected boolean, received string
   `)
+})
+
+test('refine in a union pedantry', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.union([z.number().int(), z.string()])) //
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
+  expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
+  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+})
+
+test('transform in a union', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(
+        z.union([
+          z
+            .number()
+            .int()
+            .transform(n => `Roman numeral: ${'I'.repeat(n)}`),
+          z.string(),
+        ]),
+      ) //
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
+  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
 })
 
 test('literal input', async () => {
