@@ -2,18 +2,12 @@
 
 Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
 
-<!-- codegen:start {preset: markdownTOC} -->
+<!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
 - [Installation](#installation)
 - [Usage](#usage)
    - [Parameters and flags](#parameters-and-flags)
-      - [Positional parameters](#positional-parameters)
-      - [Flags](#flags)
-      - [Both](#both)
-   - [Default procedure](#default-procedure)
+   - [Default command](#default-command)
    - [API docs](#api-docs)
-      - [trpcCli](#trpccli)
-         - [Params](#params)
-         - [Returns](#returns)
    - [Calculator example](#calculator-example)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Features and Limitations](#features-and-limitations)
@@ -34,7 +28,7 @@ npm install trpc-cli @trpc/server zod
 
 ## Usage
 
-Start by writing a normal tRPC router:
+Start by writing a normal tRPC router (docs [here](https://trpc.io/docs/server/routers) if you're not familiar with tRPC):
 
 ```ts
 import {initTRPC} from '@trpc/server'
@@ -93,7 +87,7 @@ Which is invoked like `path/to/cli add 2 3` (outputting `5`).
 
 >Note: positional parameters can use `.optional()` or `.nullish()`, but not `.nullable()`.
 
->Note: positional parameters can be named using `.describe('name of parameter')`, but names can not include any special characters.
+>Note: positional parameters can be named using `.describe('name of parameter')`, but names should not include any special characters.
 
 >Note: positional parameters are parsed based on the expected target type. Booleans must be written as `true` or `false`, spelled out. In most cases, though, you'd be better off using [flags](#flags) for boolean inputs.
 
@@ -123,7 +117,7 @@ Other types:
 - `z.object({ foo: z.object({ bar: z.number() }) })` will parse inputs as JSON:
    - `--foo '{"bar": 1}'` maps to `{foo: {bar: 1}}`
 
-Unions and intersections should also work as expected, but please test them thoroughly, especially if they are deeply-nested.
+Unions and intersections should also work as expected, but make sure to test them thoroughly, especially if they are deeply-nested.
 
 #### Both
 
@@ -167,7 +161,7 @@ Procedures with incompatible inputs will be returned in the `ignoredProcedures` 
 
 >Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though!
 
-### Default procedure
+### Default command
 
 You can define a default command for your CLI - set this to the procedure that should be invoked directly when calling your CLI. Useful for simple CLIs that only do one thing, or when you want to make the most common command very quick to type (e.g. `yarn` being an alias for `yarn install`):
 
@@ -307,28 +301,18 @@ Flags:
 
 When passing a command along with its flags, the return value will be logged to stdout:
 
-<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add --left 2 --right 3'} -->
-`node path/to/calculator add --left 2 --right 3` output:
+<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add 2 3'} -->
+`node path/to/calculator add 2 3` output:
 
 ```
-add
-
-Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
-
-Usage:
-  add [flags...] <parameter 1> <parameter 2>
-
-Flags:
-  -h, --help        Show help
-
-Unexpected flags: left, right
+5
 ```
 <!-- codegen:end -->
 
 Invalid inputs are helpfully displayed, along with help text for the associated command:
 
-<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add --left 2 --right notanumber'} -->
-`node path/to/calculator add --left 2 --right notanumber` output:
+<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add 2 notanumber', reject: false} -->
+`node path/to/calculator add 2 notanumber` output:
 
 ```
 add
@@ -341,7 +325,8 @@ Usage:
 Flags:
   -h, --help        Show help
 
-Unexpected flags: left, right
+Validation error
+  - Expected number, received string at index 1
 ```
 <!-- codegen:end -->
 
