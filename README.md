@@ -184,7 +184,7 @@ The above can be invoked with either `yarn` or `yarn install`.
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: trpcCli} -->
-#### [trpcCli](./src/index.ts#L28)
+#### [trpcCli](./src/index.ts#L29)
 
 Run a trpc router as a CLI.
 
@@ -356,7 +356,36 @@ const appRouter = trpc.router({
 
 ## Output and lifecycle
 
-The output of the command will be logged via `console.info`. The process will exit with code 0 if the command was successful, or 1 otherwise. If you don't want to rely on this logging, you can always log inside your procedures and avoid returning a value. You can also override the `logger` and `process` properties of the `run` method:
+The output of the command will be logged if it is truthy. The log algorithm aims to be friendly for bash-piping, usage with jq etc.:
+
+- Arrays will be logged line be line
+- For each line logged:
+   - string, numbers and booleans are logged directly
+   - objects are logged with `JSON.stringify(___, null, 2)`
+
+So if the procedure returns `['one', 'two', 'three]` this will be written to stdout:
+
+```
+one
+two
+three
+```
+
+If the procedure returns `[{name: 'one'}, {name: 'two'}, {name: 'three'}]` this will be written to stdout:
+
+```
+{
+  "name": "one"
+}
+{
+  "name": "two"
+}
+{
+  "name": "three"
+}
+```
+
+The process will exit with code 0 if the command was successful, or 1 otherwise. If you don't want to rely on this logging, you can always log inside your procedures and avoid returning a value. You can also override the `logger` and `process` properties of the `run` method:
 
 <!-- eslint-disable unicorn/no-process-exit -->
 ```ts
@@ -365,7 +394,7 @@ import {trpcCli} from 'trpc-cli'
 const cli = trpcCli({router: yourRouter})
 
 cli.run({
-  logger: yourLogger, // needs `.info` and `.error` methods
+  logger: yourLogger, // should define `.info` and `.error` methods
   process: {
     exit: code => {
       if (code === 0) process.exit(0)

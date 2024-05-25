@@ -52,3 +52,10 @@ export interface ParsedProcedure {
 }
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}
+
+export type LogMethod = (...args: unknown[]) => void
+
+export interface Logger {
+  info?: LogMethod
+  error?: LogMethod
+}
