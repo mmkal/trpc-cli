@@ -1,15 +1,15 @@
 import {LogMethod, Logger} from './types'
 
-export const primitiveOrJsonLogger = getLoggerTransformer(method => {
+export const primitiveOrJsonLogger = getLoggerTransformer(log => {
   const transformed: LogMethod = (...args) => {
     if (args.length === 1 && Array.isArray(args[0])) {
       args[0].forEach(item => transformed(item))
     } else if (args.every(isPrimitive)) {
-      method(...args)
+      log(...args)
     } else if (args.length === 1) {
-      method(JSON.stringify(args[0], null, 2))
+      log(JSON.stringify(args[0], null, 2))
     } else {
-      method(JSON.stringify(args, null, 2))
+      log(JSON.stringify(args, null, 2))
     }
   }
 
