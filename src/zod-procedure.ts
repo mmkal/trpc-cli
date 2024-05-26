@@ -34,7 +34,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 
   const mergedSchema = inputs[0] as z.ZodType
 
-  if (expectedLiteralTypes(mergedSchema).length > 0) {
+  if (acceptedLiteralTypes(mergedSchema).length > 0) {
     return parseLiteralInput(mergedSchema)
   }
 
@@ -56,7 +56,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 }
 
 function parseLiteralInput(schema: z.ZodType<string> | z.ZodType<number>): Result<ParsedProcedure> {
-  const type = expectedLiteralTypes(schema).at(0)
+  const type = acceptedLiteralTypes(schema).at(0)
   const name = schema.description || type || 'value'
   return {
     success: true,
@@ -68,7 +68,7 @@ function parseLiteralInput(schema: z.ZodType<string> | z.ZodType<number>): Resul
   }
 }
 
-function expectedLiteralTypes(schema: z.ZodType) {
+function acceptedLiteralTypes(schema: z.ZodType) {
   const types: Array<'string' | 'number' | 'boolean'> = []
   if (acceptsBoolean(schema)) types.push('boolean')
   if (acceptsNumber(schema)) types.push('number')
@@ -108,7 +108,7 @@ function parseMultiInputs(inputs: z.ZodType[]): Result<ParsedProcedure> {
 }
 
 function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result<ParsedProcedure> {
-  const nonPositionalIndex = tuple.items.findIndex(item => expectedLiteralTypes(item).length === 0)
+  const nonPositionalIndex = tuple.items.findIndex(item => acceptedLiteralTypes(item).length === 0)
   const types = `[${tuple.items.map(s => getInnerType(s).constructor.name).join(', ')}]`
 
   if (nonPositionalIndex > -1 && nonPositionalIndex !== tuple.items.length - 1) {
@@ -158,30 +158,46 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
 
 /**
  * Converts a positional string to parameter into a number if the target schema accepts numbers, and the input can be parsed as a number.
- * If the target schema accepts numbers but it's *not* a valid number, just return a string - zod will handle the validation.
+ * If the target schema accepts numbers but it's *not* a valid number, just return a string.
+ * trpc will use zod to handle the validation before invoking the procedure.
  */
 const convertPositional = (schema: z.ZodType, value: string) => {
   let preprocessed: string | number | boolean | null = null
 
-  const literalTypes = new Set(expectedLiteralTypes(schema))
+  const acceptedTypes = new Set(acceptedLiteralTypes(schema))
 
-  if (literalTypes.has('boolean')) {
+  if (acceptedTypes.has('boolean')) {
     if (value === 'true') preprocessed = true
     else if (value === 'false') preprocessed = false
   }
 
-  if (literalTypes.has('number') && !schema.safeParse(preprocessed).success) {
-    preprocessed = Number(value)
+  if (acceptedTypes.has('number') && !schema.safeParse(preprocessed).success) {
+    const number = Number(value)
+    if (!Number.isNaN(number)) {
+      preprocessed = Number(value)
+    }
   }
 
-  if (literalTypes.has('string') && !schema.safeParse(preprocessed).success) {
+  if (acceptedTypes.has('string') && !schema.safeParse(preprocessed).success) {
     // it's possible we converted to a number prematurely - need to account for `z.union([z.string(), z.number().int()])`, where 1.2 should be a string, not a number
     // in that case, we would have set preprocessed to a number, but it would fail validation, so we need to reset it to a string here
     preprocessed = value
   }
 
-  // if we've successfully preprocessed, use the *input* value - zod will re-parse, so we shouldn't return the parsed value - that would break if there's a `.transform(...)`
-  return preprocessed !== null && schema.safeParse(preprocessed).success ? preprocessed : value
+  if (preprocessed === null) {
+    return value // we didn't convert to a number or boolean, so just return the string
+  }
+
+  if (schema.safeParse(preprocessed).success) {
+    return preprocessed // we converted successfully, and the type looks good, so use the preprocessed value
+  }
+
+  if (acceptedTypes.has('string')) {
+    return value // we converted successfully, but the type is wrong. However strings are also accepted, so return the string original value, it might be ok.
+  }
+
+  // we converted successfully, but the type is wrong. However, strings are also not accepted, so don't return the string original value. Return the preprocessed value even though it will fail - it's probably a number failing because of a `.refine(...)` or `.int()` or `.positive()` or `.min(1)` etc. - so better to have a "must be greater than zero" error than "expected number, got string"
+  return preprocessed
 }
 
 const parameterName = (s: z.ZodType, position: number) => {
