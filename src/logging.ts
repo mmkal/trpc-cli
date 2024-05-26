@@ -1,4 +1,4 @@
-import {LogMethod as LogFn, Logger} from './types'
+import {Log, Logger} from './types'
 
 export const lineByLineLogger = getLoggerTransformer(log => {
   /**
@@ -25,10 +25,8 @@ const isPrimitive = (value: unknown): value is string | number | boolean => {
   return type === 'string' || type === 'number' || type === 'boolean'
 }
 
-type TransformLogMethod = (log: LogFn) => LogFn
-
 /** Takes a function that wraps an individual log function, and returns a function that wraps the `info` and `error` functions for a logger */
-function getLoggerTransformer(transform: TransformLogMethod) {
+function getLoggerTransformer(transform: (log: Log) => Log) {
   return (logger: Logger): Logger => {
     const info = logger.info && transform(logger.info)
     const error = logger.error && transform(logger.error)
