@@ -2,6 +2,7 @@ import {execa} from 'execa'
 import * as path from 'path'
 import stripAnsi from 'strip-ansi'
 import {expect, test} from 'vitest'
+import '../src' // make sure vitest reruns this file after every change
 
 const tsx = async (file: string, args: string[]) => {
   const {all} = await execa('./node_modules/.bin/tsx', ['test/fixtures/' + file, ...args], {
@@ -134,25 +135,21 @@ test('migrations union type', async () => {
   let output = await tsx('migrations', ['apply', '--to', 'four'])
 
   expect(output).toMatchInlineSnapshot(`
-    "[
-      'one: executed',
-      'two: executed',
-      'three: executed',
-      'four: executed',
-      'five: pending'
-    ]"
+    "one: executed
+    two: executed
+    three: executed
+    four: executed
+    five: pending"
   `)
 
   output = await tsx('migrations', ['apply', '--step', '1'])
   expect(output).toContain('four: pending') // <-- this sometimes goes wrong when I mess with union type handling
   expect(output).toMatchInlineSnapshot(`
-    "[
-      'one: executed',
-      'two: executed',
-      'three: executed',
-      'four: pending',
-      'five: pending'
-    ]"
+    "one: executed
+    two: executed
+    three: executed
+    four: pending
+    five: pending"
   `)
 })
 
@@ -177,36 +174,32 @@ test('migrations search.byName help', async () => {
 test('migrations search.byName', async () => {
   const output = await tsx('migrations', ['search.byName', '--name', 'two'])
   expect(output).toMatchInlineSnapshot(`
-    "[
-      {
-        name: 'two',
-        content: 'create view two as select name from one',
-        status: 'executed'
-      }
-    ]"
+    "{
+      "name": "two",
+      "content": "create view two as select name from one",
+      "status": "executed"
+    }"
   `)
 })
 
 test('migrations search.byContent', async () => {
   const output = await tsx('migrations', ['search.byContent', '--searchTerm', 'create table'])
   expect(output).toMatchInlineSnapshot(`
-    "[
-      {
-        name: 'one',
-        content: 'create table one(id int, name text)',
-        status: 'executed'
-      },
-      {
-        name: 'three',
-        content: 'create table three(id int, foo int)',
-        status: 'pending'
-      },
-      {
-        name: 'five',
-        content: 'create table five(id int)',
-        status: 'pending'
-      }
-    ]"
+    "{
+      "name": "one",
+      "content": "create table one(id int, name text)",
+      "status": "executed"
+    }
+    {
+      "name": "three",
+      "content": "create table three(id int, foo int)",
+      "status": "pending"
+    }
+    {
+      "name": "five",
+      "content": "create table five(id int)",
+      "status": "pending"
+    }"
   `)
 })
 
@@ -261,16 +254,48 @@ test('fs copy help', async () => {
 
 test('fs copy', async () => {
   expect(await tsx('fs', ['copy', 'one'])).toMatchInlineSnapshot(
-    `"{ source: 'one', destination: 'one.copy', options: { force: false } }"`,
+    `
+      "{
+        "source": "one",
+        "destination": "one.copy",
+        "options": {
+          "force": false
+        }
+      }"
+    `,
   )
   expect(await tsx('fs', ['copy', 'one', 'uno'])).toMatchInlineSnapshot(
-    `"{ source: 'one', destination: 'uno', options: { force: false } }"`,
+    `
+      "{
+        "source": "one",
+        "destination": "uno",
+        "options": {
+          "force": false
+        }
+      }"
+    `,
   )
   expect(await tsx('fs', ['copy', 'one', '--force'])).toMatchInlineSnapshot(
-    `"{ source: 'one', destination: 'one.copy', options: { force: true } }"`,
+    `
+      "{
+        "source": "one",
+        "destination": "one.copy",
+        "options": {
+          "force": true
+        }
+      }"
+    `,
   )
   expect(await tsx('fs', ['copy', 'one', 'uno', '--force'])).toMatchInlineSnapshot(
-    `"{ source: 'one', destination: 'uno', options: { force: true } }"`,
+    `
+      "{
+        "source": "one",
+        "destination": "uno",
+        "options": {
+          "force": true
+        }
+      }"
+    `,
   )
 
   // invalid enum value:

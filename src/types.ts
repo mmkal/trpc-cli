@@ -48,7 +48,19 @@ export interface ParsedProcedure {
    * Function for taking cleye parsed argv output and transforming it so it can be passed into the procedure
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
-  getInput: (argv: {_: string[]; flags: {}}) => unknown
+  getInput: (argv: {_: string[]; flags: Record<string, unknown>}) => unknown
 }
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}
+
+/** A function that logs any inputs. e.g. `console.info` */
+export type Log = (...args: unknown[]) => void
+
+/**
+ * A struct which has `info` and `error` functions for logging. Easiest example: `console`
+ * But most loggers like pino, winston etc. have a similar interface.
+ */
+export interface Logger {
+  info?: Log
+  error?: Log
+}
