@@ -385,7 +385,11 @@ If the procedure returns `[{name: 'one'}, {name: 'two'}, {name: 'three'}]` this 
 }
 ```
 
-The process will exit with code 0 if the command was successful, or 1 otherwise. If you don't want to rely on this logging, you can always log inside your procedures and avoid returning a value. You can also override the `logger` and `process` properties of the `run` method:
+This is to make it as easy as possible to use with other command line tools like `xargs`, `jq` etc. via bash-piping. If you don't want to rely on this logging, you can always log inside your procedures however you like and avoid returning a value.
+
+The process will exit with code 0 if the command was successful, or 1 otherwise. 
+
+You can also override the `logger` and `process` properties of the `run` method to change the default return-value logging and/or process.exit behaviour:
 
 <!-- eslint-disable unicorn/no-process-exit -->
 ```ts
