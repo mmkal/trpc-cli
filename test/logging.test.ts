@@ -1,10 +1,10 @@
 import {beforeEach, expect, test, vi} from 'vitest'
-import {primitiveOrJsonLogger} from '../src/logging'
+import {lineByLineLogger} from '../src/logging'
 
 const info = vi.fn()
 const error = vi.fn()
 const mocks = {info, error}
-const jsonish = primitiveOrJsonLogger(mocks)
+const jsonish = lineByLineLogger(mocks)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -40,6 +40,24 @@ test('primitives array', async () => {
     11
     true
     m3
+  `)
+})
+
+test('array array', async () => {
+  jsonish.info!([
+    ['m1', 'm2'],
+    ['m3', 'm4'],
+  ])
+
+  expect(info).toMatchInlineSnapshot(`
+    [
+      "m1",
+      "m2"
+    ]
+    [
+      "m3",
+      "m4"
+    ]
   `)
 })
 

@@ -6,7 +6,7 @@ import {ZodError} from 'zod'
 import {type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
-import {primitiveOrJsonConsoleLogger} from './logging'
+import {lineByLineConsoleLogger} from './logging'
 import {Logger, TrpcCliParams} from './types'
 import {parseProcedureInputs} from './zod-procedure'
 
@@ -52,7 +52,7 @@ export const trpcCli = <R extends AnyRouter>({router, ...params}: TrpcCliParams<
   )
 
   async function run(runParams?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) {
-    const logger = {...primitiveOrJsonConsoleLogger, ...runParams?.logger}
+    const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const _process = runParams?.process || process
     let verboseErrors: boolean = false
 
