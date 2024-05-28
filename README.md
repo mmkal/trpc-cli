@@ -5,6 +5,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
 - [Installation](#installation)
 - [Usage](#usage)
+   - [Disclaimer](#disclaimer)
    - [Parameters and flags](#parameters-and-flags)
    - [Default command](#default-command)
    - [API docs](#api-docs)
@@ -55,9 +56,13 @@ cli.run()
 
 And that's it! Your tRPC router is now a CLI program with help text and input validation. You can run it with `node path/to/script.js add --left 2 --right 3`.
 
+### Disclaimer
+
+>Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though, and any breaking changes will be published via release notes!
+
 ### Parameters and flags
 
-CLI positional parameters and flags are derived from each procedure's input type. Inputs should use a `zod` object or tuple type for the procedure to be mapped to a CLI command.
+CLI positional parameters and flags are derived from each procedure's input type. Inputs use `zod` types for the procedure to be mapped to a CLI command.
 
 #### Positional parameters
 
@@ -71,7 +76,7 @@ t.router({
 })
 ```
 
-You can also use anything that accepts string, number, or boolean inputs, like `z.enum(['up', 'down'])`, `z.literal(123)`, `z.string().regex(/^\w+$/)` etc.
+You can also use anything that accepts string, number, or boolean inputs, like `z.enum(['up', 'down'])`, `z.number().int()`, `z.literal(123)`, `z.string().regex(/^\w+$/)` etc.
 
 Multiple positional parameters can use a `z.tuple(...)` input type:
 
@@ -158,8 +163,6 @@ path/to/cli copy a.txt b.txt --mkdirp
 Procedures with incompatible inputs will be returned in the `ignoredProcedures` property.
 
 >You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
-
->Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though!
 
 ### Default command
 
