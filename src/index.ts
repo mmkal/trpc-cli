@@ -142,7 +142,9 @@ export const trpcCli = <R extends AnyRouter>({router, ...params}: TrpcCliParams<
     const procedureInfo = command && procedureMap[command]
 
     if (!procedureInfo) {
-      die('No command provided.')
+      const name = JSON.stringify(command || parsedArgv._[0])
+      const message = name ? `Command not found: ${name}.` : 'No command specified.'
+      return die(message)
     }
 
     if (Object.entries(unknownFlags).length > 0) {

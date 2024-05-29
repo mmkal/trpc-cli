@@ -114,6 +114,40 @@ test('cli divide failure', async () => {
   `)
 })
 
+test('cli non-existent command', async () => {
+  const output = await tsx('calculator', ['multiploo', '2', '3'])
+  expect(output).toMatchInlineSnapshot(`
+    "Command not found: "multiploo".
+    Commands:
+      add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+      subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
+      multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
+      divide          Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+
+    Flags:
+      -h, --help                  Show help
+          --verbose-errors        Throw raw errors (by default errors are summarised)
+    "
+  `)
+})
+
+test('cli no command', async () => {
+  const output = await tsx('calculator', [])
+  expect(output).toMatchInlineSnapshot(`
+    "No command specified.
+    Commands:
+      add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+      subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
+      multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
+      divide          Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+
+    Flags:
+      -h, --help                  Show help
+          --verbose-errors        Throw raw errors (by default errors are summarised)
+    "
+  `)
+})
+
 test('migrations help', async () => {
   const output = await tsx('migrations', ['--help'])
   expect(output).toMatchInlineSnapshot(`
