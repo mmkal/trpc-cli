@@ -1,12 +1,13 @@
 import {z} from 'zod'
 import zodToJsonSchema from 'zod-to-json-schema'
 import type {Result, ParsedProcedure} from './types'
+import {looksLikeInstanceof} from './uitl'
 
 function getInnerType(zodType: z.ZodType): z.ZodType {
-  if (zodType instanceof z.ZodOptional || zodType instanceof z.ZodNullable) {
+  if (looksLikeInstanceof(zodType, z.ZodOptional) || looksLikeInstanceof(zodType, z.ZodNullable)) {
     return getInnerType(zodType._def.innerType as z.ZodType)
   }
-  if (zodType instanceof z.ZodEffects) {
+  if (looksLikeInstanceof(zodType, z.ZodEffects)) {
     return getInnerType(zodType.innerType() as z.ZodType)
   }
   return zodType
@@ -20,7 +21,9 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     }
   }
 
-  const allZodTypes = inputs.every(input => input instanceof z.ZodType)
+  const allZodTypes = inputs.every(input =>
+    looksLikeInstanceof(input, z.ZodType as new (...args: unknown[]) => z.ZodType),
+  )
   if (!allZodTypes) {
     return {
       success: false,
@@ -38,7 +41,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     return parseLiteralInput(mergedSchema)
   }
 
-  if (mergedSchema instanceof z.ZodTuple) {
+  if (looksLikeInstanceof(mergedSchema, z.ZodTuple)) {
     return parseTupleInput(mergedSchema as z.ZodTuple<never>)
   }
 
@@ -222,16 +225,17 @@ const parameterName = (s: z.ZodType, position: number) => {
  * acceptsString(z.intersection(z.string(), z.number())) // false
  * acceptsString(z.intersection(z.string(), z.string().max(10))) // true
  */
-export function accepts(target: z.ZodType) {
+export function accepts<ZodTarget extends z.ZodType>(target: ZodTarget) {
   const test = (zodType: z.ZodType): boolean => {
     const innerType = getInnerType(zodType)
-    if (innerType instanceof target.constructor) return true
-    if (innerType instanceof z.ZodLiteral) return target.safeParse(innerType.value).success
-    if (innerType instanceof z.ZodEnum) return (innerType.options as unknown[]).some(o => target.safeParse(o).success)
-    if (innerType instanceof z.ZodUnion) return (innerType.options as z.ZodType[]).some(test)
-    if (innerType instanceof z.ZodIntersection)
+    if (looksLikeInstanceof(innerType, target.constructor as new (...args: unknown[]) => ZodTarget)) return true
+    if (looksLikeInstanceof(innerType, z.ZodLiteral)) return target.safeParse(innerType.value).success
+    if (looksLikeInstanceof(innerType, z.ZodEnum))
+      return (innerType.options as unknown[]).some(o => target.safeParse(o).success)
+    if (looksLikeInstanceof(innerType, z.ZodUnion)) return innerType.options.some(test)
+    if (looksLikeInstanceof(innerType, z.ZodIntersection))
       return test(innerType._def.left as z.ZodType) && test(innerType._def.right as z.ZodType)
-    if (innerType instanceof z.ZodEffects) return test(innerType.innerType() as z.ZodType)
+    if (looksLikeInstanceof(innerType, z.ZodEffects)) return test(innerType.innerType() as z.ZodType)
     return false
   }
   return test
