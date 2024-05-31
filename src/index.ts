@@ -8,7 +8,7 @@ import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {Logger, TrpcCliParams} from './types'
-import {looksLikeInstanceof} from './uitl'
+import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
 
 export * from './types'

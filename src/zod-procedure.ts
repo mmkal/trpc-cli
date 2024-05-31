@@ -1,7 +1,7 @@
 import {z} from 'zod'
 import zodToJsonSchema from 'zod-to-json-schema'
 import type {Result, ParsedProcedure} from './types'
-import {looksLikeInstanceof} from './uitl'
+import {looksLikeInstanceof} from './util'
 
 function getInnerType(zodType: z.ZodType): z.ZodType {
   if (looksLikeInstanceof(zodType, z.ZodOptional) || looksLikeInstanceof(zodType, z.ZodNullable)) {
