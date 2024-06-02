@@ -187,7 +187,7 @@ The above can be invoked with either `yarn` or `yarn install`.
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: trpcCli} -->
-#### [trpcCli](./src/index.ts#L29)
+#### [trpcCli](./src/index.ts#L30)
 
 Run a trpc router as a CLI.
 

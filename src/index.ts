@@ -8,6 +8,7 @@ import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {Logger, TrpcCliParams} from './types'
+import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
 
 export * from './types'
@@ -181,9 +182,9 @@ export const trpcCli = <R extends AnyRouter>({router, ...params}: TrpcCliParams<
 type Fail = (message: string, options?: {cause?: unknown; help?: boolean}) => never
 
 function transformError(err: unknown, fail: Fail): unknown {
-  if (err instanceof TRPCError) {
+  if (looksLikeInstanceof(err, TRPCError)) {
     const cause = err.cause
-    if (cause instanceof ZodError) {
+    if (looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues
       try {
         cause.issues = cause.issues.map(issue => {
