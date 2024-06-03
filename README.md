@@ -3,11 +3,13 @@
 Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
 
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
+- [Motivation](#motivation)
 - [Installation](#installation)
 - [Usage](#usage)
    - [Disclaimer](#disclaimer)
    - [Parameters and flags](#parameters-and-flags)
    - [Default command](#default-command)
+   - [Ignored procedures](#ignored-procedures)
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
 - [Output and lifecycle](#output-and-lifecycle)
@@ -20,6 +22,12 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Implementation and dependencies](#implementation-and-dependencies)
    - [Testing](#testing)
 <!-- codegen:end -->
+
+## Motivation
+
+tRPC offers best-in-class type-safety and DX for building "procedures" that validate their inputs, and abide by their own contracts. This library gives you all those DX benefits, and allows mapping the procedures directly to a CLI. This offers the easiest way to build a CLI while mapping parsed flags into strongly-typed inputs, and automatically outputs `--help` documentation that's always up-to-date.
+
+This isn't just the easiest and safest way out there to build a CLI, but you also get all the benefits of tRPC (and zod). For inputs, you can use zod regex types, transforms, refinements, and those will map directly into useful help-text for CLI users, and corresponding type correctness when maintaining your CLI program. You can also use tRPC context and middleware functionality just like you could if you were building a server. And as an added bonus, it becomes trivially easy to turn your CLI program into a fully-functional HTTP server. Or, you could add a "programmatic usage" to your library, just by wrapping your server with the built-in `createCaller` function from tRPC. This would all, of course, have runtime and compile-time type safety.
 
 ## Installation
 
@@ -58,7 +66,7 @@ And that's it! Your tRPC router is now a CLI program with help text and input va
 
 ### Disclaimer
 
->Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though, and any breaking changes will be published via release notes!
+>Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though, and any breaking changes will be published via release notes.
 
 ### Parameters and flags
 
@@ -176,13 +184,49 @@ const router = t.router({
     .mutation(() => console.log('installing...')),
 })
 
-trpcCli({
+const cli = trpcCli({
   router,
   default: {procedure: 'install'},
 })
+
+cli.run()
 ```
 
 The above can be invoked with either `yarn` or `yarn install`.
+
+### Ignored procedures
+
+If a procedure has an input that cannot be mapped to positional parameters and CLI flags, it will be ignored. You can access the ignored procedures, along with the associated error messages encountered when trying to map those procedures into commands, with the `.ignoredProcedures` property.
+
+```ts
+const router = t.router({
+  foo: t.procedure
+    // input can't be mapped to a command - tuples must start with string/number positional parameters:
+    .input(z.tuple([z.string(), z.object({abc: z.string()}), z.string()]))
+    .query(() => 'ok'),
+})
+
+const cli = trpcCli({router})
+
+if (cli.ignoredProcedures.length > 0) {
+  throw new Error(
+    `Some procedures weren't mapped into commands: ${JSON.stringify(cli.ignoredProcedures, null, 2)}`,
+  )
+}
+```
+
+The above will throw an error looking like:
+
+```
+Some procedures weren't mapped into commands: [
+  {
+    "procedure": "foo",
+    "reason": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings or numbers."
+  }
+]
+```
+
+Note: by design, `trpcCli` simply collects these procedures rather than throwing so that you can pass any router to it - the procedures which _can_ be mapped into commands will still work. It is up to you if you want to throw if some are ignored.
 
 ### API docs
 

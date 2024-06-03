@@ -48,9 +48,7 @@ export const trpcCli = <R extends AnyRouter>({router, ...params}: TrpcCliParams<
 
   const procedureMap = Object.fromEntries(procedureEntries)
 
-  const ignoredProcedures = Object.fromEntries(
-    procedures.flatMap(([k, v]) => (typeof v === 'string' ? [[k, v] as const] : [])),
-  )
+  const ignoredProcedures = procedures.flatMap(([k, v]) => (typeof v === 'string' ? [{procedure: k, reason: v}] : []))
 
   async function run(runParams?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}

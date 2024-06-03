@@ -323,9 +323,15 @@ test('validation', async () => {
   const cli = trpcCli({router})
 
   expect(cli.ignoredProcedures).toMatchInlineSnapshot(`
-    {
-      "tupleWithObjectInTheMiddle": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings or numbers.",
-      "tupleWithRecord": "Invalid input type [ZodString, ZodRecord]. The last type must accept object inputs.",
-    }
+    [
+      {
+        "procedure": "tupleWithObjectInTheMiddle",
+        "reason": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings or numbers.",
+      },
+      {
+        "procedure": "tupleWithRecord",
+        "reason": "Invalid input type [ZodString, ZodRecord]. The last type must accept object inputs.",
+      },
+    ]
   `)
 })
