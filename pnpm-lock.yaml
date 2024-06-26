@@ -29,8 +29,8 @@ devDependencies:
     specifier: 0.7.0
     version: 0.7.0(eslint@8.57.0)(typescript@5.5.2)(vitest@1.6.0)
   execa:
-    specifier: 9.1.0
-    version: 9.1.0
+    specifier: 9.3.0
+    version: 9.3.0
   fs-syncer:
     specifier: 0.5.3
     version: 0.5.3
@@ -3145,9 +3145,9 @@ packages:
       strip-final-newline: 3.0.0
     dev: true
 
-  /execa@9.1.0:
-    resolution: {integrity: sha512-lSgHc4Elo2m6bUDhc3Hl/VxvUDJdQWI40RZ4KMY9bKRc+hgMOT7II/JjbNDhI8VnMtrCb7U/fhpJIkLORZozWw==}
-    engines: {node: '>=18'}
+  /execa@9.3.0:
+    resolution: {integrity: sha512-l6JFbqnHEadBoVAVpN5dl2yCyfX28WoBAGaoQcNmLLSedOxTxcn2Qa83s8I/PA5i56vWru2OHOtrwF7Om2vqlg==}
+    engines: {node: ^18.19.0 || >=20.5.0}
     dependencies:
       '@sindresorhus/merge-streams': 4.0.0
       cross-spawn: 7.0.3
