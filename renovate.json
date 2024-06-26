@@ -1,6 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "baseBranches": ["deps"],
+  "automerge": true,
   "extends": [
     "config:recommended"
   ]
