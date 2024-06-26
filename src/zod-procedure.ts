@@ -32,10 +32,10 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
   }
 
   if (inputs.length > 1) {
-    return parseMultiInputs(inputs as z.ZodType[])
+    return parseMultiInputs(inputs)
   }
 
-  const mergedSchema = inputs[0] as z.ZodType
+  const mergedSchema = inputs[0]
 
   if (acceptedLiteralTypes(mergedSchema).length > 0) {
     return parseLiteralInput(mergedSchema)
