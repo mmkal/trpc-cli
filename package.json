@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@trpc/server": "10.45.2",
-    "@types/node": "20.12.12",
+    "@types/node": "20.14.9",
     "eslint-plugin-mmkal": "0.7.0",
     "execa": "9.1.0",
     "fs-syncer": "0.5.3",
