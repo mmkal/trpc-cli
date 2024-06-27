@@ -81,7 +81,7 @@ jobs:
               body: [
                 'This PR was automatically created by the ${{ github.workflow }} workflow.',
                 '',
-                'Renovate will continue to push to ${head}.',
+                `Renovate will continue to push to ${head}.`,
                 '',
                 'Review each dependency update and merge as needed.',
               ].join('\n'),
