@@ -59,11 +59,19 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const {data: [existing]} = await github.rest.pulls.list({
+            const iterator = github.paginate.iterator(github.pulls.list, {
               ...context.repo,
               state: 'open',
-              head: 'deps',
             })
+            for await (const p of iterator) {
+              console.log('p', p)
+            }
+
+            const {data: pulls} = await github.rest.pulls.list({
+              ...context.repo,
+              state: 'open',
+            })
+            const existing = pulls.find(p => p.head.ref === 'deps' && p.base.ref === 'main')
 
             if (existing) {
               console.log('PR already exists:', existing.title, existing.html_url)
