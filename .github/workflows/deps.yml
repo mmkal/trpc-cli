@@ -82,7 +82,7 @@ jobs:
               ...context.repo,
               state: 'open',
             })
-            const head = '${{ steps.branches.outputs.haed }}'
+            const head = '${{ steps.branches.outputs.head }}'
             const base = '${{ steps.branches.outputs.base }}'
 
             for await (const {data: pulls} of iterator) {
