@@ -13,6 +13,11 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+      - id: branches
+        name: Set branch variables
+        run: |
+          echo head=deps >> $GITHUB_OUTPUT
+          echo base=main >> $GITHUB_OUTPUT
       - id: checkout_deps
         uses: actions/checkout@v4
         with:
@@ -23,10 +28,10 @@ jobs:
         run: |
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-      - name: Merge latest main
+      - name: Merge latest ${{ steps.branches.outputs.base }}
         run: |
           git fetch
-          git merge --strategy-option theirs origin/main | tee merge-output.log
+          git merge --strategy-option theirs origin/${{ steps.branches.outputs.base }} | tee merge-output.log
       - name: Update lockfile
         run: |
           corepack enable
@@ -63,8 +68,8 @@ jobs:
               ...context.repo,
               state: 'open',
             })
-            const head = 'deps'
-            const base = 'main'
+            const head = '${{ steps.branches.outputs.haed }}'
+            const base = '${{ steps.branches.outputs.base }}'
 
             const getBranch = async branch => {
               const {data} = await github.rest.repos.getBranch({...context.repo, branch})
