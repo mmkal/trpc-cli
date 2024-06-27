@@ -42,19 +42,13 @@ jobs:
             git commit -m 'chore: changes after pnpm install' --no-verify
           fi
       - run: git log -n 5
-      - run: git status
-      - run: echo hi | grep -c h
       - run: |
-          is_ahead=$(git status | LC_ALL=C grep -c 'Your branch is ahead')
-          echo "is_ahead: $is_ahead"
-      - run: |
-          is_ahead=$(git status | grep -c 'Your branch is ahead')
-          echo "is_ahead: $is_ahead"
-          if [ "$is_ahead" -eq 1 ]; then
-            echo git push
-          else
+          is_ahead=$(git status | grep 'Your branch is ahead' || echo '')
+          if [ -z "$is_ahead" ]; then
             git status
             echo "no changes to push"
+          else
+            git push
           fi
   deps_to_main_pull_request:
     if: github.event.inputs.mode == 'deps_to_main_pull_request' || github.event.schedule == '0 17 * * FRI'
