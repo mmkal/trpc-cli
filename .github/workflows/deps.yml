@@ -43,6 +43,7 @@ jobs:
           fi
       - run: git log -n 5
       - run: git status
+      - run: echo hi | grep -c h
       - run: |
           is_ahead=$(git status | LC_ALL=C grep -c 'Your branch is ahead')
           echo "is_ahead: $is_ahead"
