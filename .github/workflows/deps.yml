@@ -61,6 +61,20 @@ jobs:
             })
             const head = 'deps'
             const base = 'main'
+
+            const latestCommit = async branch => {
+              const {data} = await github.rest.repos.getBranch({...context.repo, branch})
+              return data.commit
+            }
+
+            const latestHead = await latestCommit(head)
+            const latestBase = await latestCommit(base)
+            
+            if (latestHead.sha === latestBase.sha) {
+              console.log(`No changes between ${head} and ${base}. Both are at ${latestHeadSha}: ${latestHead.commit?.message}`)
+              return
+            }
+
             for await (const {data: pulls} of iterator) {
               const existing = pulls.find(p => p.head.ref === head && p.base.ref === base)
               if (existing) {
