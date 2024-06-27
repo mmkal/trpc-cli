@@ -59,24 +59,17 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const {data: test} = await github.rest.pulls.list({
-              ...context.repo,
-              state: 'open',
-              head: 'deps-syncer',
-            })
-            if (Math.random()) {
-              console.log('test prs:', test)
-              return
-            }
-            const {data: pulls} = await github.rest.pulls.list({
+            const {data: [existing]} = await github.rest.pulls.list({
               ...context.repo,
               state: 'open',
               head: 'deps',
             })
-            if (pulls.length > 0) {
-              console.log('PR already exists:', pulls[0].title, pulls[0].html_url)
+
+            if (existing) {
+              console.log('PR already exists:', existing.title, existing.html_url)
               return
             }
+
             await github.rest.pulls.create({
               ...context.repo,
               title: 'chore: sync deps to main',
