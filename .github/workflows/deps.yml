@@ -26,18 +26,20 @@ jobs:
       - name: Merge latest main
         run: |
           git fetch
-          git merge --strategy-option theirs origin/main
+          git merge --strategy-option theirs origin/main | tee merge-output.log
       - name: Update lockfile
         run: |
           corepack enable
           pnpm install --no-frozen-lockfile
       - name: Commit lockfile changes
+        id: commit_changes
         run: |
           git status
           GIT_STATUS=$(git status --porcelain)
           if [ -z "$GIT_STATUS" ]; then
             echo "no working changes, nothing to commit"
           else
+            echo changes=yes >> $GITHUB_OUTPUT
             git add .
             git commit -m 'chore: changes after pnpm install' --no-verify
           fi
