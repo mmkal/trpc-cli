@@ -31,7 +31,7 @@ jobs:
       - name: Merge latest ${{ steps.branches.outputs.base }}
         run: |
           git fetch
-          git merge --strategy-option theirs origin/${{ steps.branches.outputs.base }} | tee merge-output.log
+          git merge --strategy-option theirs origin/${{ steps.branches.outputs.base }}
       - name: Update lockfile
         run: |
           corepack enable
@@ -108,9 +108,9 @@ jobs:
 
             await github.rest.pulls.create({
               ...context.repo,
-              title: 'chore: update dependencies',
               head,
               base,
+              title: 'chore: update dependencies',
               body: [
                 'This PR was automatically created by the ${{ github.workflow }} workflow.',
                 '',
