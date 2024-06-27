@@ -51,6 +51,7 @@ jobs:
           fi
   deps_to_main_pull_request:
     runs-on: ubuntu-latest
+    needs: [main_to_deps_merge]
     steps:
       - name: Create pull request
         uses: actions/github-script@v7
@@ -71,7 +72,8 @@ jobs:
 
             const latestHead = await latestCommit(head)
             const latestBase = await latestCommit(base)
-            
+            console.log(JSON.stringify({latestHead, latestBase}, null, 2))
+
             if (latestHead.sha === latestBase.sha) {
               console.log(`No changes between ${head} and ${base}. Both are at ${latestHeadSha}: ${latestHead.commit?.message}`)
               return
