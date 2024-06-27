@@ -33,29 +33,28 @@ jobs:
           pnpm install --no-frozen-lockfile
       - name: Commit lockfile changes
         run: |
+          git status
           GIT_STATUS=$(git status --porcelain)
           if [ -z "$GIT_STATUS" ]; then
-            echo "no changes made. git status:"
-            git status
+            echo "no working changes, nothing to commit"
           else
             git add .
             git commit -m 'chore: changes after pnpm install' --no-verify
           fi
       - name: Push changes
+        id: push_changes
         run: |
           is_ahead=$(git status | grep 'Your branch is ahead' || echo '')
           if [ -z "$is_ahead" ]; then
             git status
             echo "no changes to push"
           else
+            echo ahead=yes >> $GITHUB_OUTPUT
             git push
           fi
-  deps_to_main_pull_request:
-    runs-on: ubuntu-latest
-    needs: [main_to_deps_merge]
-    steps:
       - name: Create pull request
         uses: actions/github-script@v7
+        if: steps.push_changes.outputs.ahead == 'yes'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -66,14 +65,16 @@ jobs:
             const head = 'deps'
             const base = 'main'
 
-            const latestCommit = async branch => {
+            const getBranch = async branch => {
               const {data} = await github.rest.repos.getBranch({...context.repo, branch})
-              return data.commit
+              return data
             }
 
-            const latestHead = await latestCommit(head)
-            const latestBase = await latestCommit(base)
-            console.log(JSON.stringify({latestHead, latestBase}, null, 2))
+            const {commit: latestHead} = await getBranch(head)
+            const {commit: latestBase} = await getBranch(base)
+
+            console.log(`Head: ${head}, sha: ${latestHead.sha}, parents: ${latestHead.parents.map(p => p.sha).join(', ')}`)
+            console.log(`Base: ${base}, sha: ${latestBase.sha}, parents: ${latestBase.parents.map(p => p.sha).join(', ')}`)
 
             const {data: comparison} = await github.rest.repos.compareCommits({
               ...context.repo,
