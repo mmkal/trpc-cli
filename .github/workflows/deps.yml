@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - deps
       - deps-sync
       - 'deps-sync/**'
 
@@ -74,8 +75,19 @@ jobs:
             const latestBase = await latestCommit(base)
             console.log(JSON.stringify({latestHead, latestBase}, null, 2))
 
-            if (latestHead.sha === latestBase.sha) {
-              console.log(`No changes between ${head} and ${base}. Both are at ${latestHeadSha}: ${latestHead.commit?.message}`)
+            const {data: comparison} = await github.rest.repos.compareCommits({
+              ...context.repo,
+              base: latestBase.sha,
+              head: latestHead.sha
+            })
+
+            if (comparison.status === 'identical') {
+              console.log(`No changes between ${head} and ${base}. ${head} is identical to ${base}: ${latestHead.commit?.message}`)
+              return
+            }
+
+            if (comparison.status === 'ahead' && latestHead.parents.some(parent => parent.sha === latestBase.sha)) {
+              console.log(`No changes between ${head} and ${base}. ${head} is a descendant of ${base}: ${latestHead.commit?.message}`)
               return
             }
 
