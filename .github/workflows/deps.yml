@@ -19,12 +19,6 @@ jobs:
     if: contains(github.ref_name, 'deps-syncer') || github.event.inputs.mode == 'main_to_deps_merge' || github.event.schedule == '10,40 17,18,19 * * FRI'
     runs-on: ubuntu-latest
     steps:
-      - id: checkout_main
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: main
       - id: checkout_deps
         uses: actions/checkout@v4
         with:
@@ -33,12 +27,11 @@ jobs:
           ref: deps
       - run: git log -n 5
       - run: git config --global user.name mergebot
-      - run: git config --global user.email "mergebot@example.com"
-      - run: git status
+      - run: git config --global user.email "mergebot@noreply.github.com"
       - run: git fetch
       - run: git merge origin/main
-      - run: git status
       - run: git log -n 5
+      - run: git push
   deps_to_main_pull_request:
     if: github.event.inputs.mode == 'deps_to_main_pull_request' || github.event.schedule == '0 17 * * FRI'
     runs-on: ubuntu-latest
