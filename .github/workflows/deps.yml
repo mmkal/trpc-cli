@@ -16,11 +16,11 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: deps
-      - run: git log -n 5
-      # - run: git config --global user.name mergebot
-      # - run: git config --global user.email "mergebot@users.noreply.github.com"
-      - run: git fetch
-      - run: git merge --strategy-option theirs origin/main
+      - run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git fetch
+          git merge --strategy-option theirs origin/main
       - run: corepack enable
       - run: pnpm install --no-frozen-lockfile
       - run: |
