@@ -76,8 +76,7 @@ jobs:
             console.log(JSON.stringify({latestHead, latestBase}, null, 2))
 
             const {data: comparison} = await github.rest.repos.compareCommits({
-              owner,
-              repo,
+              ...context.repo,
               base: latestBase.sha,
               head: latestHead.sha
             })
