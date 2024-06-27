@@ -63,29 +63,26 @@ jobs:
               ...context.repo,
               state: 'open',
             })
+            const head = 'deps'
+            const base = 'main'
             for await (const {data: pulls} of iterator) {
-              const existing = pulls.find(p => p.head.ref === 'deps' && p.base.ref === 'main')
+              const existing = pulls.find(p => p.head.ref === head && p.base.ref === base)
               if (existing) {
-                console.log(`Pull request ${existing.head.ref}->${existing.base.ref} already exists: ${existing.title} ${existing.html_url}`)
+                console.log(`Pull request into ${base} from ${head} already exists: ${existing.title} ${existing.html_url}`)
                 return
               }
             }
 
-            const {data: pulls} = await github.rest.pulls.list({
-              ...context.repo,
-              state: 'open',
-            })
-            const existing = pulls.find(p => p.head.ref === 'deps' && p.base.ref === 'main')
-
-            if (existing) {
-              console.log('PR already exists:', existing.title, existing.html_url)
-              return
-            }
-
             await github.rest.pulls.create({
               ...context.repo,
-              title: 'chore: sync deps to main',
-              head: 'deps',
-              base: 'main',
-              body: 'This PR was automatically created by the deps-syncer workflow.',
+              title: 'chore: update dependencies',
+              head,
+              base,
+              body: [
+                'This PR was automatically created by the ${{ github.workflow }} workflow.',
+                '',
+                'Renovate will continue to push to ${head}.',
+                '',
+                'Review each dependency update and merge as needed.',
+              ].join('\n'),
             })
