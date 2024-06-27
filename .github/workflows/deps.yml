@@ -1,0 +1,42 @@
+name: deps-sync
+on:
+  schedule:
+    - cron: 0 17 * * FRI
+    - cron: 10,40 17,18,19 * * FRI
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options:
+          - main_to_deps_merge
+          - deps_to_main_pull_request
+
+jobs:
+  main_to_deps_merge:
+    if: github.event.inputs.mode == 'main_to_deps_merge' || github.event.schedule == '10,40 17,18,19 * * FRI'
+    runs-on: ubuntu-latest
+    steps:
+      - id: checkout_deps
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: deps
+      - id: checkout_main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+      - run: git log -n 5
+      - run: git config --global user.name mergebot
+      - run: git config --global user.email "mergebot@example.com"
+      - run: git status
+      - run: git merge main
+      - run: git status
+      - run: git log -n 5
+  deps_to_main_pull_request:
+    if: github.event.inputs.mode == 'deps_to_main_pull_request' || github.event.schedule == '0 17 * * FRI'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo todo
