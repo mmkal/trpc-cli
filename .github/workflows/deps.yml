@@ -27,9 +27,20 @@ jobs:
           ref: deps
       - run: git log -n 5
       - run: git config --global user.name mergebot
-      - run: git config --global user.email "mergebot@noreply.github.com"
+      - run: git config --global user.email "mergebot@users.noreply.github.com"
       - run: git fetch
-      - run: git merge origin/main
+      - run: git merge --strategy-option theirs origin/main
+      - run: corepack enable
+      - run: pnpm install --no-frozen-lockfile
+      - run: |
+          GIT_STATUS=$(git status --porcelain)
+          if [ -z "$GIT_STATUS" ]; then
+            echo "no changes made. git status:"
+            git status
+          else
+            git add .
+            git commit -m 'chore: changes after pnpm install' --no-verify
+          fi
       - run: git log -n 5
       - run: git push
   deps_to_main_pull_request:
