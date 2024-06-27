@@ -13,6 +13,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
 - [Output and lifecycle](#output-and-lifecycle)
+- [Testing your CLI](#testing-your-cli)
 - [Features and Limitations](#features-and-limitations)
 - [More Examples](#more-examples)
    - [Migrator example](#migrator-example)
@@ -456,6 +457,26 @@ cli.run({
 ```
 
 You could also override `process.exit` to avoid killing the process at all - see [programmatic usage](#programmatic-usage) for an example.
+
+## Testing your CLI
+
+Rather than testing your CLI via a subprocess, which is slow and doesn't provide great DX, it's better to use the router that is passed to it directly with [`createCallerFactory`](https://trpc.io/docs/server/server-side-calls#create-caller):
+
+```ts
+import {initTRPC} from '@trpc/server'
+import {test, expect} from 'your-test-library'
+import {router} from '../src'
+
+const caller = initTRPC.create().createCallerFactory(router)({})
+
+test('add', async () => {
+  expect(await caller.add([2, 3])).toBe(5)
+})
+```
+
+This will give you strong types for inputs and outputs, and is essentially what `trpc-cli` does under the hood after parsing and validating command-line input.
+
+In general, you should rely on `trpc-cli` to correctly handle the lifecycle and output etc. when it's invoked as a CLI by end-users. If there are any problems there, they should be fixed on this repo - please raise an issue.
 
 ## Features and Limitations
 
