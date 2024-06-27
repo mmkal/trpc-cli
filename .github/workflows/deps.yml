@@ -10,7 +10,7 @@ on:
       - 'deps-sync/**'
 
 jobs:
-  main_to_deps_merge:
+  run:
     runs-on: ubuntu-latest
     steps:
       - id: checkout_deps
@@ -56,7 +56,6 @@ jobs:
           fi
       - name: Create pull request
         uses: actions/github-script@v7
-        if: steps.push_changes.outputs.ahead == 'yes'
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
