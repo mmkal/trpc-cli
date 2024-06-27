@@ -10,9 +10,14 @@ on:
       - 'deps-sync/**'
 
 jobs:
-  main_to_deps_merge:
+  run:
     runs-on: ubuntu-latest
     steps:
+      - id: branches
+        name: Set branch variables
+        run: |
+          echo head=deps >> $GITHUB_OUTPUT
+          echo base=main >> $GITHUB_OUTPUT
       - id: checkout_deps
         uses: actions/checkout@v4
         with:
@@ -23,43 +28,47 @@ jobs:
         run: |
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-      - name: Merge latest main
+      - name: Merge latest ${{ steps.branches.outputs.base }}
         run: |
           git fetch
-          git merge --strategy-option theirs origin/main
+          git merge --strategy-option theirs origin/${{ steps.branches.outputs.base }}
       - name: Update lockfile
         run: |
           corepack enable
           pnpm install --no-frozen-lockfile
       - name: Commit lockfile changes
+        id: commit_changes
         run: |
+          git status
           GIT_STATUS=$(git status --porcelain)
           if [ -z "$GIT_STATUS" ]; then
-            echo "no changes made. git status:"
-            git status
+            echo "no working changes, nothing to commit"
           else
+            echo changes=yes >> $GITHUB_OUTPUT
             git add .
             git commit -m 'chore: changes after pnpm install' --no-verify
           fi
       - name: Push changes
+        id: push_changes
         run: |
           is_ahead=$(git status | grep 'Your branch is ahead' || echo '')
           if [ -z "$is_ahead" ]; then
             git status
             echo "no changes to push"
           else
+            echo ahead=yes >> $GITHUB_OUTPUT
             git push
           fi
       - name: Check if deps ahead
         id: deps_ahead
         run: |
-          git checkout main
+          git checkout ${{ steps.branches.outputs.base }}
           git pull
-          diff=$(git diff deps)
+          diff=$(git diff ${{ steps.branches.outputs.head }})
           if [ -z "$diff" ]; then
-            echo no diff between main and deps
+            echo no diff between ${{ steps.branches.outputs.base }} and ${{ steps.branches.outputs.head }}
           else
-            echo "diff between main and deps:"
+            echo "diff between ${{ steps.branches.outputs.base }} and ${{ steps.branches.outputs.head }}:"
             echo "$diff"
             echo deps_ahead=yes >> $GITHUB_OUTPUT
           fi
@@ -73,8 +82,8 @@ jobs:
               ...context.repo,
               state: 'open',
             })
-            const head = 'deps'
-            const base = 'main'
+            const head = '${{ steps.branches.outputs.haed }}'
+            const base = '${{ steps.branches.outputs.base }}'
 
             for await (const {data: pulls} of iterator) {
               const existing = pulls.find(p => p.head.ref === head && p.base.ref === base)
@@ -86,9 +95,9 @@ jobs:
 
             await github.rest.pulls.create({
               ...context.repo,
-              title: 'chore: update dependencies',
               head,
               base,
+              title: 'chore: update dependencies',
               body: [
                 'This PR was automatically created by the ${{ github.workflow }} workflow.',
                 '',
