@@ -73,14 +73,14 @@ jobs:
             echo "$diff"
             echo deps_ahead=yes >> $GITHUB_OUTPUT
           fi
-      - name: Recreate deps branch
+      - name: Reset deps branch
         if: steps.deps_ahead.outputs.deps_ahead != 'yes'
         run: |
-          git checkout $base
-          git push -d origin $head
-          git branch -D $head
-          git checkout -b $head
-          git push -u origin $head
+          git checkout $head
+          git diff $base --exit-code
+          git fetch origin
+          git reset --hard origin/$base
+          git push --force-with-lease origin $head
       - name: Create pull request
         if: steps.deps_ahead.outputs.deps_ahead == 'yes'
         uses: actions/github-script@v7
