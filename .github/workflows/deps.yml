@@ -10,10 +10,13 @@ on:
         options:
           - main_to_deps_merge
           - deps_to_main_pull_request
+  push:
+    branches:
+      - deps-syncer
 
 jobs:
   main_to_deps_merge:
-    if: github.event.inputs.mode == 'main_to_deps_merge' || github.event.schedule == '10,40 17,18,19 * * FRI'
+    if: contains(github.ref_name, 'deps-syncer') || github.event.inputs.mode == 'main_to_deps_merge' || github.event.schedule == '10,40 17,18,19 * * FRI'
     runs-on: ubuntu-latest
     steps:
       - id: checkout_deps
