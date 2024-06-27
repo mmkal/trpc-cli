@@ -35,7 +35,8 @@ jobs:
       - run: git config --global user.name mergebot
       - run: git config --global user.email "mergebot@example.com"
       - run: git status
-      - run: git merge main
+      - run: git fetch
+      - run: git merge origin/main
       - run: git status
       - run: git log -n 5
   deps_to_main_pull_request:
