@@ -1,0 +1,84 @@
+name: deps-sync
+on:
+  schedule:
+    - cron: 0 3 * * *
+  push:
+    branches:
+      - deps-syncer
+
+jobs:
+  main_to_deps_merge:
+    runs-on: ubuntu-latest
+    steps:
+      - id: checkout_deps
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: deps
+      - name: Configure git # needed to author commits
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+      - name: Merge latest main
+        run: |
+          git fetch
+          git merge --strategy-option theirs origin/main
+      - name: Update lockfile
+        run: |
+          corepack enable
+          pnpm install --no-frozen-lockfile
+      - name: Commit lockfile changes
+        run: |
+          GIT_STATUS=$(git status --porcelain)
+          if [ -z "$GIT_STATUS" ]; then
+            echo "no changes made. git status:"
+            git status
+          else
+            git add .
+            git commit -m 'chore: changes after pnpm install' --no-verify
+          fi
+      - name: Push changes
+        run: |
+          is_ahead=$(git status | grep 'Your branch is ahead' || echo '')
+          if [ -z "$is_ahead" ]; then
+            git status
+            echo "no changes to push"
+          else
+            git push
+          fi
+  deps_to_main_pull_request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create pull request
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const iterator = github.paginate.iterator(github.rest.pulls.list, {
+              ...context.repo,
+              state: 'open',
+            })
+            const head = 'deps'
+            const base = 'main'
+            for await (const {data: pulls} of iterator) {
+              const existing = pulls.find(p => p.head.ref === head && p.base.ref === base)
+              if (existing) {
+                console.log(`Pull request into ${base} from ${head} already exists: ${existing.title} ${existing.html_url}`)
+                return
+              }
+            }
+
+            await github.rest.pulls.create({
+              ...context.repo,
+              title: 'chore: update dependencies',
+              head,
+              base,
+              body: [
+                'This PR was automatically created by the ${{ github.workflow }} workflow.',
+                '',
+                `Renovate will continue to push to ${head}.`,
+                '',
+                'Review each dependency update and merge as needed.',
+              ].join('\n'),
+            })
