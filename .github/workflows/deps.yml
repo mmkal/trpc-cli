@@ -13,25 +13,26 @@ jobs:
     steps:
       - id: branches
         name: Set branch variables
-        # hardcoded, but stored in a variable to make it less painful to change to `master`/`dependencies` or whatever some day
+        # hardcoded, but stored in a variable to make it less painful to change to `master`/`dependencies` or whatever
         run: |
-          echo head=deps >> $GITHUB_ENV
-          echo base=main >> $GITHUB_ENV
-      - id: checkout_deps
+          echo deps_branch=deps >> $GITHUB_ENV
+          echo main_branch=main >> $GITHUB_ENV
+          cp $GITHUB_ENV $GITHUB_OUTPUT
+      - name: checkout ${{ steps.branches.outputs.deps_branch }}
         uses: actions/checkout@v4
         with:
-          ref: deps
+          ref: ${{ steps.branches.outputs.deps_branch }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Configure git # needed to author commits
         run: |
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-      - name: Merge latest
+      - name: Merge in latest ${{ steps.branches.outputs.main_branch }}
         run: |
           git fetch
-          git merge --strategy-option theirs origin/$base
-      - name: Update lockfile
+          git merge --strategy-option theirs origin/$main_branch
+      - name: Update lockfile # main may have updated dependencies too, so make sure lockfile is valid. This is a no-op if there are no changes.
         run: |
           corepack enable
           pnpm install --no-frozen-lockfile
@@ -58,29 +59,30 @@ jobs:
             echo ahead=yes >> $GITHUB_OUTPUT
             git push
           fi
-      - name: Check if deps ahead
-        id: deps_ahead
+      - name: Check if ${{ steps.branches.outputs.deps_branch }} branch is ahead of ${{ steps.branches.outputs.main_branch }}
+        id: deps_diff
         run: |
-          git checkout $base
+          git checkout $main_branch
           git pull
-          diff=$(git diff $head)
+          diff=$(git diff $deps_branch)
           if [ -z "$diff" ]; then
-            echo "no diff between $base and $head"
+            echo "no diff between $main_branch and $deps_branch"
+            echo status=clean >> $GITHUB_OUTPUT
           else
-            echo "diff between $base and $head:"
+            echo "diff between $main_branch and $deps_branch:"
             echo "$diff"
-            echo deps_ahead=yes >> $GITHUB_OUTPUT
+            echo status=dirty >> $GITHUB_OUTPUT
           fi
       - name: Reset deps branch
-        if: steps.deps_ahead.outputs.deps_ahead != 'yes'
+        if: steps.deps_diff.outputs.status == 'clean'
         run: |
-          git checkout $head
-          git diff $base --exit-code
+          git checkout $deps_branch
+          git diff $main_branch --exit-code
           git fetch origin
-          git reset --hard origin/$base
-          git push --force-with-lease origin $head
+          git reset --hard origin/$main_branch
+          git push --force-with-lease origin $deps_branch
       - name: Create pull request
-        if: steps.deps_ahead.outputs.deps_ahead == 'yes'
+        if: steps.deps_diff.outputs.status == 'dirty'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
