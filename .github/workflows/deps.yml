@@ -75,7 +75,7 @@ jobs:
             const latestBase = await latestCommit(base)
             console.log(JSON.stringify({latestHead, latestBase}, null, 2))
 
-            const {data: comparison} = await octokit.rest.repos.compareCommits({
+            const {data: comparison} = await github.rest.repos.compareCommits({
               owner,
               repo,
               base: latestBase.sha,
