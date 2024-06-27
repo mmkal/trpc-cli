@@ -1,7 +1,5 @@
 name: deps-sync
 on:
-  schedule:
-    - cron: 0 3 * * *
   push:
     branches:
       - main
