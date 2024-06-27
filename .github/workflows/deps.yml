@@ -16,14 +16,20 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: deps
-      - run: |
+      - name: Configure git # needed to author commits
+        run: |
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+      - name: Merge latest main
+        run: |
           git fetch
           git merge --strategy-option theirs origin/main
-      - run: corepack enable
-      - run: pnpm install --no-frozen-lockfile
-      - run: |
+      - name: Update lockfile
+        run: |
+          corepack enable
+          pnpm install --no-frozen-lockfile
+      - name: Commit lockfile changes
+        run: |
           GIT_STATUS=$(git status --porcelain)
           if [ -z "$GIT_STATUS" ]; then
             echo "no changes made. git status:"
@@ -32,8 +38,8 @@ jobs:
             git add .
             git commit -m 'chore: changes after pnpm install' --no-verify
           fi
-      - run: git log -n 5
-      - run: |
+      - name: Push changes
+        run: |
           is_ahead=$(git status | grep 'Your branch is ahead' || echo '')
           if [ -z "$is_ahead" ]; then
             git status
@@ -44,8 +50,8 @@ jobs:
   deps_to_main_pull_request:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/github-script@v7
-        name: Create pull request
+      - name: Create pull request
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
