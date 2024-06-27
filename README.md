@@ -38,7 +38,7 @@ npm install trpc-cli @trpc/server zod
 
 ## Usage
 
-Start by writing a normal tRPC router (docs [here](https://trpc.io/docs/server/routers) if you're not familiar with tRPC):
+Start by writing a normal tRPC router ([docs here](https://trpc.io/docs/server/routers) if you're not familiar with tRPC):
 
 ```ts
 import {initTRPC} from '@trpc/server'
