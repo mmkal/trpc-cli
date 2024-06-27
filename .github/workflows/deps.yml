@@ -1,22 +1,13 @@
 name: deps-sync
 on:
   schedule:
-    - cron: 0 17 * * FRI
-    - cron: 10,40 17,18,19 * * FRI
-  workflow_dispatch:
-    inputs:
-      mode:
-        type: choice
-        options:
-          - main_to_deps_merge
-          - deps_to_main_pull_request
+    - cron: 0 3 * * *
   push:
     branches:
       - deps-syncer
 
 jobs:
   main_to_deps_merge:
-    if: contains(github.ref_name, 'deps-syncer') || github.event.inputs.mode == 'main_to_deps_merge' || github.event.schedule == '10,40 17,18,19 * * FRI'
     runs-on: ubuntu-latest
     steps:
       - id: checkout_deps
@@ -26,8 +17,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: deps
       - run: git log -n 5
-      - run: git config --global user.name mergebot
-      - run: git config --global user.email "mergebot@users.noreply.github.com"
+      # - run: git config --global user.name mergebot
+      # - run: git config --global user.email "mergebot@users.noreply.github.com"
       - run: git fetch
       - run: git merge --strategy-option theirs origin/main
       - run: corepack enable
@@ -51,7 +42,6 @@ jobs:
             git push
           fi
   deps_to_main_pull_request:
-    if: contains(github.ref_name, 'deps-syncer') || github.event.inputs.mode == 'deps_to_main_pull_request' || github.event.schedule == '0 17 * * FRI'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
