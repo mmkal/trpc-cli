@@ -15,23 +15,24 @@ jobs:
     steps:
       - id: branches
         name: Set branch variables
+        # hardcoded, but stored in a variable to make it less painful to change to `master`/`dependencies` or whatever some day
         run: |
-          echo head=deps >> $GITHUB_OUTPUT
-          echo base=main >> $GITHUB_OUTPUT
+          echo head=deps >> $GITHUB_ENV
+          echo base=main >> $GITHUB_ENV
       - id: checkout_deps
         uses: actions/checkout@v4
         with:
+          ref: deps
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          ref: deps
       - name: Configure git # needed to author commits
         run: |
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-      - name: Merge latest ${{ steps.branches.outputs.base }}
+      - name: Merge latest
         run: |
           git fetch
-          git merge --strategy-option theirs origin/${{ steps.branches.outputs.base }}
+          git merge --strategy-option theirs origin/$base
       - name: Update lockfile
         run: |
           corepack enable
@@ -62,24 +63,24 @@ jobs:
       - name: Check if deps ahead
         id: deps_ahead
         run: |
-          git checkout ${{ steps.branches.outputs.base }}
+          git checkout $base
           git pull
-          diff=$(git diff ${{ steps.branches.outputs.head }})
+          diff=$(git diff $head)
           if [ -z "$diff" ]; then
-            echo no diff between ${{ steps.branches.outputs.base }} and ${{ steps.branches.outputs.head }}
+            echo "no diff between $base and $head"
           else
-            echo "diff between ${{ steps.branches.outputs.base }} and ${{ steps.branches.outputs.head }}:"
+            echo "diff between $base and $head:"
             echo "$diff"
             echo deps_ahead=yes >> $GITHUB_OUTPUT
           fi
       - name: Recreate deps branch
         if: steps.deps_ahead.outputs.deps_ahead != 'yes'
         run: |
-          git checkout main
-          git push -d origin deps
-          git branch -D deps
-          git checkout -b deps
-          git push -u origin deps
+          git checkout $base
+          git push -d origin $head
+          git branch -D $head
+          git checkout -b $head
+          git push -u origin $head
       - name: Create pull request
         if: steps.deps_ahead.outputs.deps_ahead == 'yes'
         uses: actions/github-script@v7
@@ -90,8 +91,7 @@ jobs:
               ...context.repo,
               state: 'open',
             })
-            const head = '${{ steps.branches.outputs.head }}'
-            const base = '${{ steps.branches.outputs.base }}'
+            const {head, base} = process.env
 
             for await (const {data: pulls} of iterator) {
               const existing = pulls.find(p => p.head.ref === head && p.base.ref === base)
