@@ -50,11 +50,21 @@ jobs:
           else
             git push
           fi
-  deps_to_main_pull_request:
-    runs-on: ubuntu-latest
-    needs: [main_to_deps_merge]
-    steps:
+      - name: Check if deps ahead
+        id: deps_ahead
+        run: |
+          git checkout main
+          git pull
+          diff=$(git diff deps)
+          if [ -z "$diff" ]; then
+            echo no diff between main and deps
+          else
+            echo "diff between main and deps:"
+            echo "$diff"
+            echo deps_ahead=yes >> $GITHUB_OUTPUT
+          fi
       - name: Create pull request
+        if: steps.deps_ahead.outputs.deps_ahead == 'yes'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -65,31 +75,6 @@ jobs:
             })
             const head = 'deps'
             const base = 'main'
-
-            const latestCommit = async branch => {
-              const {data} = await github.rest.repos.getBranch({...context.repo, branch})
-              return data.commit
-            }
-
-            const latestHead = await latestCommit(head)
-            const latestBase = await latestCommit(base)
-            console.log(JSON.stringify({latestHead, latestBase}, null, 2))
-
-            const {data: comparison} = await github.rest.repos.compareCommits({
-              ...context.repo,
-              base: latestBase.sha,
-              head: latestHead.sha
-            })
-
-            if (comparison.status === 'identical') {
-              console.log(`No changes between ${head} and ${base}. ${head} is identical to ${base}: ${latestHead.commit?.message}`)
-              return
-            }
-
-            if (comparison.status === 'ahead' && latestHead.parents.some(parent => parent.sha === latestBase.sha)) {
-              console.log(`No changes between ${head} and ${base}. ${head} is a descendant of ${base}: ${latestHead.commit?.message}`)
-              return
-            }
 
             for await (const {data: pulls} of iterator) {
               const existing = pulls.find(p => p.head.ref === head && p.base.ref === base)
