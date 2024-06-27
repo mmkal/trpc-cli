@@ -44,12 +44,12 @@ jobs:
       - run: git log -n 5
       - run: git status
       - run: |
-          is_ahead=$(git status | grep -c 'Your branch is ahead')
+          is_ahead=$(git status | LC_ALL=C grep -c 'Your branch is ahead')
           echo "is_ahead: $is_ahead"
       - run: |
           is_ahead=$(git status | grep -c 'Your branch is ahead')
           echo "is_ahead: $is_ahead"
-          if [ $is_ahead -eq 1 ]; then
+          if [ "$is_ahead" -eq 1 ]; then
             echo git push
           else
             git status
