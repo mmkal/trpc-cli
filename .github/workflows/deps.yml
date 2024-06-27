@@ -46,8 +46,11 @@ jobs:
       - run: |
           is_ahead=$(git status | grep -c 'Your branch is ahead')
           echo "is_ahead: $is_ahead"
+      - run: |
+          is_ahead=$(git status | grep -c 'Your branch is ahead')
+          echo "is_ahead: $is_ahead"
           if [ $is_ahead -eq 1 ]; then
-            git push
+            echo git push
           else
             git status
             echo "no changes to push"
