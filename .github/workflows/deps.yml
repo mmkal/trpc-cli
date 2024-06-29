@@ -91,7 +91,7 @@ jobs:
               ...context.repo,
               state: 'open',
             })
-            const {head, base} = process.env
+            const {deps_branch: head, main_branch: base} = process.env
 
             for await (const {data: pulls} of iterator) {
               const existing = pulls.find(p => p.head.ref === head && p.base.ref === base)
