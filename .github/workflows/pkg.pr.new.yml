@@ -1,5 +1,6 @@
 name: pkg.pr.new
-on: [push]
+on:
+  push: {}
 
 jobs:
   build:
