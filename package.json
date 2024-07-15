@@ -10,7 +10,7 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@9.4.0",
+  "packageManager": "pnpm@9.5.0",
   "scripts": {
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
@@ -45,15 +45,15 @@
   },
   "devDependencies": {
     "@trpc/server": "10.45.2",
-    "@types/node": "20.14.9",
+    "@types/node": "20.14.10",
     "eslint-plugin-mmkal": "0.7.0",
     "execa": "9.3.0",
     "fs-syncer": "0.5.3",
     "np": "10.0.6",
     "strip-ansi": "7.1.0",
-    "tsx": "4.15.7",
-    "typescript": "5.5.2",
-    "vitest": "1.6.0",
+    "tsx": "4.16.2",
+    "typescript": "5.5.3",
+    "vitest": "2.0.3",
     "zod": "3.23.8"
   }
 }
