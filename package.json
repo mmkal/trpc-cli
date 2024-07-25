@@ -50,7 +50,7 @@
     "execa": "9.3.0",
     "fs-syncer": "0.5.3",
     "np": "10.0.7",
-    "pkg-pr-new": "^0.0.17",
+    "pkg-pr-new": "^0.0.18",
     "strip-ansi": "7.1.0",
     "tsx": "4.16.2",
     "typescript": "5.5.4",
