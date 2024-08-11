@@ -1,4 +1,4 @@
-# trpc-cli [![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg) [![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli)
+# trpc-cli [![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg) [![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli) [![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/mmkal)](https://x.com/mmkalmmkal)
 
 Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
 
