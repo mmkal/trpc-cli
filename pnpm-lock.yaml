@@ -33,6 +33,9 @@ importers:
       execa:
         specifier: 9.3.0
         version: 9.3.0
+      expect-type:
+        specifier: 0.18.0
+        version: 0.18.0
       fs-syncer:
         specifier: 0.5.3
         version: 0.5.3
@@ -1847,6 +1850,10 @@ packages:
   exit-hook@4.0.0:
     resolution: {integrity: sha512-Fqs7ChZm72y40wKjOFXBKg7nJZvQJmewP5/7LtePDdnah/+FH9Hp5sgMujSCMPXlxOAW2//1jrW9pnsY7o20vQ==}
     engines: {node: '>=18'}
+
+  expect-type@0.18.0:
+    resolution: {integrity: sha512-xjKoyyDLoia2h1WF+vwV8AmEpQ0drGW0InRgyywAHyOC+XSPYMxGoMXSwPjXs46D8FgLmp32sHMd1KrVingDuQ==}
+    engines: {node: '>=12.0.0'}
 
   expect@29.7.0:
     resolution: {integrity: sha512-2Zks0hf1VLFYI1kbh0I5jP3KHHyCHpkfyHBzsSXRFgl/Bg9mWYfMW8oD+PdMPlEwy5HNsR9JutYy6pMeOh61nw==}
@@ -5830,6 +5837,8 @@ snapshots:
       yoctocolors: 2.0.2
 
   exit-hook@4.0.0: {}
+
+  expect-type@0.18.0: {}
 
   expect@29.7.0:
     dependencies:
