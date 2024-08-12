@@ -6,5 +6,5 @@
   "extends": [
     "config:recommended"
   ],
-  "commitBody": "Releases: {{releases}}"
+  "commitBody": "{{{header}}}{{{table}}}{{{notes}}}{{{changelogs}}}{{{configDescription}}}{{{footer}}}"
 }
