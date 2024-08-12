@@ -49,7 +49,7 @@ jobs:
             git commit -m 'chore: changes after pnpm install' --no-verify
           fi
       - name: Push changes
-        id: push_changes
+        id: check_aheadness
         run: |
           is_ahead=$(git status | grep 'Your branch is ahead' || echo '')
           if [ -z "$is_ahead" ]; then
@@ -57,8 +57,10 @@ jobs:
             echo "no changes to push"
           else
             echo ahead=yes >> $GITHUB_OUTPUT
-            git push
           fi
+      - name: Push changes
+        if: steps.check_aheadness.outputs.ahead == 'yes'
+        uses: autofix-ci/action@ff86a557419858bb967097bfc916833f5647fa8c
       - name: Check if ${{ steps.branches.outputs.deps_branch }} branch is ahead of ${{ steps.branches.outputs.main_branch }}
         id: deps_diff
         run: |
