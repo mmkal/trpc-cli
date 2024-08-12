@@ -6,5 +6,5 @@
   "extends": [
     "config:recommended"
   ],
-  "commitBody": "{{releases}}"
+  "commitBody": "Releases: {{{releaseNotes}}}. JSON releases: {{{toJSON releaseNotes}}}"
 }
