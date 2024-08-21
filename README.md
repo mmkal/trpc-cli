@@ -232,7 +232,7 @@ Note: by design, `trpcCli` simply collects these procedures rather than throwing
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: trpcCli} -->
-#### [trpcCli](./src/index.ts#L30)
+#### [trpcCli](./src/index.ts#L36)
 
 Run a trpc router as a CLI.
 
