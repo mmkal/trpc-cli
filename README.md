@@ -245,7 +245,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L55)
+#### [createCli](./src/index.ts#L66)
 
 Run a trpc router as a CLI.
 
