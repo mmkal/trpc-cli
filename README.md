@@ -6,6 +6,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
 - [Motivation](#motivation)
 - [Installation](#installation)
 - [Usage](#usage)
+   - [Quickstart](#quickstart)
    - [Disclaimer](#disclaimer)
    - [Parameters and flags](#parameters-and-flags)
    - [Default command](#default-command)
@@ -33,15 +34,36 @@ This isn't just the easiest and safest way to build a CLI, but you also get all 
 ## Installation
 
 ```
-npm install trpc-cli @trpc/server zod
+npm install trpc-cli
 ```
 
 ## Usage
 
-Start by writing a normal tRPC router ([docs here](https://trpc.io/docs/server/routers) if you're not familiar with tRPC):
+### Quickstart
+
+The fastest way to get going is to write a normal tRPC router, using `trpc` and `zod` exports from this library, and turn it into a fully-functional CLI by passing it to `trpcCli`:
+
+```ts
+import {trpc as t, zod as z, trpcCli} from 'trpc-cli'
+
+const router = t.router({
+  add: t.procedure
+    .input(z.object({left: z.number(), right: z.number()}))
+    .query(({input}) => input.left + input.right),
+})
+
+trpcCli({router}).run()
+```
+
+And that's it! Your tRPC router is now a CLI program with help text and input validation. You can run it with `node yourscript add --left 2 --right 3`.
+
+[Docs here](https://trpc.io/docs/server/routers) if you're not familiar with tRPC.
+
+You can also create a tRPC router in the usual way using imports from `@trpc/server` and `zod` - the builtin exports are purely a convenience for simple use-case:
 
 ```ts
 import {initTRPC} from '@trpc/server'
+import {trpcCli} from 'trpc-cli'
 import {z} from 'zod'
 
 const t = initTRPC.create()
@@ -51,19 +73,10 @@ export const router = t.router({
     .input(z.object({left: z.number(), right: z.number()}))
     .query(({input}) => input.left + input.right),
 })
-```
-
-Then you can turn it into a fully-functional CLI by passing it to `trpcCli`
-
-```ts
-import {trpcCli} from 'trpc-cli'
-import {router} from './router'
 
 const cli = trpcCli({router})
 cli.run()
 ```
-
-And that's it! Your tRPC router is now a CLI program with help text and input validation. You can run it with `node path/to/script.js add --left 2 --right 3`.
 
 ### Disclaimer
 
