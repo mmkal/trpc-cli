@@ -16,6 +16,25 @@ export * from './types'
 export {z} from 'zod'
 export * as zod from 'zod'
 
+export {
+  /**
+   * `initTRPC` from `@trpc/server`
+   * @example
+   * ```ts
+   * import {initTRPC, TrpcCliMeta} from 'trpc-cli'
+   *
+   * const t = initTRPC.meta<TrpcCliMeta>().context<{foo: string}>().create()
+   *
+   * const router = t.router({
+   *   getFoo: t.procedure
+   *     .meta({description: 'Get foo from context'})
+   *     .query(({ctx}) => ctx.foo)
+   * })
+   * ```
+   */
+  initTRPC,
+} from '@trpc/server'
+
 /** "starter" trpc instance. Useful to get a new project started without needing to set up `@trpc/server` manually */
 export const trpc = initTRPC.meta<TrpcCliMeta>().create()
 
