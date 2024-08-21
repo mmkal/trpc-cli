@@ -41,10 +41,10 @@ npm install trpc-cli
 
 ### Quickstart
 
-The fastest way to get going is to write a normal tRPC router, using `trpc` and `zod` exports from this library, and turn it into a fully-functional CLI by passing it to `trpcCli`:
+The fastest way to get going is to write a normal tRPC router, using `trpc` and `zod` exports from this library, and turn it into a fully-functional CLI by passing it to `createCli`:
 
 ```ts
-import {trpc as t, zod as z, trpcCli} from 'trpc-cli'
+import {trpc as t, zod as z, createCli} from 'trpc-cli'
 
 const router = t.router({
   add: t.procedure
@@ -52,7 +52,7 @@ const router = t.router({
     .query(({input}) => input.left + input.right),
 })
 
-trpcCli({router}).run()
+createCli({router}).run()
 ```
 
 And that's it! Your tRPC router is now a CLI program with help text and input validation. You can run it with `node yourscript add --left 2 --right 3`.
@@ -63,7 +63,7 @@ You can also create a tRPC router in the usual way using imports from `@trpc/ser
 
 ```ts
 import {initTRPC} from '@trpc/server'
-import {trpcCli} from 'trpc-cli'
+import {createCli} from 'trpc-cli'
 import {z} from 'zod'
 
 const t = initTRPC.create()
@@ -74,13 +74,13 @@ export const router = t.router({
     .query(({input}) => input.left + input.right),
 })
 
-const cli = trpcCli({router})
+const cli = createCli({router})
 cli.run()
 ```
 
 ### Disclaimer
 
->Note that this library is still v0, so parts of the API may change slightly. The basic usage of `trpcCli({router}).run()` will remain though, and any breaking changes will be published via release notes.
+>Note that this library is still v0, so parts of the API may change slightly. The basic usage of `createCli({router}).run()` will remain though, and any breaking changes will be published via release notes.
 
 ### Parameters and flags
 
@@ -198,7 +198,7 @@ const router = t.router({
     .mutation(() => console.log('installing...')),
 })
 
-const cli = trpcCli({
+const cli = createCli({
   router,
   default: {procedure: 'install'},
 })
@@ -220,7 +220,7 @@ const router = t.router({
     .query(() => 'ok'),
 })
 
-const cli = trpcCli({router})
+const cli = createCli({router})
 
 if (cli.ignoredProcedures.length > 0) {
   throw new Error(
@@ -240,12 +240,12 @@ Some procedures weren't mapped into commands: [
 ]
 ```
 
-Note: by design, `trpcCli` simply collects these procedures rather than throwing so that you can pass any router to it - the procedures which _can_ be mapped into commands will still work. It is up to you if you want to throw if some are ignored.
+Note: by design, `createCli` simply collects these procedures rather than throwing so that you can pass any router to it - the procedures which _can_ be mapped into commands will still work. It is up to you if you want to throw if some are ignored.
 
 ### API docs
 
-<!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: trpcCli} -->
-#### [trpcCli](./src/index.ts#L36)
+<!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
+#### [createCli](./src/index.ts#L36)
 
 Run a trpc router as a CLI.
 
@@ -268,10 +268,10 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:ae42f01a6ea72021b5bc7f4823803c9f -->
+<!-- hash:54cb14f5071e3f48dd048b83ec94836b -->
 ```ts
 import * as trpcServer from '@trpc/server'
-import {trpcCli, type TrpcCliMeta} from 'trpc-cli'
+import {createCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
@@ -317,7 +317,7 @@ const router = trpc.router({
     .mutation(({input}) => input[0] / input[1]),
 })
 
-void trpcCli({router}).run()
+void createCli({router}).run()
 ```
 <!-- codegen:end -->
 
@@ -454,9 +454,9 @@ You can also override the `logger` and `process` properties of the `run` method 
 
 <!-- eslint-disable unicorn/no-process-exit -->
 ```ts
-import {trpcCli} from 'trpc-cli'
+import {createCli} from 'trpc-cli'
 
-const cli = trpcCli({router: yourRouter})
+const cli = createCli({router: yourRouter})
 
 cli.run({
   logger: yourLogger, // should define `.info` and `.error` methods
@@ -517,10 +517,10 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:8635f80f9309a63813b659a227270b73 -->
+<!-- hash:1473b37f6ec855149a81ab0a2364afe2 -->
 ```ts
 import * as trpcServer from '@trpc/server'
-import {trpcCli, type TrpcCliMeta} from 'trpc-cli'
+import {createCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
@@ -617,7 +617,7 @@ const router = trpc.router({
   }),
 })
 
-const cli = trpcCli({
+const cli = createCli({
   router,
   alias: (fullName, {command}) => {
     if (fullName === 'status') {
@@ -725,9 +725,9 @@ This library should probably _not_ be used programmatically - the functionality 
 The `.run()` function does return a value, but it's typed as `unknown` since the input is just `argv: string[]` . But if you really need to for some reason, you could override the `console.error` and `process.exit` calls:
 
 ```ts
-import {trpcCli} from 'trpc-cli'
+import {createCli} from 'trpc-cli'
 
-const cli = trpcCli({router: yourAppRouter})
+const cli = createCli({router: yourAppRouter})
 
 const runCli = async (argv: string[]) => {
   return new Promise<void>((resolve, reject) => {

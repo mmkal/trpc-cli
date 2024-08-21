@@ -33,7 +33,7 @@ export type AnyProcedure = Procedure<any, any>
  * @param default A procedure to use as the default command when the user doesn't specify one.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
-export const trpcCli = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
+export const createCli = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([name, procedure]) => {
     const procedureResult = parseProcedureInputs(procedure._def.inputs as unknown[])
     if (!procedureResult.success) {
@@ -182,6 +182,9 @@ export const trpcCli = <R extends AnyRouter>({router, ...params}: TrpcCliParams<
 
   return {run, ignoredProcedures}
 }
+
+/** @deprecated renamed to `createCli` */
+export const trpcCli = createCli
 
 type Fail = (message: string, options?: {cause?: unknown; help?: boolean}) => never
 
