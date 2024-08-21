@@ -7,16 +7,22 @@ import {type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
-import {Logger, TrpcCliParams} from './types'
+import {Logger, TrpcCliMeta, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
 
 export * from './types'
 
+export {z} from 'zod'
+export * as zod from 'zod'
+
+/** "starter" trpc instance. Useful to get a new project started without needing to set up `@trpc/server` manually */
+export const trpc = initTRPC.meta<TrpcCliMeta>().create()
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyRouter = Router<any>
+export type AnyRouter = Router<any>
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyProcedure = Procedure<any, any>
+export type AnyProcedure = Procedure<any, any>
 
 /**
  * Run a trpc router as a CLI.
