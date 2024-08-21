@@ -35,8 +35,19 @@ export {
   initTRPC,
 } from '@trpc/server'
 
-/** "starter" trpc instance. Useful to get a new project started without needing to set up `@trpc/server` manually */
+/**
+ * A "starter" trpc instance. Useful to get a new project started without needing to set up `@trpc/server` manually.
+ * Equivalent to `initTRPC.meta<TrpcCliMeta>().create()`.
+ * Note: if you need to specify a context, use {@linkcode createTrpc}.
+ */
 export const trpc = initTRPC.meta<TrpcCliMeta>().create()
+
+/**
+ * Create a "starter" trpc instance, with context.
+ * Equivalent to `initTRPC.meta<TrpcCliMeta>().context<Context>()`.
+ * Note: if you don't need to specify a context, just use {@linkcode trpc}.
+ */
+export const createTrpc = <Context extends {}>() => initTRPC.meta<TrpcCliMeta>().context<Context>().create()
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyRouter = Router<any>
