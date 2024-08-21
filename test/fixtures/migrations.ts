@@ -1,6 +1,6 @@
 import * as trpcServer from '@trpc/server'
 import {z} from 'zod'
-import {trpcCli, type TrpcCliMeta} from '../../src'
+import {createCli, type TrpcCliMeta} from '../../src'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -75,7 +75,7 @@ const router = trpc.router({
   }),
 })
 
-const cli = trpcCli({
+const cli = createCli({
   router,
   alias: (fullName, {command}) => {
     if (fullName === 'status') {
