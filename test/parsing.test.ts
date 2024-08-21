@@ -2,7 +2,7 @@ import {Router, initTRPC} from '@trpc/server'
 import stripAnsi from 'strip-ansi'
 import {expect, test} from 'vitest'
 import {z} from 'zod'
-import {trpcCli, TrpcCliMeta, TrpcCliParams} from '../src'
+import {createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 
 expect.addSnapshotSerializer({
   test: (val): val is Error => val instanceof Error,
@@ -23,7 +23,7 @@ const run = <R extends Router<any>>(router: R, argv: string[]) => {
   return runWith({router}, argv)
 }
 const runWith = <R extends Router<any>>(params: TrpcCliParams<R>, argv: string[]) => {
-  const cli = trpcCli(params)
+  const cli = createCli(params)
   return new Promise<string>((resolve, reject) => {
     const logs: unknown[][] = []
     const addLogs = (...args: unknown[]) => logs.push(args)
@@ -320,7 +320,7 @@ test('validation', async () => {
       .input(z.tuple([z.string(), z.record(z.string())])) //
       .query(() => 'ok'),
   })
-  const cli = trpcCli({router})
+  const cli = createCli({router})
 
   expect(cli.ignoredProcedures).toMatchInlineSnapshot(`
     [
