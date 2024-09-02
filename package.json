@@ -52,7 +52,7 @@
     "expect-type": "0.20.0",
     "fs-syncer": "0.5.3",
     "np": "10.0.7",
-    "pkg-pr-new": "^0.0.23",
+    "pkg-pr-new": "^0.0.24",
     "strip-ansi": "7.1.0",
     "tsx": "4.19.0",
     "typescript": "5.5.4",
