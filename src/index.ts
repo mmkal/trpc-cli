@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import {Procedure, Router, TRPCError, initTRPC} from '@trpc/server'
+import * as trpcServer from '@trpc/server'
 import * as cleye from 'cleye'
 import colors from 'picocolors'
 import {ZodError} from 'zod'
@@ -7,7 +7,7 @@ import {type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
-import {Logger, TrpcCliMeta, TrpcCliParams} from './types'
+import {Logger, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
 
@@ -16,43 +16,14 @@ export * from './types'
 export {z} from 'zod'
 export * as zod from 'zod'
 
-export {
-  /**
-   * `initTRPC` from `@trpc/server`
-   * @example
-   * ```ts
-   * import {initTRPC, TrpcCliMeta} from 'trpc-cli'
-   *
-   * const t = initTRPC.meta<TrpcCliMeta>().context<{foo: string}>().create()
-   *
-   * const router = t.router({
-   *   getFoo: t.procedure
-   *     .meta({description: 'Get foo from context'})
-   *     .query(({ctx}) => ctx.foo)
-   * })
-   * ```
-   */
-  initTRPC,
-} from '@trpc/server'
+export * as trpcServer from '@trpc/server'
 
-/**
- * A "starter" trpc instance. Useful to get a new project started without needing to set up `@trpc/server` manually.
- * Equivalent to `initTRPC.meta<TrpcCliMeta>().create()`.
- * Note: if you need to specify a context, use {@linkcode createTrpc}.
- */
-export const trpc = initTRPC.meta<TrpcCliMeta>().create()
-
-/**
- * Create a "starter" trpc instance, with context.
- * Equivalent to `initTRPC.meta<TrpcCliMeta>().context<Context>()`.
- * Note: if you don't need to specify a context, just use {@linkcode trpc}.
- */
-export const createTrpc = <Context extends {}>() => initTRPC.meta<TrpcCliMeta>().context<Context>().create()
+/** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyRouter = Router<any>
+export type AnyRouter = trpcServer.Router<any>
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyProcedure = Procedure<any, any>
+export type AnyProcedure = trpcServer.Procedure<any, any>
 
 /**
  * Run a trpc router as a CLI.
@@ -155,7 +126,7 @@ export const createCli = <R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     type Context = NonNullable<typeof params.context>
 
-    const caller = initTRPC.context<Context>().create({}).createCallerFactory(router)(params.context)
+    const caller = trpcServer.initTRPC.context<Context>().create({}).createCallerFactory(router)(params.context)
 
     const die: Fail = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
       if (verboseErrors !== undefined && verboseErrors) {
@@ -219,7 +190,7 @@ export const trpcCli = createCli
 type Fail = (message: string, options?: {cause?: unknown; help?: boolean}) => never
 
 function transformError(err: unknown, fail: Fail): unknown {
-  if (looksLikeInstanceof(err, TRPCError)) {
+  if (looksLikeInstanceof(err, trpcServer.TRPCError)) {
     const cause = err.cause
     if (looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues
