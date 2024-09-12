@@ -1,8 +1,8 @@
-import {Router, inferRouterContext} from '@trpc/server'
 import {type JsonSchema7Type} from 'zod-to-json-schema'
+import {AnyRouter, inferRouterContext} from './trpc-compat'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type TrpcCliParams<R extends Router<any>> = {
+export type TrpcCliParams<R extends AnyRouter> = {
   /** A tRPC router. Procedures will become CLI commands. */
   router: R
   /** Context to be supplied when invoking the router. */
