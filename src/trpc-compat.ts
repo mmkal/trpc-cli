@@ -1,5 +1,5 @@
 import * as trpc10 from '@trpc/server'
-import * as trpc11 from 'trpcserver11'
+import type * as trpc11 from 'trpcserver11' // make sure this is a type-only import, it's a devDependency
 
 export type Trpc11Procedure = trpc11.AnyTRPCProcedure
 

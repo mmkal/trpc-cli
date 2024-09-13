@@ -26,7 +26,7 @@ export * as trpcServer from '@trpc/server'
 export {AnyRouter, AnyProcedure} from './trpc-compat'
 
 export interface TrpcCli {
-  run: (params: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) => Promise<void>
+  run: (params?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) => Promise<void>
   ignoredProcedures: {procedure: string; reason: string}[]
 }
 
