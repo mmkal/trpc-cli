@@ -99,7 +99,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         return {
           name: commandName,
-          help: procedure.meta as {},
+          help: (procedure._def.meta || (procedure as {meta?: {}}).meta) as {},
           parameters: jsonSchema.parameters,
           flags: flags as {},
         }
