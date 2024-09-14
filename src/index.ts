@@ -7,7 +7,7 @@ import {type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
-import {AnyProcedure, AnyRouter} from './trpc-compat'
+import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {Logger, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
@@ -49,7 +49,21 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const jsonSchema = procedureResult.value
     const properties = flattenedProperties(jsonSchema.flagsSchema)
     const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
-    const type = router._def.procedures[name]._def.mutation ? 'mutation' : 'query'
+
+    const trpcProcedure = router._def.procedures[name]
+    let type: 'mutation' | 'query' | 'subscription'
+    if (isTrpc11Procedure(trpcProcedure)) {
+      type = trpcProcedure._def.type
+      if (!params.createCallerFactory) {
+        throw new Error('createCallerFactory is required when using trpc v11')
+      }
+    } else if (trpcProcedure._def.mutation) {
+      type = 'mutation'
+    } else if (trpcProcedure._def.query) {
+      type = 'query'
+    } else {
+      type = 'subscription'
+    }
 
     return [name, {name, procedure, jsonSchema, properties, incompatiblePairs, type}] as const
   })
@@ -99,7 +113,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         return {
           name: commandName,
-          help: (procedure._def.meta || (procedure as {meta?: {}}).meta) as {},
+          help: procedure._def.meta,
           parameters: jsonSchema.parameters,
           flags: flags as {},
         }
@@ -131,12 +145,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     type Context = NonNullable<typeof params.context>
 
-    const caller = trpcServer.initTRPC
-      .context<Context>()
-      .create({})
-      // need any because
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .createCallerFactory(router as any)(params.context)
+    const createCallerFactory =
+      params.createCallerFactory ||
+      (trpcServer.initTRPC.context<Context>().create({}).createCallerFactory as CreateCallerFactoryLike)
+
+    const caller = createCallerFactory(router)(params.context)
 
     const die: Fail = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
       if (verboseErrors !== undefined && verboseErrors) {
@@ -230,6 +243,7 @@ function transformError(err: unknown, fail: Fail): unknown {
       return fail(err.message, {cause: err})
     }
   }
+  return err
 }
 
 type CleyeCommandOptions = cleye.Command['options']

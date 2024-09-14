@@ -1,5 +1,5 @@
 import {type JsonSchema7Type} from 'zod-to-json-schema'
-import {AnyRouter, inferRouterContext} from './trpc-compat'
+import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TrpcCliParams<R extends AnyRouter> = {
@@ -22,6 +22,9 @@ export type TrpcCliParams<R extends AnyRouter> = {
   default?: {
     procedure: keyof R['_def']['procedures']
   }
+
+  /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v11. */
+  createCallerFactory?: CreateCallerFactoryLike
 }
 /**
  * Optional interface for describing procedures via meta - if your router conforms to this meta shape, it will contribute to the CLI help text.
