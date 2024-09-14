@@ -2,7 +2,7 @@ import {initTRPC as initTRPC_v10} from 'trpcserver10'
 import {initTRPC as initTRPC_v11} from 'trpcserver11'
 import {expect, expectTypeOf, test, vi} from 'vitest'
 import {createCli, TrpcCliMeta, z} from '../src'
-import {Trpc10RouterLike, Trpc11PRouterLike} from '../src/trpc-compat'
+import {Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat'
 
 test('can create cli from trpc v10', async () => {
   const t = initTRPC_v10.context<{customContext: true}>().meta<TrpcCliMeta>().create()
@@ -13,7 +13,13 @@ test('can create cli from trpc v10', async () => {
       .mutation(({input}) => {
         return input[0] + input[1]
       }),
+    foo: t.router({
+      bar: t.procedure.query(() => 'baz'),
+    }),
   }) satisfies Trpc10RouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
+
+  expect(router._def.procedures).toHaveProperty('foo.bar')
+  expect(router._def.procedures).not.toHaveProperty('foo')
 
   expectTypeOf(router).toMatchTypeOf<Trpc10RouterLike>()
 
@@ -54,7 +60,18 @@ test('can create cli from trpc v11', async () => {
       .mutation(({input}) => {
         return input[0] + input[1]
       }),
-  }) satisfies Trpc11PRouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
+    foo: {
+      bar: t.procedure.query(() => 'baz'),
+    },
+    abc: t.router({
+      def: t.procedure.query(() => 'baz'),
+    }),
+  }) satisfies Trpc11RouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
+
+  expect(router._def.procedures).toHaveProperty('foo.bar')
+  expect(router._def.procedures).not.toHaveProperty('foo')
+  expect(router._def.procedures).toHaveProperty('abc.def')
+  expect(router._def.procedures).not.toHaveProperty('abc')
 
   // @ts-expect-error for some reason trpc11 doesn't expose `.inputs` at the type level
   expect(router._def.procedures.add._def.inputs).toEqual([expect.any(z.ZodType)])
@@ -95,7 +112,7 @@ test('error when using trpc v11 without createCallerFactory', async () => {
       .mutation(({input}) => {
         return input[0] + input[1]
       }),
-  }) satisfies Trpc11PRouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
+  }) satisfies Trpc11RouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
 
   expect(() => createCli({router})).toThrowErrorMatchingInlineSnapshot(
     `[Error: createCallerFactory is required when using trpc v11]`,

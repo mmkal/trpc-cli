@@ -50,7 +50,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const properties = flattenedProperties(jsonSchema.flagsSchema)
     const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
 
-    const trpcProcedure = router._def.procedures[name]
+    // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
+    const trpcProcedure = router._def.procedures[name] as AnyProcedure
     let type: 'mutation' | 'query' | 'subscription'
     if (isTrpc11Procedure(trpcProcedure)) {
       type = trpcProcedure._def.type
@@ -61,8 +62,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       type = 'mutation'
     } else if (trpcProcedure._def.query) {
       type = 'query'
-    } else {
+    } else if (trpcProcedure._def.subscription) {
       type = 'subscription'
+    } else {
+      const keys = Object.keys(trpcProcedure._def).join(', ')
+      throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
     }
 
     return [name, {name, procedure, jsonSchema, properties, incompatiblePairs, type}] as const

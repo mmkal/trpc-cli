@@ -4,12 +4,12 @@
  * Type which looks *enough* like a trpc v11(+?) router to infer its types correctly
  * This is written from scratch to avoid any kind of dependency on @trpc/server v11+
  */
-export type Trpc11PRouterLike = {
+export type Trpc11RouterLike = {
   _def: {
     _config: {
       $types: {meta: any; ctx: any}
     }
-    procedures: Record<string, Trpc11ProcedureLike>
+    procedures: Record<string, Trpc11ProcedureLike | Trpc11RouterLike | Record<string, Trpc11ProcedureLike>>
   }
 }
 
@@ -28,7 +28,7 @@ export type Trpc10RouterLike = {
     _config: {
       $types: {meta: any; ctx: any}
     }
-    procedures: Record<string, Trpc10ProcedureLike>
+    procedures: Record<string, Trpc10ProcedureLike | Trpc10RouterLike>
   }
 }
 
@@ -47,7 +47,7 @@ export type Trpc10ProcedureLike = {
 
 export type CreateCallerFactoryLike = (router: any) => (context: any) => Record<string, (input: unknown) => unknown>
 
-export type AnyRouter = Trpc10RouterLike | Trpc11PRouterLike
+export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike
 
 export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike
 
@@ -57,7 +57,7 @@ export const isTrpc11Procedure = (procedure: AnyProcedure): procedure is Trpc11P
   return 'type' in procedure._def && typeof procedure._def.type === 'string'
 }
 
-export const isTrpc11Router = (router: AnyRouter): router is Trpc11PRouterLike => {
+export const isTrpc11Router = (router: AnyRouter): router is Trpc11RouterLike => {
   const procedure = Object.values(router._def.procedures)[0] as AnyProcedure | undefined
   return Boolean(procedure && isTrpc11Procedure(procedure))
 }

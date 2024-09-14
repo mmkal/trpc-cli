@@ -530,9 +530,10 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:4f58f50fdbebc0071f210c80103b4d9c -->
+<!-- hash:dfcdb95c59b99a4e1a8bd95597ee80de -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
+import * as trpcCompat from '../../src/trpc-compat'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -557,7 +558,7 @@ const searchProcedure = trpc.procedure
   })
 
 const router = trpc.router({
-  apply: trpc.procedure
+  up: trpc.procedure
     .meta({
       description:
         'Apply migrations. By default all pending migrations will be applied.',
@@ -626,7 +627,7 @@ const router = trpc.router({
         )
       }),
   }),
-})
+}) satisfies trpcCompat.Trpc10RouterLike
 
 const cli = createCli({
   router,
@@ -678,7 +679,7 @@ Here's how the CLI will work:
 
 ```
 Commands:
-  apply                   Apply migrations. By default all pending migrations will be applied.
+  up                      Apply migrations. By default all pending migrations will be applied.
   create                  Create a new migration
   list                    List all migrations
   search.byName           Look for migrations by name
@@ -695,17 +696,16 @@ Flags:
 `node path/to/migrations apply --help` output:
 
 ```
-apply
-
-Apply migrations. By default all pending migrations will be applied.
-
-Usage:
-  apply [flags...]
+Commands:
+  up                      Apply migrations. By default all pending migrations will be applied.
+  create                  Create a new migration
+  list                    List all migrations
+  search.byName           Look for migrations by name
+  search.byContent        Look for migrations by their script content
 
 Flags:
-  -h, --help                 Show help
-      --step <number>        Mark this many migrations as executed; Exclusive minimum: 0
-      --to <string>          Mark migrations up to this one as exectued
+  -h, --help                  Show help
+      --verbose-errors        Throw raw errors (by default errors are summarised)
 
 ```
 <!-- codegen:end -->
