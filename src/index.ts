@@ -55,9 +55,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     let type: 'mutation' | 'query' | 'subscription'
     if (isTrpc11Procedure(trpcProcedure)) {
       type = trpcProcedure._def.type
-      if (!params.createCallerFactory) {
-        throw new Error('createCallerFactory is required when using trpc v11')
-      }
     } else if (trpcProcedure._def.mutation) {
       type = 'mutation'
     } else if (trpcProcedure._def.query) {
@@ -217,6 +214,9 @@ export const trpcCli = createCli
 type Fail = (message: string, options?: {cause?: unknown; help?: boolean}) => never
 
 function transformError(err: unknown, fail: Fail): unknown {
+  if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
+    return new Error('createCallerFactory version mismatch - pass in createCallerFactory explicitly', {cause: err})
+  }
   if (looksLikeInstanceof(err, trpcServer.TRPCError)) {
     const cause = err.cause
     if (looksLikeInstanceof(cause, ZodError)) {

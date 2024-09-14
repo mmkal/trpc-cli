@@ -114,7 +114,9 @@ test('error when using trpc v11 without createCallerFactory', async () => {
       }),
   }) satisfies Trpc11RouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
 
-  expect(() => createCli({router})).toThrowErrorMatchingInlineSnapshot(
-    `[Error: createCallerFactory is required when using trpc v11]`,
+  const cli = createCli({router})
+
+  await expect(cli.run({argv: ['add', '--verboseErrors', '1', '2']})).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: createCallerFactory version mismatch - pass in createCallerFactory explicitly]`,
   )
 })
