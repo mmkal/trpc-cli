@@ -13,6 +13,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Ignored procedures](#ignored-procedures)
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
+- [tRPC v10 vs v11](#trpc-v10-vs-v11)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Testing your CLI](#testing-your-cli)
 - [Features and Limitations](#features-and-limitations)
@@ -41,10 +42,12 @@ npm install trpc-cli
 
 ### Quickstart
 
-The fastest way to get going is to write a normal tRPC router, using `trpc` and `zod` exports from this library, and turn it into a fully-functional CLI by passing it to `createCli`:
+The fastest way to get going is to write a normal tRPC router, using `trpcServer` and `zod` exports from this library, and turn it into a fully-functional CLI by passing it to `createCli`:
 
 ```ts
-import {trpc as t, zod as z, createCli} from 'trpc-cli'
+import {trpcServer, zod as z, createCli, TrpcCliMeta} from 'trpc-cli'
+
+const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
 const router = t.router({
   add: t.procedure
@@ -245,7 +248,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L66)
+#### [createCli](./src/index.ts#L42)
 
 Run a trpc router as a CLI.
 
@@ -268,10 +271,9 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:54cb14f5071e3f48dd048b83ec94836b -->
+<!-- hash:88401aa19b6a08abc634d5be37ffab3a -->
 ```ts
-import * as trpcServer from '@trpc/server'
-import {createCli, type TrpcCliMeta} from 'trpc-cli'
+import {createCli, type TrpcCliMeta, trpcServer} from 'trpc-cli'
 import {z} from 'zod'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
@@ -415,6 +417,17 @@ const appRouter = trpc.router({
 })
 ```
 
+## tRPC v10 vs v11
+
+Both versions 10 and 11 of `@trpc/server` are both supported, but if using tRPC v11 you must pass in the `createCallerFactory` function to `createCli`:
+
+```ts
+import {initTRPC} from '@trpc/server'
+
+const {createCallerFactory} = initTRPC.create()
+const cli = createCli({router, createCallerFactory})
+```
+
 ## Output and lifecycle
 
 The output of the command will be logged if it is truthy. The log algorithm aims to be friendly for bash-piping, usage with jq etc.:
@@ -517,11 +530,10 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:1473b37f6ec855149a81ab0a2364afe2 -->
+<!-- hash:dfcdb95c59b99a4e1a8bd95597ee80de -->
 ```ts
-import * as trpcServer from '@trpc/server'
-import {createCli, type TrpcCliMeta} from 'trpc-cli'
-import {z} from 'zod'
+import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
+import * as trpcCompat from '../../src/trpc-compat'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -546,7 +558,7 @@ const searchProcedure = trpc.procedure
   })
 
 const router = trpc.router({
-  apply: trpc.procedure
+  up: trpc.procedure
     .meta({
       description:
         'Apply migrations. By default all pending migrations will be applied.',
@@ -615,7 +627,7 @@ const router = trpc.router({
         )
       }),
   }),
-})
+}) satisfies trpcCompat.Trpc10RouterLike
 
 const cli = createCli({
   router,
@@ -667,7 +679,7 @@ Here's how the CLI will work:
 
 ```
 Commands:
-  apply                   Apply migrations. By default all pending migrations will be applied.
+  up                      Apply migrations. By default all pending migrations will be applied.
   create                  Create a new migration
   list                    List all migrations
   search.byName           Look for migrations by name
@@ -684,17 +696,16 @@ Flags:
 `node path/to/migrations apply --help` output:
 
 ```
-apply
-
-Apply migrations. By default all pending migrations will be applied.
-
-Usage:
-  apply [flags...]
+Commands:
+  up                      Apply migrations. By default all pending migrations will be applied.
+  create                  Create a new migration
+  list                    List all migrations
+  search.byName           Look for migrations by name
+  search.byContent        Look for migrations by their script content
 
 Flags:
-  -h, --help                 Show help
-      --step <number>        Mark this many migrations as executed; Exclusive minimum: 0
-      --to <string>          Mark migrations up to this one as exectued
+  -h, --help                  Show help
+      --verbose-errors        Throw raw errors (by default errors are summarised)
 
 ```
 <!-- codegen:end -->

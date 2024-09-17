@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import {Procedure, Router, TRPCError, initTRPC} from '@trpc/server'
+import * as trpcServer from '@trpc/server'
 import * as cleye from 'cleye'
 import colors from 'picocolors'
 import {ZodError} from 'zod'
@@ -7,7 +7,8 @@ import {type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
-import {Logger, TrpcCliMeta, TrpcCliParams} from './types'
+import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
+import {Logger, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
 
@@ -16,43 +17,18 @@ export * from './types'
 export {z} from 'zod'
 export * as zod from 'zod'
 
-export {
-  /**
-   * `initTRPC` from `@trpc/server`
-   * @example
-   * ```ts
-   * import {initTRPC, TrpcCliMeta} from 'trpc-cli'
-   *
-   * const t = initTRPC.meta<TrpcCliMeta>().context<{foo: string}>().create()
-   *
-   * const router = t.router({
-   *   getFoo: t.procedure
-   *     .meta({description: 'Get foo from context'})
-   *     .query(({ctx}) => ctx.foo)
-   * })
-   * ```
-   */
-  initTRPC,
-} from '@trpc/server'
+export * as trpcServer from '@trpc/server'
 
-/**
- * A "starter" trpc instance. Useful to get a new project started without needing to set up `@trpc/server` manually.
- * Equivalent to `initTRPC.meta<TrpcCliMeta>().create()`.
- * Note: if you need to specify a context, use {@linkcode createTrpc}.
- */
-export const trpc = initTRPC.meta<TrpcCliMeta>().create()
-
-/**
- * Create a "starter" trpc instance, with context.
- * Equivalent to `initTRPC.meta<TrpcCliMeta>().context<Context>()`.
- * Note: if you don't need to specify a context, just use {@linkcode trpc}.
- */
-export const createTrpc = <Context extends {}>() => initTRPC.meta<TrpcCliMeta>().context<Context>().create()
+/** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyRouter = Router<any>
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyProcedure = Procedure<any, any>
+
+export {AnyRouter, AnyProcedure} from './trpc-compat'
+
+export interface TrpcCli {
+  run: (params?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) => Promise<void>
+  ignoredProcedures: {procedure: string; reason: string}[]
+}
 
 /**
  * Run a trpc router as a CLI.
@@ -63,7 +39,7 @@ export type AnyProcedure = Procedure<any, any>
  * @param default A procedure to use as the default command when the user doesn't specify one.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
-export const createCli = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
+export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([name, procedure]) => {
     const procedureResult = parseProcedureInputs(procedure._def.inputs as unknown[])
     if (!procedureResult.success) {
@@ -73,7 +49,22 @@ export const createCli = <R extends AnyRouter>({router, ...params}: TrpcCliParam
     const jsonSchema = procedureResult.value
     const properties = flattenedProperties(jsonSchema.flagsSchema)
     const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
-    const type = router._def.procedures[name]._def.mutation ? 'mutation' : 'query'
+
+    // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
+    const trpcProcedure = router._def.procedures[name] as AnyProcedure
+    let type: 'mutation' | 'query' | 'subscription'
+    if (isTrpc11Procedure(trpcProcedure)) {
+      type = trpcProcedure._def.type
+    } else if (trpcProcedure._def.mutation) {
+      type = 'mutation'
+    } else if (trpcProcedure._def.query) {
+      type = 'query'
+    } else if (trpcProcedure._def.subscription) {
+      type = 'subscription'
+    } else {
+      const keys = Object.keys(trpcProcedure._def).join(', ')
+      throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
+    }
 
     return [name, {name, procedure, jsonSchema, properties, incompatiblePairs, type}] as const
   })
@@ -123,7 +114,7 @@ export const createCli = <R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         return {
           name: commandName,
-          help: procedure.meta as {},
+          help: procedure._def.meta,
           parameters: jsonSchema.parameters,
           flags: flags as {},
         }
@@ -155,7 +146,11 @@ export const createCli = <R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     type Context = NonNullable<typeof params.context>
 
-    const caller = initTRPC.context<Context>().create({}).createCallerFactory(router)(params.context)
+    const createCallerFactory =
+      params.createCallerFactory ||
+      (trpcServer.initTRPC.context<Context>().create({}).createCallerFactory as CreateCallerFactoryLike)
+
+    const caller = createCallerFactory(router)(params.context)
 
     const die: Fail = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
       if (verboseErrors !== undefined && verboseErrors) {
@@ -202,7 +197,7 @@ export const createCli = <R extends AnyRouter>({router, ...params}: TrpcCliParam
     const input = procedureInfo.jsonSchema.getInput({_: parsedArgv._, flags}) as never
 
     try {
-      const result: unknown = await caller[procedureInfo.type as 'mutation'](procedureInfo.name, input)
+      const result: unknown = await (caller[procedureInfo.name] as Function)(input)
       if (result) logger.info?.(result)
       _process.exit(0)
     } catch (err) {
@@ -219,7 +214,10 @@ export const trpcCli = createCli
 type Fail = (message: string, options?: {cause?: unknown; help?: boolean}) => never
 
 function transformError(err: unknown, fail: Fail): unknown {
-  if (looksLikeInstanceof(err, TRPCError)) {
+  if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
+    return new Error('createCallerFactory version mismatch - pass in createCallerFactory explicitly', {cause: err})
+  }
+  if (looksLikeInstanceof(err, trpcServer.TRPCError)) {
     const cause = err.cause
     if (looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues
@@ -249,6 +247,7 @@ function transformError(err: unknown, fail: Fail): unknown {
       return fail(err.message, {cause: err})
     }
   }
+  return err
 }
 
 type CleyeCommandOptions = cleye.Command['options']
