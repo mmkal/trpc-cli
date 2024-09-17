@@ -48,7 +48,7 @@ export interface ParsedProcedure {
   /** JSON Schema type describing the flags for the procedure */
   flagsSchema: JsonSchema7Type
   /**
-   * Function for taking cleye parsed argv output and transforming it so it can be passed into the procedure
+   * Function for taking cleye parsed argv output and transforming it so it can be passed into the procedure.
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
   getInput: (argv: {_: string[]; flags: Record<string, unknown>}) => unknown

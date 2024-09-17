@@ -121,6 +121,49 @@ Which is invoked like `path/to/cli add 2 3` (outputting `5`).
 
 >Note: positional parameters are parsed based on the expected target type. Booleans must be written as `true` or `false`, spelled out. In most cases, though, you'd be better off using [flags](#flags) for boolean inputs.
 
+Array/spread parameters can use an array input type:
+
+```ts
+t.router({
+  lint: t.procedure
+    .input(z.array(z.string()).describe('file paths to lint'))
+    .mutation(({input}) => {
+      lintFiles(input.map(file => path.join(process.cwd(), file)))
+    }),
+})
+```
+
+Which is invoked like `path/to/cli lint file1 file2 file3 file4`.
+
+Array inputs can also be used with [flags](#flags) by nesting them in a tuple.
+
+```ts
+t.router({
+  lint: t.procedure
+    .input(
+      z.tuple([
+        z.array(z.string()).describe('file paths to lint'),
+        z.object({maxWarnings: z.number().default(10)}),
+      ]),
+    )
+    .mutation(({input}) => {
+      const result = lintFiles(
+        input.files.map(file => path.join(process.cwd(), file)),
+      )
+      if (result.warnings.length > input.maxWarnings) {
+        throw new Error(`Too many warnings: ${result.warnings.length}`)
+      }
+    }),
+})
+```
+
+Which could be invoked with any of:
+
+- `path/to/cli lint file1 file2 file3 file4 --max-warnings 10`
+- `path/to/cli lint file1 file2 file3 file4 --maxWarnings=10`
+- `path/to/cli lint --maxWarnings=10 file1 file2 file3 file4`
+- `path/to/cli lint --maxWarnings 10 file1 file2 file3 file4`
+
 #### Flags
 
 `z.object(...)` inputs become flags (passed with `--foo bar` or `--foo=bar`) syntax. Values are accepted in either `--camelCase` or `--kebab-case`, and are parsed like in most CLI programs:
