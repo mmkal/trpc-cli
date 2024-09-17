@@ -274,7 +274,9 @@ test('tuple input with flags', async () => {
 
 test('single character flag', async () => {
   const router = t.router({
-    foo: t.procedure.input(z.object({a: z.string()})).query(({input}) => JSON.stringify(input || null)),
+    foo: t.procedure
+      .input(z.object({a: z.string()})) //
+      .query(({input}) => JSON.stringify(input || null)),
   })
 
   // todo: support this somehow, not sure why this restriction exists. it comes from type-flag.
@@ -326,7 +328,7 @@ test('validation', async () => {
     [
       {
         "procedure": "tupleWithObjectInTheMiddle",
-        "reason": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings or numbers.",
+        "reason": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings, numbers or booleans.",
       },
       {
         "procedure": "tupleWithRecord",
@@ -334,4 +336,167 @@ test('validation', async () => {
       },
     ]
   `)
+})
+
+test('string array input', async () => {
+  const router = t.router({
+    stringArray: t.procedure
+      .input(z.array(z.string())) //
+      .query(({input}) => `strings: ${JSON.stringify(input)}`),
+  })
+
+  const cli = createCli({router})
+
+  expect(cli.ignoredProcedures).toEqual([])
+
+  const result = await run(router, ['stringArray', 'hello', 'world'])
+  expect(result).toMatchInlineSnapshot(`"strings: ["hello","world"]"`)
+})
+
+test('number array input', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.array(z.number())) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  const cli = createCli({router})
+
+  expect(cli.ignoredProcedures).toEqual([])
+
+  const result = await run(router, ['test', '1', '2', '3', '4'])
+  expect(result).toMatchInlineSnapshot(`"list: [1,2,3,4]"`)
+
+  await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Logs: Validation error
+      - Expected number, received string at index 1
+  `)
+})
+
+test('number array input with constraints', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.array(z.number().int())) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  await expect(run(router, ['test', '1.2'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Logs: Validation error
+      - Expected integer, received float at index 0
+  `)
+})
+
+test('boolean array input', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.array(z.boolean())) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  const cli = createCli({router})
+
+  expect(cli.ignoredProcedures).toEqual([])
+
+  const result = await run(router, ['test', 'true', 'false', 'true'])
+  expect(result).toMatchInlineSnapshot(`"list: [true,false,true]"`)
+
+  await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Logs: Validation error
+      - Expected boolean, received string at index 1
+  `)
+})
+
+test('mixed array input', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.array(z.union([z.boolean(), z.number(), z.string()]))) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  const cli = createCli({router})
+
+  expect(cli.ignoredProcedures).toEqual([])
+
+  const result = await run(router, ['test', '12', 'true', '3.14', 'null', 'undefined', 'hello'])
+  expect(result).toMatchInlineSnapshot(`"list: [12,true,3.14,"null","undefined","hello"]"`)
+})
+
+test("nullable array inputs aren't supported", async () => {
+  const router = t.router({
+    test1: t.procedure.input(z.array(z.string().nullable())).query(({input}) => `list: ${JSON.stringify(input)}`),
+    test2: t.procedure
+      .input(z.array(z.union([z.boolean(), z.number(), z.string()]).nullable())) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  const cli = createCli({router})
+
+  expect(cli.ignoredProcedures).toMatchInlineSnapshot(`
+    [
+      {
+        "procedure": "test1",
+        "reason": "Invalid input type ZodNullable<ZodString>[]. Nullable arrays are not supported.",
+      },
+      {
+        "procedure": "test2",
+        "reason": "Invalid input type ZodNullable<ZodUnion>[]. Nullable arrays are not supported.",
+      },
+    ]
+  `)
+})
+
+test('string array input with options', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.tuple([
+          z.array(z.string()), //
+          z.object({foo: z.string()}).optional(),
+        ]),
+      )
+      .query(({input}) => `input: ${JSON.stringify(input)}`),
+  })
+
+  const cli = createCli({router})
+  expect(cli.ignoredProcedures).toEqual([])
+
+  const result = await run(router, ['test', 'hello', 'world', '--foo', 'bar'])
+  expect(result).toMatchInlineSnapshot(`"input: [["hello","world"],{"foo":"bar"}]"`)
+
+  const result2 = await run(router, ['test', '--foo', 'bar', 'hello', 'world'])
+  expect(result2).toMatchInlineSnapshot(`"input: [["hello","world"],{"foo":"bar"}]"`)
+
+  const result3 = await run(router, ['test', 'hello', '--foo=bar', 'world'])
+  expect(result3).toMatchInlineSnapshot(`"input: [["hello","world"],{"foo":"bar"}]"`)
+})
+
+test('mixed array input with options', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.tuple([
+          z.array(z.union([z.string(), z.number()])), //
+          z.object({foo: z.string().optional()}),
+        ]),
+      ) //
+      .query(({input}) => `input: ${JSON.stringify(input)}`),
+  })
+
+  const cli = createCli({router})
+  expect(cli.ignoredProcedures).toEqual([])
+
+  const result0 = await run(router, ['test', 'hello', '1', 'world'])
+  expect(result0).toMatchInlineSnapshot(`"input: [["hello",1,"world"],{}]"`)
+
+  const result1 = await run(router, ['test', 'hello', '1', 'world', '--foo', 'bar'])
+  expect(result1).toMatchInlineSnapshot(`"input: [["hello",1,"world"],{"foo":"bar"}]"`)
+
+  const result2 = await run(router, ['test', '--foo', 'bar', 'hello', '1', 'world'])
+  expect(result2).toMatchInlineSnapshot(`"input: [["hello",1,"world"],{"foo":"bar"}]"`)
+
+  const result3 = await run(router, ['test', 'hello', 'world', '--foo=bar', '1'])
+  expect(result3).toMatchInlineSnapshot(`"input: [["hello","world",1],{"foo":"bar"}]"`)
 })

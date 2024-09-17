@@ -45,6 +45,13 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     return parseTupleInput(mergedSchema)
   }
 
+  if (
+    looksLikeInstanceof<z.ZodArray<never>>(mergedSchema, z.ZodArray) &&
+    acceptedLiteralTypes(mergedSchema.element).length > 0
+  ) {
+    return parseArrayInput(mergedSchema)
+  }
+
   if (!acceptsObject(mergedSchema)) {
     return {
       success: false,
@@ -110,14 +117,39 @@ function parseMultiInputs(inputs: z.ZodType[]): Result<ParsedProcedure> {
   }
 }
 
+function parseArrayInput(array: z.ZodArray<z.ZodType>): Result<ParsedProcedure> {
+  if (looksLikeInstanceof(array.element, z.ZodNullable)) {
+    return {
+      success: false,
+      error: `Invalid input type ${array.element.constructor.name}<${getInnerType(array.element).constructor.name}>[]. Nullable arrays are not supported.`,
+    }
+  }
+  return {
+    success: true,
+    value: {
+      parameters: [],
+      flagsSchema: {},
+      getInput: argv => argv._.map(s => convertPositional(array.element, s)),
+    },
+  }
+}
+
 function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result<ParsedProcedure> {
-  const nonPositionalIndex = tuple.items.findIndex(item => acceptedLiteralTypes(item).length === 0)
+  const nonPositionalIndex = tuple.items.findIndex(item => {
+    if (acceptedLiteralTypes(item).length > 0) {
+      return false // it's a string, number or boolean
+    }
+    if (looksLikeInstanceof<z.ZodArray<never>>(item, z.ZodArray) && acceptedLiteralTypes(item.element).length > 0) {
+      return false // it's an array of strings, numbers or booleans
+    }
+    return true // it's not a string, number, boolean or array of strings, numbers or booleans. So it's probably a flags object
+  })
   const types = `[${tuple.items.map(s => getInnerType(s).constructor.name).join(', ')}]`
 
   if (nonPositionalIndex > -1 && nonPositionalIndex !== tuple.items.length - 1) {
     return {
       success: false,
-      error: `Invalid input type ${types}. Positional parameters must be strings or numbers.`,
+      error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
     }
   }
 
@@ -125,6 +157,10 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
 
   const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
   const postionalParametersToTupleInput = (argv: {_: string[]; flags: {}}) => {
+    if (positionalSchemas.length === 1 && looksLikeInstanceof<z.ZodArray<never>>(positionalSchemas[0], z.ZodArray)) {
+      const element = positionalSchemas[0].element
+      return [argv._.map(s => convertPositional(element, s))]
+    }
     return positionalSchemas.map((schema, i) => convertPositional(schema, argv._[i]))
   }
 
@@ -165,10 +201,9 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
  * trpc will use zod to handle the validation before invoking the procedure.
  */
 const convertPositional = (schema: z.ZodType, value: string) => {
-  let preprocessed: string | number | boolean | null = null
+  let preprocessed: string | number | boolean | undefined = undefined
 
   const acceptedTypes = new Set(acceptedLiteralTypes(schema))
-
   if (acceptedTypes.has('boolean')) {
     if (value === 'true') preprocessed = true
     else if (value === 'false') preprocessed = false
@@ -187,7 +222,7 @@ const convertPositional = (schema: z.ZodType, value: string) => {
     preprocessed = value
   }
 
-  if (preprocessed === null) {
+  if (preprocessed === undefined) {
     return value // we didn't convert to a number or boolean, so just return the string
   }
 
@@ -203,7 +238,11 @@ const convertPositional = (schema: z.ZodType, value: string) => {
   return preprocessed
 }
 
-const parameterName = (s: z.ZodType, position: number) => {
+const parameterName = (s: z.ZodType, position: number): string => {
+  if (looksLikeInstanceof<z.ZodArray<never>>(s, z.ZodArray)) {
+    const elementName = parameterName(s.element, position)
+    return `[${elementName.slice(1, -1)}...]`
+  }
   // cleye requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
   const name = s.description || `parameter ${position}`.replaceAll(/\W+/g, ' ').trim()
   return s.isOptional() ? `[${name}]` : `<${name}>`
