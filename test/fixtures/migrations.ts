@@ -1,6 +1,5 @@
-import * as trpcServer from '@trpc/server'
-import {z} from 'zod'
-import {createCli, type TrpcCliMeta} from '../../src'
+import {createCli, type TrpcCliMeta, trpcServer, z} from '../../src'
+import * as trpcCompat from '../../src/trpc-compat'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -21,7 +20,7 @@ const searchProcedure = trpc.procedure
   })
 
 const router = trpc.router({
-  apply: trpc.procedure
+  up: trpc.procedure
     .meta({description: 'Apply migrations. By default all pending migrations will be applied.'})
     .input(
       z.union([
@@ -73,7 +72,7 @@ const router = trpc.router({
         return ctx.filter(migrations.filter(m => m.content.includes(input.searchTerm)))
       }),
   }),
-})
+}) satisfies trpcCompat.Trpc10RouterLike
 
 const cli = createCli({
   router,

@@ -152,7 +152,7 @@ test('migrations help', async () => {
   const output = await tsx('migrations', ['--help'])
   expect(output).toMatchInlineSnapshot(`
     "Commands:
-      apply                   Apply migrations. By default all pending migrations will be applied.
+      up                      Apply migrations. By default all pending migrations will be applied.
       create                  Create a new migration
       list                    List all migrations
       search.byName           Look for migrations by name
@@ -166,7 +166,7 @@ test('migrations help', async () => {
 })
 
 test('migrations union type', async () => {
-  let output = await tsx('migrations', ['apply', '--to', 'four'])
+  let output = await tsx('migrations', ['up', '--to', 'four'])
 
   expect(output).toMatchInlineSnapshot(`
     "one: executed
@@ -176,7 +176,7 @@ test('migrations union type', async () => {
     five: pending"
   `)
 
-  output = await tsx('migrations', ['apply', '--step', '1'])
+  output = await tsx('migrations', ['up', '--step', '1'])
   expect(output).toContain('four: pending') // <-- this sometimes goes wrong when I mess with union type handling
   expect(output).toMatchInlineSnapshot(`
     "one: executed
@@ -238,16 +238,16 @@ test('migrations search.byContent', async () => {
 })
 
 test('migrations incompatible flags', async () => {
-  const output = await tsx('migrations', ['apply', '--to', 'four', '--step', '1'])
+  const output = await tsx('migrations', ['up', '--to', 'four', '--step', '1'])
   expect(output).toContain('--step and --to are incompatible')
   expect(output).toMatchInlineSnapshot(`
     "--step and --to are incompatible and cannot be used together
-    apply
+    up
 
     Apply migrations. By default all pending migrations will be applied.
 
     Usage:
-      apply [flags...]
+      up [flags...]
 
     Flags:
       -h, --help                 Show help
