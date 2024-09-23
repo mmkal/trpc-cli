@@ -9,9 +9,9 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const looksLikeInstanceof = <T>(value: unknown, target: new (...args: any[]) => T): value is T => {
   let current = value?.constructor
-  do {
+  while (current?.name) {
     if (current?.name === target.name) return true
     current = Object.getPrototypeOf(current) as Function
-  } while (current?.name)
+  }
   return false
 }
