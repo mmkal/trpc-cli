@@ -37,8 +37,8 @@ importers:
         specifier: 9.3.1
         version: 9.3.1
       expect-type:
-        specifier: 0.20.0
-        version: 0.20.0
+        specifier: 1.0.0
+        version: 1.0.0
       fs-syncer:
         specifier: 0.5.3
         version: 0.5.3
@@ -1794,8 +1794,8 @@ packages:
     resolution: {integrity: sha512-Fqs7ChZm72y40wKjOFXBKg7nJZvQJmewP5/7LtePDdnah/+FH9Hp5sgMujSCMPXlxOAW2//1jrW9pnsY7o20vQ==}
     engines: {node: '>=18'}
 
-  expect-type@0.20.0:
-    resolution: {integrity: sha512-uHaC9LYNv6BcW+8SvXcwUUDCrrUxt3GSa61DFvTHj8JC+M0hekMFBwMlCarLQDk5bbpZ2vStpnQPIwRuV98YMw==}
+  expect-type@1.0.0:
+    resolution: {integrity: sha512-WcdwgWmGAE48kSHjxPVLriBuvJdJdi1VKTh7HmHvcm6WPdIT1Z04wUVX8BLiqnq0Rz5SnfJ+P0kM1RBqSLLoPQ==}
     engines: {node: '>=12.0.0'}
 
   expect@29.7.0:
@@ -5675,7 +5675,7 @@ snapshots:
 
   exit-hook@4.0.0: {}
 
-  expect-type@0.20.0: {}
+  expect-type@1.0.0: {}
 
   expect@29.7.0:
     dependencies:
