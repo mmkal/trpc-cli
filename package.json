@@ -10,7 +10,7 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@9.10.0",
+  "packageManager": "pnpm@9.12.2",
   "scripts": {
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
@@ -47,17 +47,17 @@
   },
   "devDependencies": {
     "trpcserver10": "npm:@trpc/server@10.45.2",
-    "trpcserver11": "npm:@trpc/server@11.0.0-rc.502",
-    "@types/node": "20.16.5",
+    "trpcserver11": "npm:@trpc/server@11.0.0-rc.580",
+    "@types/node": "20.16.11",
     "eslint-plugin-mmkal": "0.9.0",
     "execa": "9.3.1",
-    "expect-type": "0.20.0",
+    "expect-type": "1.1.0",
     "fs-syncer": "0.5.3",
     "np": "10.0.7",
-    "pkg-pr-new": "^0.0.24",
+    "pkg-pr-new": "^0.0.29",
     "strip-ansi": "7.1.0",
     "tsx": "4.19.1",
-    "typescript": "5.6.2",
-    "vitest": "2.1.1"
+    "typescript": "5.6.3",
+    "vitest": "2.1.3"
   }
 }
