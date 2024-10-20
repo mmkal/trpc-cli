@@ -55,8 +55,8 @@ importers:
         specifier: npm:@trpc/server@10.45.2
         version: '@trpc/server@10.45.2'
       trpcserver11:
-        specifier: npm:@trpc/server@11.0.0-rc.589
-        version: '@trpc/server@11.0.0-rc.589'
+        specifier: npm:@trpc/server@11.0.0-rc.591
+        version: '@trpc/server@11.0.0-rc.591'
       tsx:
         specifier: 4.19.1
         version: 4.19.1
@@ -789,8 +789,8 @@ packages:
   '@trpc/server@10.45.2':
     resolution: {integrity: sha512-wOrSThNNE4HUnuhJG6PfDRp4L2009KDVxsd+2VYH8ro6o/7/jwYZ8Uu5j+VaW+mOmc8EHerHzGcdbGNQSAUPgg==}
 
-  '@trpc/server@11.0.0-rc.589':
-    resolution: {integrity: sha512-/FrBBRzb2lpqe+a2tIcQfLhE9Dk2k5DRobufqp5fFhy/evw4drZ8AcZgh+ckhYuFmZysqdwmw5kmD3uIUD2yjw==}
+  '@trpc/server@11.0.0-rc.591':
+    resolution: {integrity: sha512-JPq+USXR1+fsa3AF58DynABGZ5upYJ3Dhijjonui26L5tf8VLYUBj+ARF4dMPE44RKPNBNQZ1l42/lSTTFJx7w==}
 
   '@types/dedent@0.7.0':
     resolution: {integrity: sha512-EGlKlgMhnLt/cM4DbUSafFdrkeJoC9Mvnj0PUCU7tFmTjMjNRT957kXCx0wYm3JuEq4o4ZsS5vG+NlkM2DMd2A==}
@@ -4358,7 +4358,7 @@ snapshots:
 
   '@trpc/server@10.45.2': {}
 
-  '@trpc/server@11.0.0-rc.589': {}
+  '@trpc/server@11.0.0-rc.591': {}
 
   '@types/dedent@0.7.0': {}
 
