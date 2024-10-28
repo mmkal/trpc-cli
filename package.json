@@ -48,7 +48,7 @@
   "devDependencies": {
     "trpcserver10": "npm:@trpc/server@10.45.2",
     "trpcserver11": "npm:@trpc/server@11.0.0-rc.599",
-    "@types/node": "20.17.1",
+    "@types/node": "20.17.2",
     "eslint-plugin-mmkal": "0.9.0",
     "execa": "9.3.1",
     "expect-type": "1.1.0",
