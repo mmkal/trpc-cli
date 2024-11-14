@@ -55,8 +55,8 @@ importers:
         specifier: npm:@trpc/server@10.45.2
         version: '@trpc/server@10.45.2'
       trpcserver11:
-        specifier: npm:@trpc/server@11.0.0-rc.632
-        version: '@trpc/server@11.0.0-rc.632(@babel/core@7.24.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)'
+        specifier: npm:@trpc/server@11.0.0-rc.633
+        version: '@trpc/server@11.0.0-rc.633(@babel/core@7.24.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)'
       tsx:
         specifier: 4.19.2
         version: 4.19.2
@@ -966,8 +966,8 @@ packages:
   '@trpc/server@10.45.2':
     resolution: {integrity: sha512-wOrSThNNE4HUnuhJG6PfDRp4L2009KDVxsd+2VYH8ro6o/7/jwYZ8Uu5j+VaW+mOmc8EHerHzGcdbGNQSAUPgg==}
 
-  '@trpc/server@11.0.0-rc.632':
-    resolution: {integrity: sha512-Wp9VLZfzInzVosYiTE1a6k2w2uRzpp7lNnpMCe2pSIWI3wkATP+wmS9GLpd9CaImSLU5lfD3s7yhaxYpBdowUg==}
+  '@trpc/server@11.0.0-rc.633':
+    resolution: {integrity: sha512-R26i5aP7/DvgIp3YbU+0u0nbggqItMLYvPmVBOyTP8rD5+wrifZ9ZKp8p+KMzhQEGeBv5mJ48TjJ2URcKwxg6g==}
 
   '@types/aws-lambda@8.10.145':
     resolution: {integrity: sha512-dtByW6WiFk5W5Jfgz1VM+YPA21xMXTuSFoLYIDY0L44jDLLflVPtZkYuu3/YxpGcvjzKFBZLU+GyKjR0HOYtyw==}
@@ -5072,7 +5072,7 @@ snapshots:
 
   '@trpc/server@10.45.2': {}
 
-  '@trpc/server@11.0.0-rc.632(@babel/core@7.24.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@trpc/server@11.0.0-rc.633(@babel/core@7.24.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     optionalDependencies:
       '@types/aws-lambda': 8.10.145
       express: 4.21.1
@@ -5279,7 +5279,7 @@ snapshots:
       debug: 4.3.7
       globby: 11.1.0
       is-glob: 4.0.3
-      semver: 7.6.2
+      semver: 7.6.3
       tsutils: 3.21.0(typescript@5.6.3)
     optionalDependencies:
       typescript: 5.6.3
@@ -8296,8 +8296,7 @@ snapshots:
 
   semver@7.6.2: {}
 
-  semver@7.6.3:
-    optional: true
+  semver@7.6.3: {}
 
   send@0.19.0:
     dependencies:
