@@ -46,8 +46,8 @@ importers:
         specifier: 10.1.0
         version: 10.1.0(typescript@5.7.2)
       pkg-pr-new:
-        specifier: ^0.0.30
-        version: 0.0.30
+        specifier: ^0.0.32
+        version: 0.0.32
       strip-ansi:
         specifier: 7.1.0
         version: 7.1.0
@@ -2753,9 +2753,6 @@ packages:
     resolution: {integrity: sha512-ua1L4OgXSBdsu1FPb7F3tYH0F48a6kxvod4pLUlGY9COeJAJQNX/sNH2IiEmsxw7lqYiAwrdHMjz1FctOsyDQg==}
     engines: {node: '>=18'}
 
-  package-manager-detector@0.1.2:
-    resolution: {integrity: sha512-iePyefLTOm2gEzbaZKSW+eBMjg+UYsQvUKxmvGXAQ987K16efBg10MxIjZs08iyX+DY2/owKY9DIdu193kX33w==}
-
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
     engines: {node: '>=6'}
@@ -2836,8 +2833,8 @@ packages:
     resolution: {integrity: sha512-4peoBq4Wks0riS0z8741NVv+/8IiTvqnZAr8QGgtdifrtpdXbNw/FxRS1l6NFqm4EMzuS0EDqNNx4XGaz8cuyQ==}
     engines: {node: '>=18'}
 
-  pkg-pr-new@0.0.30:
-    resolution: {integrity: sha512-jnmMgCBsDMaRGgOwT0crx6mxXETwPoVDedV8C0XnbEAIS2Lxx7Q1ySaFHiK6Ednq/cLhadkF54PFBTsNWIdI0g==}
+  pkg-pr-new@0.0.32:
+    resolution: {integrity: sha512-weyLBz/Qkc9ZJIE/pX5IGCyShdSq1SetOf7PSp9Vjv1RPPJySNP8NVW9w0SC3elVBCQlc6D76mJO/7PhVEJHag==}
     hasBin: true
 
   pkg-types@1.1.3:
@@ -6615,8 +6612,6 @@ snapshots:
       registry-url: 6.0.1
       semver: 7.6.3
 
-  package-manager-detector@0.1.2: {}
-
   parent-module@1.0.1:
     dependencies:
       callsites: 3.1.0
@@ -6684,13 +6679,12 @@ snapshots:
     dependencies:
       find-up-simple: 1.0.0
 
-  pkg-pr-new@0.0.30:
+  pkg-pr-new@0.0.32:
     dependencies:
       '@jsdevtools/ez-spawn': 3.0.4
       '@octokit/action': 6.1.0
       ignore: 5.3.2
       isbinaryfile: 5.0.2
-      package-manager-detector: 0.1.2
       pkg-types: 1.1.3
       query-registry: 3.0.1
       tinyglobby: 0.2.10
