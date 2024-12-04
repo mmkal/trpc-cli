@@ -16,6 +16,7 @@ export type TrpcCliParams<R extends AnyRouter> = {
    */
   alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined
   /**
+   * @deprecated
    * The name of the "default" command - this procedure will be run if no command is specified. Default value is `default`, if such a procedure exists. Otherwise there is no default procedure.
    * Set to `false` to disable the default command, even when there's a procedure named `'default'`.
    */
@@ -40,6 +41,8 @@ export interface TrpcCliMeta {
   usage?: false | string | string[]
   /** Example code snippets to display in `--help` output. */
   examples?: string | string[]
+  /** If true, this command will be run if no command is specified. */
+  default?: boolean
 }
 
 export interface ParsedProcedure {

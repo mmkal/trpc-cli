@@ -5,7 +5,7 @@ const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
 const router = trpc.router({
   migra: trpc.procedure
-    .meta({description: 'Diff two schemas.'})
+    .meta({description: 'Diff two schemas.', default: true})
     .input(
       z.tuple([
         z.string().describe('Base database URL'), //
@@ -26,8 +26,5 @@ const router = trpc.router({
     }),
 })
 
-const cli = createCli({
-  router,
-  default: {procedure: 'migra'},
-})
+const cli = createCli({router})
 void cli.run()

@@ -288,13 +288,14 @@ test('single character flag', async () => {
 test('custom default procedure', async () => {
   const yarn = t.router({
     install: t.procedure
+      .meta({default: true})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
   const params: TrpcCliParams<typeof yarn> = {
     router: yarn,
-    default: {procedure: 'install'},
+    // default: {procedure: 'install'},
   }
 
   const yarnOutput = await runWith(params, ['--frozen-lockfile'])

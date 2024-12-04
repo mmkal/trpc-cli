@@ -8,7 +8,7 @@ import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {Logger, TrpcCliParams} from './types'
+import {Logger, TrpcCliMeta, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
 
@@ -121,7 +121,19 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       },
     )
 
-    const defaultCommand = params.default && cleyeCommands.find(({name}) => name === params.default?.procedure)
+    const [defaultProcedureKey, ...extras] = procedureEntries.flatMap(([key, proc]) => {
+      const meta: Partial<TrpcCliMeta> = proc.procedure._def.meta
+      return meta?.default ? [key] : []
+    })
+    if (extras.length > 0) {
+      throw new Error(
+        `multiple commands have \`default: true\` - only one command can be the default: ${defaultProcedureKey},${extras.join(',')}`,
+      )
+    }
+
+    const defaultCommand = defaultProcedureKey
+      ? cleyeCommands.find(({name}) => name === defaultProcedureKey)
+      : params.default && cleyeCommands.find(({name}) => name === params.default?.procedure)
 
     const parsedArgv = cleye.cli(
       {
@@ -164,6 +176,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     }
 
     let command = parsedArgv.command as string | undefined
+
+    if (params.default) {
+      logger.error?.(
+        'default has been deprecated - add a `default: true` flag to the command you want to be the default',
+      )
+    }
+
+    if (!command && defaultProcedureKey) {
+      command = defaultProcedureKey
+    }
 
     if (!command && params.default) {
       command = params.default.procedure as string

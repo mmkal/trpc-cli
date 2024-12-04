@@ -241,18 +241,16 @@ You can define a default command for your CLI - set this to the procedure that s
 // filename: yarn
 const router = t.router({
   install: t.procedure //
+    .meta({default: true})
     .mutation(() => console.log('installing...')),
 })
 
-const cli = createCli({
-  router,
-  default: {procedure: 'install'},
-})
+const cli = createCli({router})
 
 cli.run()
 ```
 
-The above can be invoked with either `yarn` or `yarn install`.
+The above can be invoked with either `yarn` or `yarn install`. In future, you'll be able to set `default: true` on subcommands, but for now there is a check to ensure only one command is set as the default.
 
 ### Ignored procedures
 
