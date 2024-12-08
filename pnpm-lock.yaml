@@ -55,8 +55,8 @@ importers:
         specifier: npm:@trpc/server@10.45.2
         version: '@trpc/server@10.45.2'
       trpcserver11:
-        specifier: npm:@trpc/server@11.0.0-rc.657
-        version: '@trpc/server@11.0.0-rc.657(typescript@5.7.2)'
+        specifier: npm:@trpc/server@11.0.0-rc.660
+        version: '@trpc/server@11.0.0-rc.660(typescript@5.7.2)'
       tsx:
         specifier: 4.19.2
         version: 4.19.2
@@ -785,8 +785,8 @@ packages:
   '@trpc/server@10.45.2':
     resolution: {integrity: sha512-wOrSThNNE4HUnuhJG6PfDRp4L2009KDVxsd+2VYH8ro6o/7/jwYZ8Uu5j+VaW+mOmc8EHerHzGcdbGNQSAUPgg==}
 
-  '@trpc/server@11.0.0-rc.657':
-    resolution: {integrity: sha512-JaUH0fQM+3HqD2Bz++ut0utf7F/G/38APPkAI1kt6s3FLCNVX8ejmPoiMxW56aVNrOsBqVIRXUSJZl9Qa3CgXw==}
+  '@trpc/server@11.0.0-rc.660':
+    resolution: {integrity: sha512-QUapcZCNOpHT7ng9LceGc9ImkboWd0Go9ryrduZpL+p4jdfaC6409AQ3x4XEW6Wu3yBmZAn4CywCsDrDhjDy/w==}
     peerDependencies:
       typescript: '>=5.6.2'
 
@@ -4259,7 +4259,7 @@ snapshots:
 
   '@trpc/server@10.45.2': {}
 
-  '@trpc/server@11.0.0-rc.657(typescript@5.7.2)':
+  '@trpc/server@11.0.0-rc.660(typescript@5.7.2)':
     dependencies:
       typescript: 5.7.2
 
