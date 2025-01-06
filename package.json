@@ -10,7 +10,7 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@9.15.2",
+  "packageManager": "pnpm@9.15.3",
   "scripts": {
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
