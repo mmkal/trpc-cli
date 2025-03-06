@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer from '@trpc/server'
-import {Command} from 'commander'
+import {Command, Option} from 'commander'
 import colors from 'picocolors'
 import {ZodError} from 'zod'
 import {type JsonSchema7Type} from 'zod-to-json-schema'
@@ -82,6 +82,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const _process = runParams?.process || process
     let verboseErrors: boolean = false
 
+    // Track if any command has been executed
+    let commandExecuted = false
+
     // Setup the main program with Commander
     const program = new Command()
       .option('--verbose-errors', 'Throw raw errors (by default errors are summarised)')
@@ -103,8 +106,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       // Add positional parameters
       if (jsonSchema.parameters.length > 0) {
-        const usage = jsonSchema.parameters.join(' ')
-        command.arguments(usage)
+        jsonSchema.parameters.forEach(param => {
+          // Convert parameter format like <parameter 1> or [parameter 2] to suitable format for Commander
+          const required = param.startsWith('<') && param.endsWith('>')
+          const name = param.slice(1, -1)
+          if (required) {
+            command.argument(`<${name}>`, `${name}`)
+          } else {
+            command.argument(`[${name}]`, `${name}`)
+          }
+        })
       }
 
       // Add flags
@@ -113,7 +124,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
           description = `${description} (optional)`.trim()
         }
-        // description ||= undefined
 
         let flags = `--${propertyKey}`
         const alias = params.alias?.(propertyKey, {command: commandName, flags: properties})
@@ -122,45 +132,43 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
 
         const propertyType = 'type' in propertyValue ? propertyValue.type : null
+        let option: Option
 
         switch (propertyType) {
           case 'boolean': {
             // For boolean flags, no value required
-            command.option(flags, description)
-
+            option = new Option(flags, description)
             break
           }
           case 'number':
           case 'integer': {
             // For number flags, use a custom parser
-            const flagsWithValue = `${flags} <value>`
-            command.option(flagsWithValue, description, Number)
-
+            option = new Option(`${flags} <value>`, description)
+            option.argParser(Number)
             break
           }
           case 'array': {
             // For array flags, collect values
-            const flagsWithValue = `${flags} <value>`
-            command.option(flagsWithValue, description, (value: string, previous: string[] = []) => {
+            option = new Option(`${flags} <value>`, description)
+            option.argParser((value: string, previous: string[] = []) => {
               previous.push(value)
               return previous
             })
-
             break
           }
           case 'object': {
             // For object flags, parse as JSON
-            const flagsWithValue = `${flags} <json>`
-            command.option(flagsWithValue, description, (value: string) => JSON.parse(value))
-
+            option = new Option(`${flags} <json>`, description)
+            option.argParser((value: string) => JSON.parse(value))
             break
           }
           default: {
             // Default case (string or any other type)
-            const flagsWithValue = `${flags} <value>`
-            command.option(flagsWithValue, description)
+            option = new Option(`${flags} <value>`, description)
           }
         }
+
+        command.addOption(option)
 
         // Set default value if specified
         if (propertyValue.default !== undefined) {
@@ -169,8 +177,17 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       })
 
       // Set the action for this command
-      command.action(async (args, options) => {
+      command.action(async (...args) => {
         try {
+          commandExecuted = true
+
+          // Commander passes params differently than cleye
+          // The last argument is the Command instance itself, and we need to extract options from it
+          const options = args.at(-1)?.opts() || {}
+
+          // All other args are positional
+          const positionalArgs = args.slice(0, -1)
+
           // Check for incompatible flag pairs
           const incompatibleMessages = incompatiblePairs
             .filter(([a, b]) => options[a] !== undefined && options[b] !== undefined)
@@ -182,7 +199,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }
 
           // Extract positional arguments and flags
-          const input = jsonSchema.getInput({_: args || [], flags: options}) as never
+          const input = jsonSchema.getInput({_: positionalArgs, flags: options}) as never
 
           // Call the procedure
           const result: unknown = await (caller[commandName] as Function)(input)
@@ -220,7 +237,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const caller = createCallerFactory(router)(params.context)
 
     const die: Fail = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
-      console.log({message, cause, help}, new Error().stack)
       if (verboseErrors !== undefined && verboseErrors) {
         throw (cause as Error) || new Error(message)
       }
@@ -245,18 +261,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         if (!isOption && !isKnownCommand) {
           // This is a positional argument, not a command or option, so we need to insert the default command
           const newArgv = [...argv.slice(0, 2), defaultCommand, ...argv.slice(2)]
-          program.parse(newArgv as string[])
+          program.parse(newArgv)
         } else if (isOption) {
           // This is an option, so we need to insert the default command
           const newArgv = [...argv.slice(0, 2), defaultCommand, ...argv.slice(2)]
-          program.parse(newArgv as string[])
+          program.parse(newArgv)
         } else {
           // Normal case, parse as-is
           program.parse(argv)
         }
       } else if (defaultCommand && argv.length === 2) {
         // No args provided but we have a default command
-        program.parse([...argv, defaultCommand] as string[])
+        program.parse([...argv, defaultCommand])
       } else {
         // Normal case, parse as-is
         program.parse(argv)
@@ -265,16 +281,15 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       // Check for --verbose-errors flag
       verboseErrors = program.opts().verboseErrors
 
-      // If no command matched and we're still here, show help
-      if (!program.commands.some(cmd => (cmd as any)._hasRun)) {
-        console.log({
-          opts: program.opts(),
-          processedArgs: program.processedArgs,
-          args: program.args,
-        })
+      // If no command was executed, check if we need to show help
+      if (!commandExecuted) {
         if (argv.length > 2) {
           const commandName = argv[2]
-          die(`Unknown command: ${commandName}`)
+          const isKnownCommand = procedureEntries.some(([name]) => name === commandName)
+
+          if (!isKnownCommand && !commandName.startsWith('-')) {
+            die(`Unknown command: ${commandName}`)
+          }
         } else {
           die('No command specified.')
         }
