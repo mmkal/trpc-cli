@@ -209,8 +209,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     }
 
     // Process each procedure and add as a command or subcommand
-    procedureEntries.forEach(([procedureName, commandConfig]) => {
-      const segments = procedureName.split('.')
+    procedureEntries.forEach(([procedurePath, commandConfig]) => {
+      const segments = procedurePath.split('.')
 
       // Create the command path and ensure parent commands exist
       let currentPath = ''
@@ -237,7 +237,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const parentCommand = commandTree[parentPath]
 
       const leafCommand = new Command(leafName)
-      configureCommand(leafCommand, procedureName, commandConfig)
+      configureCommand(leafCommand, procedurePath, commandConfig)
       parentCommand.addCommand(leafCommand)
     })
 
