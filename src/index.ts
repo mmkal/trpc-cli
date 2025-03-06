@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer from '@trpc/server'
-import * as cleye from 'cleye'
+import {Command} from 'commander'
 import colors from 'picocolors'
 import {ZodError} from 'zod'
 import {type JsonSchema7Type} from 'zod-to-json-schema'
@@ -82,79 +82,134 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const _process = runParams?.process || process
     let verboseErrors: boolean = false
 
-    const cleyeCommands = procedureEntries.map(
-      ([commandName, {procedure, jsonSchema, properties}]): CleyeCommandOptions => {
-        const flags = Object.fromEntries(
-          Object.entries(properties).map(([propertyKey, propertyValue]) => {
-            const cleyeType = getCleyeType(propertyValue)
+    // Setup the main program with Commander
+    const program = new Command()
+      .option('--verbose-errors', 'Throw raw errors (by default errors are summarised)')
+      .helpOption('-h, --help', 'Show help')
 
-            let description: string | undefined = getDescription(propertyValue)
-            if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
-              description = `${description} (optional)`.trim()
-            }
-            description ||= undefined
+    const defaultCommands: string[] = []
 
-            return [
-              propertyKey,
-              {
-                type: cleyeType,
-                description,
-                default: propertyValue.default as {},
-              },
-            ]
-          }),
-        )
+    // Process each procedure and add as a command
+    procedureEntries.forEach(([commandName, {procedure, jsonSchema, properties, incompatiblePairs}]) => {
+      const meta = procedure._def.meta as Partial<TrpcCliMeta> | undefined
 
-        Object.entries(flags).forEach(([fullName, flag]) => {
-          const alias = params.alias?.(fullName, {command: commandName, flags})
-          if (alias) {
-            Object.assign(flag, {alias: alias})
-          }
-        })
+      // Check if this is a default command
+      if (meta?.default) {
+        defaultCommands.push(commandName)
+      }
 
-        return {
-          name: commandName,
-          help: procedure._def.meta,
-          parameters: jsonSchema.parameters,
-          flags: flags as {},
+      // Create the command
+      const command = new Command(commandName).description(meta?.description || '')
+
+      // Add positional parameters
+      if (jsonSchema.parameters.length > 0) {
+        const usage = jsonSchema.parameters.join(' ')
+        command.arguments(usage)
+      }
+
+      // Add flags
+      Object.entries(properties).forEach(([propertyKey, propertyValue]) => {
+        let description = getDescription(propertyValue)
+        if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
+          description = `${description} (optional)`.trim()
         }
-      },
-    )
+        // description ||= undefined
 
-    const [defaultProcedureKey, ...extras] = procedureEntries.flatMap(([key, proc]) => {
-      const meta: Partial<TrpcCliMeta> = proc.procedure._def.meta
-      return meta?.default ? [key] : []
+        let flags = `--${propertyKey}`
+        const alias = params.alias?.(propertyKey, {command: commandName, flags: properties})
+        if (alias) {
+          flags = `-${alias}, ${flags}`
+        }
+
+        const propertyType = 'type' in propertyValue ? propertyValue.type : null
+
+        switch (propertyType) {
+          case 'boolean': {
+            // For boolean flags, no value required
+            command.option(flags, description)
+
+            break
+          }
+          case 'number':
+          case 'integer': {
+            // For number flags, use a custom parser
+            const flagsWithValue = `${flags} <value>`
+            command.option(flagsWithValue, description, Number)
+
+            break
+          }
+          case 'array': {
+            // For array flags, collect values
+            const flagsWithValue = `${flags} <value>`
+            command.option(flagsWithValue, description, (value: string, previous: string[] = []) => {
+              previous.push(value)
+              return previous
+            })
+
+            break
+          }
+          case 'object': {
+            // For object flags, parse as JSON
+            const flagsWithValue = `${flags} <json>`
+            command.option(flagsWithValue, description, (value: string) => JSON.parse(value))
+
+            break
+          }
+          default: {
+            // Default case (string or any other type)
+            const flagsWithValue = `${flags} <value>`
+            command.option(flagsWithValue, description)
+          }
+        }
+
+        // Set default value if specified
+        if (propertyValue.default !== undefined) {
+          command.setOptionValueWithSource(propertyKey, propertyValue.default, 'default')
+        }
+      })
+
+      // Set the action for this command
+      command.action(async (args, options) => {
+        try {
+          // Check for incompatible flag pairs
+          const incompatibleMessages = incompatiblePairs
+            .filter(([a, b]) => options[a] !== undefined && options[b] !== undefined)
+            .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
+
+          if (incompatibleMessages?.length) {
+            die(incompatibleMessages.join('\n'))
+            return
+          }
+
+          // Extract positional arguments and flags
+          const input = jsonSchema.getInput({_: args || [], flags: options}) as never
+
+          // Call the procedure
+          const result: unknown = await (caller[commandName] as Function)(input)
+          if (result) logger.info?.(result)
+          _process.exit(0)
+        } catch (err) {
+          throw transformError(err, die)
+        }
+      })
+
+      // Add the command to the program
+      program.addCommand(command)
     })
-    if (extras.length > 0) {
+
+    if (defaultCommands.length > 1) {
       throw new Error(
-        `multiple commands have \`default: true\` - only one command can be the default: ${defaultProcedureKey},${extras.join(',')}`,
+        `multiple commands have \`default: true\` - only one command can be the default: ${defaultCommands.join(',')}`,
       )
     }
 
-    const defaultCommand = defaultProcedureKey
-      ? cleyeCommands.find(({name}) => name === defaultProcedureKey)
-      : params.default && cleyeCommands.find(({name}) => name === params.default?.procedure)
+    const defaultCommand = defaultCommands[0] || params.default?.procedure
 
-    const parsedArgv = cleye.cli(
-      {
-        flags: {
-          verboseErrors: {
-            type: Boolean,
-            description: `Throw raw errors (by default errors are summarised)`,
-            default: false,
-          },
-        },
-        ...defaultCommand,
-        commands: cleyeCommands
-          .filter(cmd => cmd.name !== defaultCommand?.name)
-          .map(cmd => cleye.command(cmd)) as cleye.Command[],
-      },
-      undefined,
-      runParams?.argv,
-    )
-
-    const {verboseErrors: _verboseErrors, ...unknownFlags} = parsedArgv.unknownFlags as Record<string, unknown>
-    verboseErrors = _verboseErrors || parsedArgv.flags.verboseErrors
+    if (params.default) {
+      logger.error?.(
+        'default has been deprecated - add a `default: true` flag to the command you want to be the default',
+      )
+    }
 
     type Context = NonNullable<typeof params.context>
 
@@ -165,65 +220,71 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const caller = createCallerFactory(router)(params.context)
 
     const die: Fail = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
+      console.log({message, cause, help}, new Error().stack)
       if (verboseErrors !== undefined && verboseErrors) {
         throw (cause as Error) || new Error(message)
       }
       logger.error?.(colors.red(message))
       if (help) {
-        parsedArgv.showHelp()
+        program.help()
       }
       return _process.exit(1)
     }
 
-    let command = parsedArgv.command as string | undefined
-
-    if (params.default) {
-      logger.error?.(
-        'default has been deprecated - add a `default: true` flag to the command you want to be the default',
-      )
-    }
-
-    if (!command && defaultProcedureKey) {
-      command = defaultProcedureKey
-    }
-
-    if (!command && params.default) {
-      command = params.default.procedure as string
-    }
-
-    const procedureInfo = command && procedureMap[command]
-
-    if (!procedureInfo) {
-      const name = JSON.stringify(command || parsedArgv._[0])
-      const message = name ? `Command not found: ${name}.` : 'No command specified.'
-      return die(message)
-    }
-
-    if (Object.entries(unknownFlags).length > 0) {
-      const s = Object.entries(unknownFlags).length === 1 ? '' : 's'
-      return die(`Unexpected flag${s}: ${Object.keys(unknownFlags).join(', ')}`)
-    }
-
-    let {help, ...flags} = parsedArgv.flags
-
-    flags = Object.fromEntries(Object.entries(flags as {}).filter(([_k, v]) => v !== undefined)) // cleye returns undefined for flags which didn't receive a value
-
-    const incompatibleMessages = procedureInfo.incompatiblePairs
-      .filter(([a, b]) => a in flags && b in flags)
-      .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
-
-    if (incompatibleMessages?.length) {
-      return die(incompatibleMessages.join('\n'))
-    }
-
-    const input = procedureInfo.jsonSchema.getInput({_: parsedArgv._, flags}) as never
-
+    // Parse the arguments
     try {
-      const result: unknown = await (caller[procedureInfo.name] as Function)(input)
-      if (result) logger.info?.(result)
-      _process.exit(0)
+      // Handle the case where no command is provided but there's a default
+      const argv = runParams?.argv || process.argv
+
+      // If we have a default command and the first non-option argument isn't a command, insert it
+      if (defaultCommand && argv.length > 2) {
+        const firstArg = argv[2]
+        const isOption = firstArg.startsWith('-')
+        const isKnownCommand = procedureEntries.some(([name]) => name === firstArg)
+
+        if (!isOption && !isKnownCommand) {
+          // This is a positional argument, not a command or option, so we need to insert the default command
+          const newArgv = [...argv.slice(0, 2), defaultCommand, ...argv.slice(2)]
+          program.parse(newArgv as string[])
+        } else if (isOption) {
+          // This is an option, so we need to insert the default command
+          const newArgv = [...argv.slice(0, 2), defaultCommand, ...argv.slice(2)]
+          program.parse(newArgv as string[])
+        } else {
+          // Normal case, parse as-is
+          program.parse(argv)
+        }
+      } else if (defaultCommand && argv.length === 2) {
+        // No args provided but we have a default command
+        program.parse([...argv, defaultCommand] as string[])
+      } else {
+        // Normal case, parse as-is
+        program.parse(argv)
+      }
+
+      // Check for --verbose-errors flag
+      verboseErrors = program.opts().verboseErrors
+
+      // If no command matched and we're still here, show help
+      if (!program.commands.some(cmd => (cmd as any)._hasRun)) {
+        console.log({
+          opts: program.opts(),
+          processedArgs: program.processedArgs,
+          args: program.args,
+        })
+        if (argv.length > 2) {
+          const commandName = argv[2]
+          die(`Unknown command: ${commandName}`)
+        } else {
+          die('No command specified.')
+        }
+      }
     } catch (err) {
-      throw transformError(err, die)
+      if (err instanceof Error) {
+        die(err.message, {cause: err})
+      } else {
+        die(String(err))
+      }
     }
   }
 
@@ -270,33 +331,4 @@ function transformError(err: unknown, fail: Fail): unknown {
     }
   }
   return err
-}
-
-type CleyeCommandOptions = cleye.Command['options']
-type CleyeFlag = NonNullable<CleyeCommandOptions['flags']>[string]
-
-function getCleyeType(schema: JsonSchema7Type): Extract<CleyeFlag, {type: unknown}>['type'] {
-  const _type = 'type' in schema && typeof schema.type === 'string' ? schema.type : null
-  switch (_type) {
-    case 'string': {
-      return String
-    }
-    case 'integer':
-    case 'number': {
-      return Number
-    }
-    case 'boolean': {
-      return Boolean
-    }
-    case 'array': {
-      return [String]
-    }
-    case 'object': {
-      return (s: string) => JSON.parse(s) as {}
-    }
-    default: {
-      _type satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
-      return (value: unknown) => value
-    }
-  }
 }

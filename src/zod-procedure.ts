@@ -67,7 +67,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 
 function parseLiteralInput(schema: z.ZodType<string> | z.ZodType<number>): Result<ParsedProcedure> {
   const type = acceptedLiteralTypes(schema).at(0)
-  const name = schema.description || type || 'value'
+  const name = (schema.description || type || 'value').replaceAll(/\s+/g, '_')
   return {
     success: true,
     value: {
@@ -244,7 +244,7 @@ const parameterName = (s: z.ZodType, position: number): string => {
     return `[${elementName.slice(1, -1)}...]`
   }
   // cleye requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
-  const name = s.description || `parameter ${position}`.replaceAll(/\W+/g, ' ').trim()
+  const name = s.description || `parameter_${position}`.replaceAll(/\W+/g, ' ').trim()
   return s.isOptional() ? `[${name}]` : `<${name}>`
 }
 
