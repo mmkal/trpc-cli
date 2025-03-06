@@ -99,6 +99,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       '': program, // Root level
     }
 
+    // Keep track of default commands for each parent path
+    const defaultCommands: Record<
+      string,
+      {
+        procedurePath: string
+        config: (typeof procedureEntries)[0][1]
+        command: Command
+      }
+    > = {}
+
     // Function to configure a command with its options and help settings
     const configureCommand = (
       command: Command,
@@ -209,8 +219,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     }
 
     // Process each procedure and add as a command or subcommand
-    procedureEntries.forEach(([procedurePath, commandConfig]) => {
-      const segments = procedurePath.split('.')
+    procedureEntries.forEach(([procedureName, commandConfig]) => {
+      const segments = procedureName.split('.')
 
       // Create the command path and ensure parent commands exist
       let currentPath = ''
@@ -237,8 +247,35 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const parentCommand = commandTree[parentPath]
 
       const leafCommand = new Command(leafName)
-      configureCommand(leafCommand, procedurePath, commandConfig)
+      configureCommand(leafCommand, procedureName, commandConfig)
       parentCommand.addCommand(leafCommand)
+
+      // Check if this command should be the default for its parent
+      const meta = commandConfig.procedure._def.meta as Partial<TrpcCliMeta> | undefined
+      if (meta?.default === true) {
+        defaultCommands[parentPath] = {
+          procedurePath: procedureName,
+          config: commandConfig,
+          command: leafCommand,
+        }
+      }
+    })
+
+    // Configure default commands for parent commands
+    Object.entries(defaultCommands).forEach(([parentPath, {procedurePath, config, command}]) => {
+      const parentCommand = commandTree[parentPath]
+
+      // Update parent command description to indicate default subcommand
+      const currentDescription = parentCommand.description() || ''
+      const defaultDesc = `Default: ${command.name()}`
+      const newDescription = currentDescription.includes(defaultDesc)
+        ? currentDescription
+        : `${currentDescription}${currentDescription ? ' ' : ''}(${defaultDesc})`.trim()
+
+      parentCommand.description(newDescription)
+
+      // Configure the parent command to have the same action as the default subcommand
+      configureCommand(parentCommand, procedurePath, config)
     })
 
     // After all commands are added, generate descriptions for parent commands
