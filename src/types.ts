@@ -20,7 +20,7 @@ export type TrpcCliParams<R extends AnyRouter> = {
    * The name of the "default" command - this procedure will be run if no command is specified. Default value is `default`, if such a procedure exists. Otherwise there is no default procedure.
    * Set to `false` to disable the default command, even when there's a procedure named `'default'`.
    */
-  default?: {
+  _default?: {
     procedure: Extract<keyof R['_def']['procedures'], string>
   }
 

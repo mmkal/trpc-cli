@@ -268,13 +268,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       )
     }
 
-    const defaultCommand = defaultCommands[0] || params.default?.procedure
-
-    if (params.default) {
-      logger.error?.(
-        'default has been deprecated - add a `default: true` flag to the command you want to be the default',
-      )
-    }
+    const defaultCommand = defaultCommands[0]
 
     type Context = NonNullable<typeof params.context>
 
