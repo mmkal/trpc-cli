@@ -293,10 +293,7 @@ test('custom default procedure', async () => {
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {
-    router: yarn,
-    // default: {procedure: 'install'},
-  }
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
   const yarnOutput = await runWith(params, ['--frozen-lockfile'])
   expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
