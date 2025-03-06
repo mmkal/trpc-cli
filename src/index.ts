@@ -105,18 +105,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const command = new Command(commandName).description(meta?.description || '')
 
       // Add positional parameters
-      if (jsonSchema.parameters.length > 0) {
-        jsonSchema.parameters.forEach(param => {
-          // Convert parameter format like <parameter 1> or [parameter 2] to suitable format for Commander
-          const required = param.startsWith('<') && param.endsWith('>')
-          const name = param.slice(1, -1)
-          if (required) {
-            command.argument(`<${name}>`, `${name}`)
-          } else {
-            command.argument(`[${name}]`, `${name}`)
-          }
-        })
-      }
+      jsonSchema.parameters.forEach(param => command.argument(param))
 
       // Add flags
       Object.entries(properties).forEach(([propertyKey, propertyValue]) => {

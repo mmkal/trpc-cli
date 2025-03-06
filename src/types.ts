@@ -21,7 +21,7 @@ export type TrpcCliParams<R extends AnyRouter> = {
    * Set to `false` to disable the default command, even when there's a procedure named `'default'`.
    */
   default?: {
-    procedure: keyof R['_def']['procedures']
+    procedure: Extract<keyof R['_def']['procedures'], string>
   }
 
   /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v11. */
