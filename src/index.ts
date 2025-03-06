@@ -40,10 +40,10 @@ export interface TrpcCli {
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
-  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([name, procedure]) => {
+  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
     const procedureResult = parseProcedureInputs(procedure._def.inputs as unknown[])
     if (!procedureResult.success) {
-      return [name, procedureResult.error] as const
+      return [procedurePath, procedureResult.error] as const
     }
 
     const jsonSchema = procedureResult.value
@@ -51,7 +51,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
 
     // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
-    const trpcProcedure = router._def.procedures[name] as AnyProcedure
+    const trpcProcedure = router._def.procedures[procedurePath] as AnyProcedure
     let type: 'mutation' | 'query' | 'subscription'
     if (isTrpc11Procedure(trpcProcedure)) {
       type = trpcProcedure._def.type
@@ -66,7 +66,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
     }
 
-    return [name, {name, procedure, jsonSchema, properties, incompatiblePairs, type}] as const
+    return [procedurePath, {name: procedurePath, procedure, jsonSchema, properties, incompatiblePairs, type}] as const
   })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
@@ -102,7 +102,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     // Function to configure a command with its options and help settings
     const configureCommand = (
       command: Command,
-      commandName: string,
+      procedurePath: string,
       {procedure, jsonSchema, properties, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
       // Configure help settings for this command
@@ -123,7 +123,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
 
         let flags = `--${propertyKey}`
-        const alias = params.alias?.(propertyKey, {command: commandName, flags: properties})
+        const alias = params.alias?.(propertyKey, {command: procedurePath, flags: properties})
         if (alias) {
           flags = `-${alias}, ${flags}`
         }
@@ -199,7 +199,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           const input = jsonSchema.getInput({_: positionalArgs, flags: options}) as never
 
           // Call the procedure
-          const result: unknown = await (caller[commandName] as Function)(input)
+          const result: unknown = await (caller[procedurePath] as Function)(input)
           if (result) logger.info?.(result)
           _process.exit(0)
         } catch (err) {
@@ -209,8 +209,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     }
 
     // Process each procedure and add as a command or subcommand
-    procedureEntries.forEach(([commandName, commandConfig]) => {
-      const segments = commandName.split('.')
+    procedureEntries.forEach(([procedureName, commandConfig]) => {
+      const segments = procedureName.split('.')
 
       // Create the command path and ensure parent commands exist
       let currentPath = ''
@@ -237,7 +237,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const parentCommand = commandTree[parentPath]
 
       const leafCommand = new Command(leafName)
-      configureCommand(leafCommand, commandName, commandConfig)
+      configureCommand(leafCommand, procedureName, commandConfig)
       parentCommand.addCommand(leafCommand)
     })
 
