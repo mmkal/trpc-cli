@@ -11,9 +11,15 @@ const router = trpc.router({
     })
     .input(z.tuple([z.number(), z.number()]))
     .query(({input}) => input[0] + input[1]),
+  subtract: trpc.procedure
+    .input(z.object({left: z.number(), right: z.number()}))
+    .query(({input}) => input.left - input.right),
   deeply: trpc.router({
     nested1: trpc.router({
-      command1: trpc.procedure.input(z.object({foo: z.string()})).query(({input}) => 'ok:' + input.foo),
+      command1: trpc.procedure
+        .meta({default: true, description: 'This is command ONE'})
+        .input(z.object({foo: z.string()}))
+        .query(({input}) => 'ok:' + input.foo),
       command2: trpc.procedure.input(z.object({foo: z.string()})).query(({input}) => 'ok:' + input.foo),
     }),
     nested2: trpc.router({
