@@ -265,15 +265,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     Object.entries(defaultCommands).forEach(([parentPath, {procedurePath, config, command}]) => {
       const parentCommand = commandTree[parentPath]
 
-      // Update parent command description to indicate default subcommand
-      const currentDescription = parentCommand.description() || ''
-      const defaultDesc = `Default: ${command.name()}`
-      const newDescription = currentDescription.includes(defaultDesc)
-        ? currentDescription
-        : `${currentDescription}${currentDescription ? ' ' : ''}(${defaultDesc})`.trim()
-
-      parentCommand.description(newDescription)
-
       // Configure the parent command to have the same action as the default subcommand
       configureCommand(parentCommand, procedurePath, config)
     })
@@ -286,9 +277,25 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       // Get the names of all direct subcommands
       const subcommandNames = command.commands.map(cmd => cmd.name())
 
-      // Set the description to show available subcommands
-      if (!command.description()) {
-        command.description(`Available subcommands: ${subcommandNames.join(', ')}`)
+      // Check if there's a default command for this path
+      const defaultCommand = defaultCommands[path]?.command.name()
+
+      // Format the subcommand list, marking the default one
+      const formattedSubcommands = subcommandNames
+        .map(name => (name === defaultCommand ? `${name} (default)` : name))
+        .join(', ')
+
+      // Get the existing description (might have been set by a default command)
+      const existingDescription = command.description() || ''
+
+      // Only add the subcommand list if it's not already part of the description
+      if (!existingDescription.includes('Available subcommands:')) {
+        const baseDescription = existingDescription.replace(/\s*\(Default:.*?\)/, '').trim()
+        const newDescription = baseDescription
+          ? `${baseDescription}\nAvailable subcommands: ${formattedSubcommands}`
+          : `Available subcommands: ${formattedSubcommands}`
+
+        command.description(newDescription)
       }
     })
 

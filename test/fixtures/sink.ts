@@ -18,13 +18,13 @@ const router = trpc.router({
     nested1: trpc.router({
       command1: trpc.procedure
         .meta({default: true, description: 'This is command ONE'})
-        .input(z.object({foo: z.string()}))
-        .query(({input}) => 'ok:' + input.foo),
-      command2: trpc.procedure.input(z.object({foo: z.string()})).query(({input}) => 'ok:' + input.foo),
+        .input(z.object({foo1: z.string()}))
+        .query(({input}) => 'ok:' + JSON.stringify(input)),
+      command2: trpc.procedure.input(z.object({foo2: z.string()})).query(({input}) => 'ok:' + JSON.stringify(input)),
     }),
     nested2: trpc.router({
-      command3: trpc.procedure.input(z.object({foo: z.string()})).query(({input}) => 'ok:' + input.foo),
-      command4: trpc.procedure.input(z.object({foo: z.string()})).query(({input}) => 'ok:' + input.foo),
+      command3: trpc.procedure.input(z.object({foo3: z.string()})).query(({input}) => 'ok:' + JSON.stringify(input)),
+      command4: trpc.procedure.input(z.object({foo4: z.string()})).query(({input}) => 'ok:' + JSON.stringify(input)),
     }),
   }),
 })
