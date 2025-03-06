@@ -89,11 +89,27 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const program = new Command()
       .option('--verbose-errors', 'Throw raw errors (by default errors are summarised)')
       .helpOption('-h, --help', 'Show help')
+      // Show help text after errors including unknown commands
+      .showHelpAfterError()
+      // Enable suggestions for unknown commands and options
+      .showSuggestionAfterError()
 
     const defaultCommands: string[] = []
 
-    // Process each procedure and add as a command
-    procedureEntries.forEach(([commandName, {procedure, jsonSchema, properties, incompatiblePairs}]) => {
+    // Organize commands in a tree structure for nested subcommands
+    const commandTree: Record<string, Command> = {
+      '': program, // Root level
+    }
+
+    // Function to configure a command with its options and help settings
+    const configureCommand = (
+      command: Command,
+      commandName: string,
+      {procedure, jsonSchema, properties, incompatiblePairs}: (typeof procedureEntries)[0][1],
+    ) => {
+      // Configure help settings for this command
+      command.showHelpAfterError().showSuggestionAfterError()
+
       const meta = procedure._def.meta as Partial<TrpcCliMeta> | undefined
 
       // Check if this is a default command
@@ -101,8 +117,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         defaultCommands.push(commandName)
       }
 
-      // Create the command
-      const command = new Command(commandName).description(meta?.description || '')
+      command.description(meta?.description || '')
 
       // Add positional parameters
       jsonSchema.parameters.forEach(param => command.argument(param))
@@ -183,7 +198,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
 
           if (incompatibleMessages?.length) {
-            die(incompatibleMessages.join('\n'))
+            die(incompatibleMessages.join('\n'), {currentCommand: command})
             return
           }
 
@@ -195,12 +210,56 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           if (result) logger.info?.(result)
           _process.exit(0)
         } catch (err) {
-          throw transformError(err, die)
+          throw transformError(err, (msg, opts) => die(msg, {...opts, currentCommand: command}))
         }
       })
+    }
 
-      // Add the command to the program
-      program.addCommand(command)
+    // Process each procedure and add as a command or subcommand
+    procedureEntries.forEach(([commandName, commandConfig]) => {
+      const segments = commandName.split('.')
+
+      // Create the command path and ensure parent commands exist
+      let currentPath = ''
+      for (let i = 0; i < segments.length - 1; i++) {
+        const segment = segments[i]
+        const parentPath = currentPath
+        currentPath = currentPath ? `${currentPath}.${segment}` : segment
+
+        // Create parent command if it doesn't exist
+        if (!commandTree[currentPath]) {
+          const parentCommand = commandTree[parentPath]
+          const newCommand = new Command(segment)
+            // Configure help settings for parent commands too
+            .showHelpAfterError()
+            .showSuggestionAfterError()
+          parentCommand.addCommand(newCommand)
+          commandTree[currentPath] = newCommand
+        }
+      }
+
+      // Create the actual leaf command
+      const leafName = segments.at(-1)
+      const parentPath = segments.length > 1 ? segments.slice(0, -1).join('.') : ''
+      const parentCommand = commandTree[parentPath]
+
+      const leafCommand = new Command(leafName)
+      configureCommand(leafCommand, commandName, commandConfig)
+      parentCommand.addCommand(leafCommand)
+    })
+
+    // After all commands are added, generate descriptions for parent commands
+    Object.entries(commandTree).forEach(([path, command]) => {
+      // Skip the root command and leaf commands (which already have descriptions)
+      if (path === '' || command.commands.length === 0) return
+
+      // Get the names of all direct subcommands
+      const subcommandNames = command.commands.map(cmd => cmd.name())
+
+      // Set the description to show available subcommands
+      if (!command.description()) {
+        command.description(`Available subcommands: ${subcommandNames.join(', ')}`)
+      }
     })
 
     if (defaultCommands.length > 1) {
@@ -225,13 +284,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     const caller = createCallerFactory(router)(params.context)
 
-    const die: Fail = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
+    const die: Fail = (
+      message: string,
+      {cause, help = true, currentCommand = program}: {cause?: unknown; help?: boolean; currentCommand?: Command} = {},
+    ) => {
       if (verboseErrors !== undefined && verboseErrors) {
         throw (cause as Error) || new Error(message)
       }
       logger.error?.(colors.red(message))
       if (help) {
-        program.help()
+        currentCommand.help()
       }
       return _process.exit(1)
     }
@@ -249,11 +311,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         if (!isOption && !isKnownCommand) {
           // This is a positional argument, not a command or option, so we need to insert the default command
-          const newArgv = [...argv.slice(0, 2), defaultCommand, ...argv.slice(2)]
+          const newArgv = [...argv.slice(0, 2), ...defaultCommand.split('.'), ...argv.slice(2)]
           program.parse(newArgv)
         } else if (isOption) {
           // This is an option, so we need to insert the default command
-          const newArgv = [...argv.slice(0, 2), defaultCommand, ...argv.slice(2)]
+          const newArgv = [...argv.slice(0, 2), ...defaultCommand.split('.'), ...argv.slice(2)]
           program.parse(newArgv)
         } else {
           // Normal case, parse as-is
@@ -261,7 +323,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
       } else if (defaultCommand && argv.length === 2) {
         // No args provided but we have a default command
-        program.parse([...argv, defaultCommand])
+        program.parse([...argv, ...defaultCommand.split('.')])
       } else {
         // Normal case, parse as-is
         program.parse(argv)
@@ -274,10 +336,17 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       if (!commandExecuted) {
         if (argv.length > 2) {
           const commandName = argv[2]
-          const isKnownCommand = procedureEntries.some(([name]) => name === commandName)
+          if (!commandName.startsWith('-')) {
+            // Check if it's a known root command
+            const isKnownCommand = procedureEntries.some(([name]) => name.split('.')[0] === commandName)
 
-          if (!isKnownCommand && !commandName.startsWith('-')) {
-            die(`Unknown command: ${commandName}`)
+            if (!isKnownCommand) {
+              // Get all root command names for suggestions
+              const rootCommands = [...new Set(procedureEntries.map(([name]) => name.split('.')[0]))]
+              const suggestions = rootCommands.length > 0 ? `\nAvailable commands: ${rootCommands.join(', ')}` : ''
+
+              die(`Unknown command: ${commandName}${suggestions}`, {help: true})
+            }
           }
         } else {
           die('No command specified.')
@@ -298,7 +367,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-type Fail = (message: string, options?: {cause?: unknown; help?: boolean}) => never
+type Fail = (message: string, options?: {cause?: unknown; help?: boolean; currentCommand?: Command}) => never
 
 function transformError(err: unknown, fail: Fail): unknown {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
