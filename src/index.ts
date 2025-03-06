@@ -94,8 +94,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       // Enable suggestions for unknown commands and options
       .showSuggestionAfterError()
 
-    const defaultCommands: string[] = []
-
     // Organize commands in a tree structure for nested subcommands
     const commandTree: Record<string, Command> = {
       '': program, // Root level
@@ -111,11 +109,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.showHelpAfterError().showSuggestionAfterError()
 
       const meta = procedure._def.meta as Partial<TrpcCliMeta> | undefined
-
-      // Check if this is a default command
-      if (meta?.default) {
-        defaultCommands.push(commandName)
-      }
 
       command.description(meta?.description || '')
 
@@ -262,14 +255,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       }
     })
 
-    if (defaultCommands.length > 1) {
-      throw new Error(
-        `multiple commands have \`default: true\` - only one command can be the default: ${defaultCommands.join(',')}`,
-      )
-    }
-
-    const defaultCommand = defaultCommands[0]
-
     type Context = NonNullable<typeof params.context>
 
     const createCallerFactory =
@@ -294,34 +279,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     // Parse the arguments
     try {
-      // Handle the case where no command is provided but there's a default
       const argv = runParams?.argv || process.argv
-
-      // If we have a default command and the first non-option argument isn't a command, insert it
-      if (defaultCommand && argv.length > 2) {
-        const firstArg = argv[2]
-        const isOption = firstArg.startsWith('-')
-        const isKnownCommand = procedureEntries.some(([name]) => name === firstArg)
-
-        if (!isOption && !isKnownCommand) {
-          // This is a positional argument, not a command or option, so we need to insert the default command
-          const newArgv = [...argv.slice(0, 2), ...defaultCommand.split('.'), ...argv.slice(2)]
-          program.parse(newArgv)
-        } else if (isOption) {
-          // This is an option, so we need to insert the default command
-          const newArgv = [...argv.slice(0, 2), ...defaultCommand.split('.'), ...argv.slice(2)]
-          program.parse(newArgv)
-        } else {
-          // Normal case, parse as-is
-          program.parse(argv)
-        }
-      } else if (defaultCommand && argv.length === 2) {
-        // No args provided but we have a default command
-        program.parse([...argv, ...defaultCommand.split('.')])
-      } else {
-        // Normal case, parse as-is
-        program.parse(argv)
-      }
+      program.parse(argv)
 
       // Check for --verbose-errors flag
       verboseErrors = program.opts().verboseErrors
