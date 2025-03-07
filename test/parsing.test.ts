@@ -374,12 +374,12 @@ test('number array input', async () => {
 
 test('number array input with constraints', async () => {
   const router = t.router({
-    test: t.procedure
+    foo: t.procedure
       .input(z.array(z.number().int())) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['test', '1.2'])).rejects.toMatchInlineSnapshot(`
+  await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: Logs: Validation error
       - Expected integer, received float at index 0

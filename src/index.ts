@@ -79,19 +79,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
   async function run(runParams?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const _process = runParams?.process || process
-    let verboseErrors: boolean = false
+    const verboseErrors: boolean = false
 
-    // Track if any command has been executed
-    let commandExecuted = false
-
-    // Setup the main program with Commander
     const program = new Command()
-      .option('--verbose-errors', 'Throw raw errors (by default errors are summarised)')
-      .helpOption('-h, --help', 'Show help')
-      // Show help text after errors including unknown commands
-      .showHelpAfterError()
-      // Enable suggestions for unknown commands and options
-      .showSuggestionAfterError()
+    program.option('--verbose-errors', 'Throw raw errors (by default errors are summarised)')
+    program.showHelpAfterError()
+    program.showSuggestionAfterError()
 
     // Organize commands in a tree structure for nested subcommands
     const commandTree: Record<string, Command> = {
@@ -112,7 +105,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const configureCommand = (
       command: Command,
       procedurePath: string,
-      {procedure, jsonSchema, properties, incompatiblePairs}: (typeof procedureEntries)[0][1],
+      {procedure, jsonSchema: parsedProcedure, properties, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
       // Configure help settings for this command
       command.showHelpAfterError().showSuggestionAfterError()
@@ -122,12 +115,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.description(meta?.description || '')
 
       // Add positional parameters
-      jsonSchema.parameters.forEach(param => command.argument(param))
+      parsedProcedure.parameters.forEach(param => command.argument(param))
 
       // Add flags
       Object.entries(properties).forEach(([propertyKey, propertyValue]) => {
         let description = getDescription(propertyValue)
-        if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
+        if ('required' in parsedProcedure.flagsSchema && !parsedProcedure.flagsSchema.required?.includes(propertyKey)) {
           description = `${description} (optional)`.trim()
         }
 
@@ -155,6 +148,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }
           case 'array': {
             // For array flags, collect values
+            // todo: check this is right
             option = new Option(`${flags} <value>`, description)
             option.argParser((value: string, previous: string[] = []) => {
               previous.push(value)
@@ -185,14 +179,17 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       // Set the action for this command
       command.action(async (...args) => {
         try {
-          commandExecuted = true
+          if (args.at(-1) !== command) {
+            throw new Error(`Unexpected args format, last arg is not the Command instance`, {cause: args})
+          }
+          if (args.at(-2) !== command.opts()) {
+            throw new Error(`Unexpected args format, second last arg is not the options object`, {cause: args})
+          }
 
-          // Commander passes params differently than cleye
-          // The last argument is the Command instance itself, and we need to extract options from it
-          const options = args.at(-1)?.opts() || {}
+          const options = command.opts()
 
-          // All other args are positional
-          const positionalArgs = args.slice(0, -1)
+          // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
+          const positionalArgs = args.slice(0, -2)
 
           // Check for incompatible flag pairs
           const incompatibleMessages = incompatiblePairs
@@ -204,11 +201,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             return
           }
 
-          // Extract positional arguments and flags
-          const input = jsonSchema.getInput({_: positionalArgs, flags: options}) as never
+          const input = parsedProcedure.getInput({_: positionalArgs, flags: options}) as never
 
-          // Call the procedure
-          const result: unknown = await (caller[procedurePath] as Function)(input)
+          const result: unknown = await caller[procedurePath](input)
           if (result != null) logger.info?.(result)
           _process.exit(0)
         } catch (err) {
@@ -314,57 +309,19 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       if (help) {
         currentCommand.help()
       }
-      return _process.exit(1)
+      return _process.exit(11)
     }
 
-    // Parse the arguments
-    try {
-      console.log('runParams', runParams)
-      if (runParams?.process) {
-        program.exitOverride(error => {
-          console.error({error})
-          runParams.process!.exit(error.exitCode)
-        })
-      }
+    program.exitOverride(error => {
+      console.log('xyz', error)
+      _process.exit(error.exitCode)
+    })
 
-      if (runParams?.argv) {
-        await program.parseAsync(runParams.argv, {from: 'user'})
-      } else {
-        await program.parseAsync(process.argv)
-      }
-      const argv = runParams?.argv || process.argv
-      console.log('argv', argv, {runParams})
-      await program.parseAsync(argv)
-
-      // Check for --verbose-errors flag
-      verboseErrors = program.opts().verboseErrors
-
-      // If no command was executed, check if we need to show help
-      if (!commandExecuted) {
-        if (argv.length > 2) {
-          const commandName = argv[2]
-          if (!commandName.startsWith('-')) {
-            // Check if it's a known root command
-            const isKnownCommand = procedureEntries.some(([name]) => name.split('.')[0] === commandName)
-
-            if (!isKnownCommand) {
-              // Get all root command names for suggestions
-              const rootCommands = [...new Set(procedureEntries.map(([name]) => name.split('.')[0]))]
-              const suggestions = rootCommands.length > 0 ? `\nAvailable commands: ${rootCommands.join(', ')}` : ''
-
-              die(`Unknown command: ${commandName}${suggestions}`, {help: true})
-            }
-          }
-        } else {
-          die('No command specified.')
-        }
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        die(err.message, {cause: err})
-      } else {
-        die(String(err))
-      }
+    console.log('runParams', runParams)
+    if (runParams?.argv) {
+      await program.parseAsync(runParams.argv, {from: 'user'})
+    } else {
+      await program.parseAsync(process.argv)
     }
   }
 

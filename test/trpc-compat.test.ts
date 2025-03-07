@@ -128,7 +128,7 @@ test('error when using trpc v11 without createCallerFactory', async () => {
 
   const cli = createCli({router})
 
-  await expect(cli.run({argv: ['add', '--verboseErrors', '1', '2']})).rejects.toThrowErrorMatchingInlineSnapshot(
+  await expect(cli.run({argv: ['add', '--verbose-errors', '1', '2']})).rejects.toThrowErrorMatchingInlineSnapshot(
     `[Error: createCallerFactory version mismatch - pass in createCallerFactory explicitly]`,
   )
 })
