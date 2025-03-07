@@ -16,6 +16,11 @@ test('can create cli from trpc v10', async () => {
     foo: t.router({
       bar: t.procedure.query(() => 'baz'),
     }),
+    deeply: t.router({
+      nested1: t.router({
+        command1: t.procedure.query(() => 'ok'),
+      }),
+    }),
   }) satisfies Trpc10RouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
 
   expect(router._def.procedures).toHaveProperty('foo.bar')
@@ -53,6 +58,7 @@ test('can create cli from trpc v10', async () => {
 test('can create cli from trpc v11', async () => {
   const t = initTRPC_v11.context<{customContext: true}>().meta<TrpcCliMeta>().create()
 
+  const trpc = t
   const router = t.router({
     add: t.procedure
       .meta({description: 'Add two numbers'})
@@ -65,6 +71,12 @@ test('can create cli from trpc v11', async () => {
     },
     abc: t.router({
       def: t.procedure.query(() => 'baz'),
+    }),
+    deeply: trpc.router({
+      nested2: trpc.router({
+        command3: trpc.procedure.input(z.object({foo3: z.string()})).query(({input}) => 'ok:' + JSON.stringify(input)),
+        command4: trpc.procedure.input(z.object({foo4: z.string()})).query(({input}) => 'ok:' + JSON.stringify(input)),
+      }),
     }),
   }) satisfies Trpc11RouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
 

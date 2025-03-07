@@ -9,8 +9,13 @@ export type Trpc11RouterLike = {
     _config: {
       $types: {meta: any; ctx: any}
     }
-    procedures: Record<string, Trpc11ProcedureLike | Trpc11RouterLike | Record<string, Trpc11ProcedureLike>>
+    procedures: Record<string, Trpc11ProcedureLike | Trpc11ProcedureRecordLike | Record<string, Trpc11ProcedureLike>>
   }
+}
+
+/** Even though you use `t.router({})` to create a sub-router, the actual type is a record of procedures and sub-routers rather than a root-level router */
+export interface Trpc11ProcedureRecordLike {
+  [key: string]: Trpc11ProcedureLike | Trpc11ProcedureRecordLike
 }
 
 export type Trpc11ProcedureLike = {
