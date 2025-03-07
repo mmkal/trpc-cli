@@ -3,7 +3,6 @@ import * as trpcServer from '@trpc/server'
 import {Command, Option} from 'commander'
 import colors from 'picocolors'
 import {ZodError} from 'zod'
-import {type JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
@@ -166,7 +165,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           case 'object': {
             // For object flags, parse as JSON
             option = new Option(`${flags} <json>`, description)
-            option.argParser((value: string) => JSON.parse(value))
+            option.argParser((value: string) => JSON.parse(value) as {})
             break
           }
           default: {
@@ -210,7 +209,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
           // Call the procedure
           const result: unknown = await (caller[procedurePath] as Function)(input)
-          if (result) logger.info?.(result)
+          if (result != null) logger.info?.(result)
           _process.exit(0)
         } catch (err) {
           throw transformError(err, (msg, opts) => die(msg, {...opts, currentCommand: command}))
@@ -219,8 +218,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     }
 
     // Process each procedure and add as a command or subcommand
-    procedureEntries.forEach(([procedureName, commandConfig]) => {
-      const segments = procedureName.split('.')
+    procedureEntries.forEach(([procedurePath, commandConfig]) => {
+      const segments = procedurePath.split('.')
 
       // Create the command path and ensure parent commands exist
       let currentPath = ''
@@ -247,26 +246,23 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const parentCommand = commandTree[parentPath]
 
       const leafCommand = new Command(leafName)
-      configureCommand(leafCommand, procedureName, commandConfig)
+      configureCommand(leafCommand, procedurePath, commandConfig)
       parentCommand.addCommand(leafCommand)
 
       // Check if this command should be the default for its parent
       const meta = commandConfig.procedure._def.meta as Partial<TrpcCliMeta> | undefined
       if (meta?.default === true) {
+        configureCommand(parentCommand, procedurePath, commandConfig)
+        for (let ancestor = parentCommand.parent, i = 0; ancestor && i < 10; ancestor = ancestor.parent, i++) {
+          ancestor.enablePositionalOptions()
+        }
+        parentCommand.passThroughOptions()
         defaultCommands[parentPath] = {
-          procedurePath: procedureName,
+          procedurePath: procedurePath,
           config: commandConfig,
           command: leafCommand,
         }
       }
-    })
-
-    // Configure default commands for parent commands
-    Object.entries(defaultCommands).forEach(([parentPath, {procedurePath, config, command}]) => {
-      const parentCommand = commandTree[parentPath]
-
-      // Configure the parent command to have the same action as the default subcommand
-      configureCommand(parentCommand, procedurePath, config)
     })
 
     // After all commands are added, generate descriptions for parent commands
@@ -323,7 +319,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     // Parse the arguments
     try {
-      const argv = runParams?.argv || process.argv
+    const argv = runParams?.argv || process.argv
       program.parse(argv)
 
       // Check for --verbose-errors flag
@@ -345,7 +341,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
               die(`Unknown command: ${commandName}${suggestions}`, {help: true})
             }
           }
-        } else {
+    } else {
           die('No command specified.')
         }
       }

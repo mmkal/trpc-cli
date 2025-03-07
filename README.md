@@ -289,7 +289,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L42)
+#### [createCli](./src/index.ts#L41)
 
 Run a trpc router as a CLI.
 
@@ -371,16 +371,30 @@ Run `node path/to/cli --help` for formatted help text for the `sum` and `divide`
 `node path/to/calculator --help` output:
 
 ```
+Usage: calculator [options] [command]
+
+Options:
+  --verbose-errors                      Throw raw errors (by default errors are
+                                        summarised)
+  -h, --help                            Show help
+
 Commands:
-  add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
-  subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
-  multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
-  divide          Divide two numbers. Useful if you have a number and you want to make it smaller and `subtract` isn't quite powerful enough for you.
-
-Flags:
-  -h, --help                  Show help
-      --verbose-errors        Throw raw errors (by default errors are summarised)
-
+  add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
+                                        your friend both have apples, and you
+                                        want to know how many apples there are
+                                        in total.
+  subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
+                                        a number and you want to make it
+                                        smaller.
+  multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
+                                        you want to count the number of tiles on
+                                        your bathroom wall and are short on
+                                        time.
+  divide <numerator> <denominator>      Divide two numbers. Useful if you have a
+                                        number and you want to make it smaller
+                                        and `subtract` isn't quite powerful
+                                        enough for you.
+  help [command]                        display help for command
 ```
 <!-- codegen:end -->
 
@@ -390,16 +404,13 @@ You can also show help text for the corresponding procedures (which become "comm
 `node path/to/calculator add --help` output:
 
 ```
-add
+Usage: calculator add [options] <parameter_1> <parameter_2>
 
-Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+Add two numbers. Use this if you and your friend both have apples, and you want
+to know how many apples there are in total.
 
-Usage:
-  add [flags...] <parameter 1> <parameter 2>
-
-Flags:
-  -h, --help        Show help
-
+Options:
+  -h, --help  display help for command
 ```
 <!-- codegen:end -->
 
@@ -419,16 +430,13 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
-add
+Usage: calculator add [options] <parameter_1> <parameter_2>
 
-Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+Add two numbers. Use this if you and your friend both have apples, and you want
+to know how many apples there are in total.
 
-Usage:
-  add [flags...] <parameter 1> <parameter 2>
-
-Flags:
-  -h, --help        Show help
-
+Options:
+  -h, --help  display help for command
 Validation error
   - Expected number, received string at index 1
 ```
@@ -719,17 +727,19 @@ Here's how the CLI will work:
 `node path/to/migrations --help` output:
 
 ```
+Usage: migrations [options] [command]
+
+Options:
+  --verbose-errors  Throw raw errors (by default errors are summarised)
+  -h, --help        Show help
+
 Commands:
-  up                      Apply migrations. By default all pending migrations will be applied.
-  create                  Create a new migration
-  list                    List all migrations
-  search.byName           Look for migrations by name
-  search.byContent        Look for migrations by their script content
-
-Flags:
-  -h, --help                  Show help
-      --verbose-errors        Throw raw errors (by default errors are summarised)
-
+  up [options]      Apply migrations. By default all pending migrations will be
+                    applied.
+  create [options]  Create a new migration
+  list [options]    List all migrations
+  search            Available subcommands: byName, byContent
+  help [command]    display help for command
 ```
 <!-- codegen:end -->
 
@@ -737,17 +747,19 @@ Flags:
 `node path/to/migrations apply --help` output:
 
 ```
+Usage: migrations [options] [command]
+
+Options:
+  --verbose-errors  Throw raw errors (by default errors are summarised)
+  -h, --help        Show help
+
 Commands:
-  up                      Apply migrations. By default all pending migrations will be applied.
-  create                  Create a new migration
-  list                    List all migrations
-  search.byName           Look for migrations by name
-  search.byContent        Look for migrations by their script content
-
-Flags:
-  -h, --help                  Show help
-      --verbose-errors        Throw raw errors (by default errors are summarised)
-
+  up [options]      Apply migrations. By default all pending migrations will be
+                    applied.
+  create [options]  Create a new migration
+  list [options]    List all migrations
+  search            Available subcommands: byName, byContent
+  help [command]    display help for command
 ```
 <!-- codegen:end -->
 
@@ -755,18 +767,19 @@ Flags:
 `node path/to/migrations search.byContent --help` output:
 
 ```
-search.byContent
+Usage: migrations [options] [command]
 
-Look for migrations by their script content
+Options:
+  --verbose-errors  Throw raw errors (by default errors are summarised)
+  -h, --help        Show help
 
-Usage:
-  search.byContent [flags...]
-
-Flags:
-  -h, --help                        Show help
-  -q, --search-term <string>        Only show migrations whose `content` value contains this string
-  -s, --status <string>             Filter to only show migrations with this status; Enum: executed,pending
-
+Commands:
+  up [options]      Apply migrations. By default all pending migrations will be
+                    applied.
+  create [options]  Create a new migration
+  list [options]    List all migrations
+  search            Available subcommands: byName, byContent
+  help [command]    display help for command
 ```
 <!-- codegen:end -->
 
