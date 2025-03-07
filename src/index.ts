@@ -319,8 +319,22 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     // Parse the arguments
     try {
-    const argv = runParams?.argv || process.argv
-      program.parse(argv)
+      console.log('runParams', runParams)
+      if (runParams?.process) {
+        program.exitOverride(error => {
+          console.error({error})
+          runParams.process!.exit(error.exitCode)
+        })
+      }
+
+      if (runParams?.argv) {
+        await program.parseAsync(runParams.argv, {from: 'user'})
+      } else {
+        await program.parseAsync(process.argv)
+      }
+      const argv = runParams?.argv || process.argv
+      console.log('argv', argv, {runParams})
+      await program.parseAsync(argv)
 
       // Check for --verbose-errors flag
       verboseErrors = program.opts().verboseErrors
@@ -341,7 +355,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
               die(`Unknown command: ${commandName}${suggestions}`, {help: true})
             }
           }
-    } else {
+        } else {
           die('No command specified.')
         }
       }

@@ -48,7 +48,8 @@
   },
   "devDependencies": {
     "@types/node": "20.16.11",
-    "eslint-plugin-mmkal": "0.9.0",
+    "eslint": "8",
+    "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb",
     "execa": "9.3.1",
     "expect-type": "1.1.0",
     "fs-syncer": "0.5.3",
