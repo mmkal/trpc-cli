@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer from '@trpc/server'
-import {Command, Option} from 'commander'
+import {Argument, Command, Option} from 'commander'
 import colors from 'picocolors'
 import {ZodError} from 'zod'
 import * as zodValidationError from 'zod-validation-error'
@@ -40,14 +40,14 @@ export interface TrpcCli {
  */
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
-    const procedureResult = parseProcedureInputs(procedure._def.inputs as unknown[])
-    if (!procedureResult.success) {
-      return [procedurePath, procedureResult.error] as const
+    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[])
+    if (!procedureInputsResult.success) {
+      return [procedurePath, procedureInputsResult.error] as const
     }
 
-    const jsonSchema = procedureResult.value
-    const properties = flattenedProperties(jsonSchema.flagsSchema)
-    const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
+    const procedureInputs = procedureInputsResult.value
+    const properties = flattenedProperties(procedureInputs.flagsSchema)
+    const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.flagsSchema)
 
     // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
     const trpcProcedure = router._def.procedures[procedurePath] as AnyProcedure
@@ -65,7 +65,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
     }
 
-    return [procedurePath, {name: procedurePath, procedure, jsonSchema, properties, incompatiblePairs, type}] as const
+    return [
+      procedurePath,
+      {name: procedurePath, procedure, procedureInputs, properties, incompatiblePairs, type},
+    ] as const
   })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
@@ -105,7 +108,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const configureCommand = (
       command: Command,
       procedurePath: string,
-      {procedure, jsonSchema: parsedProcedure, properties, incompatiblePairs}: (typeof procedureEntries)[0][1],
+      {procedure, procedureInputs, properties, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
       // Configure help settings for this command
       command.showHelpAfterError().showSuggestionAfterError()
@@ -115,12 +118,22 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.description(meta?.description || '')
 
       // Add positional parameters
-      parsedProcedure.parameters.forEach(param => command.argument(param))
+      // procedureInputs.parameters.forEach(param => {
+      //   command.argument(param)
+      // })
+      procedureInputs.positionalParameters.forEach(param => {
+        const argument = new Argument(param.name, param.description + (param.required ? ` (required)` : ' (optional)'))
+        argument.required = param.required
+        argument.variadic = param.array
+        command.addArgument(argument)
+      })
 
       // Add flags
       Object.entries(properties).forEach(([propertyKey, propertyValue]) => {
         let description = getDescription(propertyValue)
-        if ('required' in parsedProcedure.flagsSchema && !parsedProcedure.flagsSchema.required?.includes(propertyKey)) {
+        const isOptional =
+          'required' in procedureInputs.flagsSchema && !procedureInputs.flagsSchema.required?.includes(propertyKey)
+        if (isOptional) {
           description = `${description} (optional)`.trim()
         }
 
@@ -168,6 +181,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }
         }
 
+        if (!isOptional) {
+          option.makeOptionMandatory()
+        }
+
         command.addOption(option)
 
         // Set default value if specified
@@ -178,36 +195,35 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       // Set the action for this command
       command.action(async (...args) => {
+        const options = command.opts()
+
+        if (args.at(-2) !== options) {
+          throw new Error(`Unexpected args format, second last arg is not the options object`, {cause: args})
+        }
+        if (args.at(-1) !== command) {
+          throw new Error(`Unexpected args format, last arg is not the Command instance`, {cause: args})
+        }
+
+        // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
+        const positionalArgs = args.slice(0, -2)
+
+        // Check for incompatible flag pairs
+        const incompatibleMessages = incompatiblePairs
+          .filter(([a, b]) => options[a] !== undefined && options[b] !== undefined)
+          .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
+
+        if (incompatibleMessages?.length) {
+          die(incompatibleMessages.join('\n'), {currentCommand: command})
+          return
+        }
+
+        const input = procedureInputs.getInput({positionalValues: positionalArgs, flags: options}) as never
         try {
-          if (args.at(-1) !== command) {
-            throw new Error(`Unexpected args format, last arg is not the Command instance`, {cause: args})
-          }
-          if (args.at(-2) !== command.opts()) {
-            throw new Error(`Unexpected args format, second last arg is not the options object`, {cause: args})
-          }
-
-          const options = command.opts()
-
-          // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
-          const positionalArgs = args.slice(0, -2)
-
-          // Check for incompatible flag pairs
-          const incompatibleMessages = incompatiblePairs
-            .filter(([a, b]) => options[a] !== undefined && options[b] !== undefined)
-            .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
-
-          if (incompatibleMessages?.length) {
-            die(incompatibleMessages.join('\n'), {currentCommand: command})
-            return
-          }
-
-          const input = parsedProcedure.getInput({_: positionalArgs, flags: options}) as never
-
-          const result: unknown = await caller[procedurePath](input)
+          const result = await caller[procedurePath](input)
           if (result != null) logger.info?.(result)
           _process.exit(0)
         } catch (err) {
-          throw transformError(err, (msg, opts) => die(msg, {...opts, currentCommand: command}))
+          throw transformError(err)
         }
       })
     }
@@ -302,6 +318,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       message: string,
       {cause, help = true, currentCommand = program}: {cause?: unknown; help?: boolean; currentCommand?: Command} = {},
     ) => {
+      console.log('dying', {message, cause, help, currentCommand})
       if (verboseErrors !== undefined && verboseErrors) {
         throw (cause as Error) || new Error(message)
       }
@@ -309,19 +326,24 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       if (help) {
         currentCommand.help()
       }
-      return _process.exit(11)
+      _process.exit(11)
+      throw new Error(`Failed to exit`)
     }
 
     program.exitOverride(error => {
-      console.log('xyz', error)
       _process.exit(error.exitCode)
     })
 
-    console.log('runParams', runParams)
-    if (runParams?.argv) {
-      await program.parseAsync(runParams.argv, {from: 'user'})
-    } else {
-      await program.parseAsync(process.argv)
+    try {
+      if (runParams?.argv) {
+        await program.parseAsync(runParams.argv, {from: 'user'})
+      } else {
+        await program.parseAsync(process.argv)
+      }
+      _process.exit(0)
+    } catch (err) {
+      logger.error?.(colors.red(String(err)))
+      _process.exit(12)
     }
   }
 
@@ -333,13 +355,13 @@ export const trpcCli = createCli
 
 type Fail = (message: string, options?: {cause?: unknown; help?: boolean; currentCommand?: Command}) => never
 
-function transformError(err: unknown, fail: Fail): unknown {
+function transformError(err: unknown) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error('createCallerFactory version mismatch - pass in createCallerFactory explicitly', {cause: err})
   }
   if (looksLikeInstanceof(err, trpcServer.TRPCError)) {
     const cause = err.cause
-    if (looksLikeInstanceof(cause, ZodError)) {
+    if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues
       try {
         cause.issues = cause.issues.map(issue => {
@@ -355,16 +377,13 @@ function transformError(err: unknown, fail: Fail): unknown {
           issueSeparator: '\n  - ',
         })
 
-        return fail(prettyError.message, {cause, help: true})
+        return new Error(prettyError.message) // don't include cause
       } finally {
         cause.issues = originalIssues
       }
     }
     if (err.code === 'INTERNAL_SERVER_ERROR') {
-      throw cause
-    }
-    if (err.code === 'BAD_REQUEST') {
-      return fail(err.message, {cause: err})
+      return cause
     }
   }
   return err

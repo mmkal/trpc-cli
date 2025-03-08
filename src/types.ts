@@ -46,15 +46,22 @@ export interface TrpcCliMeta {
 }
 
 export interface ParsedProcedure {
+  positionalParameters: Array<{
+    name: string
+    description: string
+    type: 'string' | 'number' | 'boolean'
+    required: boolean
+    array: boolean
+  }>
   /** positional parameters */
   parameters: string[]
   /** JSON Schema type describing the flags for the procedure */
   flagsSchema: JsonSchema7Type
   /**
-   * Function for taking cleye parsed argv output and transforming it so it can be passed into the procedure.
+   * Function for taking commander parsed argv output and transforming it so it can be passed into the procedure.
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
-  getInput: (argv: {_: string[]; flags: Record<string, unknown>}) => unknown
+  getInput: (argv: {positionalValues: Array<string | string[]>; flags: Record<string, unknown>}) => unknown
 }
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}

@@ -7,7 +7,15 @@ const t = trpc
 
 const router = trpc.router({
   foo: t.procedure
-    .input(z.array(z.number().int())) //
+    .input(
+      z.tuple([
+        z.array(z.number().int().describe('numbers')), //,
+        z.object({
+          xx: z.string(),
+          yy: z.string(),
+        }),
+      ]),
+    ) //
     .query(({input}) => `list: ${JSON.stringify(input)}`),
   // add: trpc.procedure
   //   .meta({
