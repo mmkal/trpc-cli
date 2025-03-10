@@ -587,7 +587,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:dfcdb95c59b99a4e1a8bd95597ee80de -->
+<!-- hash:97ca7a803daf45d77855458dab42c340 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -597,6 +597,11 @@ const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 const migrations = getMigrations()
 
 const searchProcedure = trpc.procedure
+  .meta({
+    aliases: {
+      flags: {status: 's'},
+    },
+  })
   .input(
     z.object({
       status: z
@@ -668,7 +673,12 @@ const router = trpc.router({
         return ctx.filter(migrations.filter(m => m.name === input.name))
       }),
     byContent: searchProcedure
-      .meta({description: 'Look for migrations by their script content'})
+      .meta({
+        description: 'Look for migrations by their script content',
+        aliases: {
+          flags: {searchTerm: 'q'},
+        },
+      })
       .input(
         z.object({
           searchTerm: z
@@ -686,18 +696,7 @@ const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc10RouterLike
 
-const cli = createCli({
-  router,
-  alias: (fullName, {command}) => {
-    if (fullName === 'status') {
-      return 's'
-    }
-    if (fullName === 'searchTerm' && command.startsWith('search.')) {
-      return 'q'
-    }
-    return undefined
-  },
-})
+const cli = createCli({router})
 
 void cli.run()
 
