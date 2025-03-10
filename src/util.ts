@@ -11,7 +11,7 @@ export const looksLikeInstanceof = <T>(value: unknown, target: new (...args: any
   let current = value?.constructor
   while (current?.name) {
     if (current?.name === target.name) return true
-    current = Object.getPrototypeOf(current) as Function
+    current = Object.getPrototypeOf(current) as typeof current // parent class
   }
   return false
 }
