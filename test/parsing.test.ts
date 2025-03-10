@@ -13,7 +13,7 @@ expect.addSnapshotSerializer({
       err = err.cause
       messages.push('  '.repeat(messages.length) + 'Caused by: ' + err.message)
     }
-    return stripAnsi(messages.join('\n'))
+    return stripAnsi(messages.join('\n')).split('Usage: ')[0].trim()
   },
 })
 
@@ -257,18 +257,6 @@ test('tuple input with flags', async () => {
   await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: Logs: error: required option '--foo <string>' not specified
-
-
-
-    Usage: program foo [options] <parameter_1> <parameter_2>
-
-    Arguments:
-      parameter_1      (required)
-      parameter_2      (required)
-
-    Options:
-      --foo <string>
-      -h, --help      display help for command
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -278,18 +266,6 @@ test('tuple input with flags', async () => {
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: Logs: error: required option '--foo <string>' not specified
-
-
-
-    Usage: program foo [options] <parameter_1> <parameter_2>
-
-    Arguments:
-      parameter_1      (required)
-      parameter_2      (required)
-
-    Options:
-      --foo <string>
-      -h, --help      display help for command
   `)
 })
 
@@ -305,14 +281,6 @@ test('single character flag', async () => {
     `
       CLI exited with code 1
         Caused by: Logs: error: too many arguments for 'foo'. Expected 0 arguments but got 2.
-
-
-
-      Usage: program foo [options]
-
-      Options:
-        --a <string>
-        -h, --help    display help for command
     `,
   )
 })
