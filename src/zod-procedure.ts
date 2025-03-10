@@ -93,7 +93,7 @@ function parseLiteralInput(schema: z.ZodType<string> | z.ZodType<number>): Resul
       ],
       parameters: [schema.isOptional() ? `[${name}]` : `<${name}>`],
       flagsSchema: {},
-      getInput: argv => convertPositional(schema, argv.positionalValues[0]),
+      getInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
     },
   }
 }

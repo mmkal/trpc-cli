@@ -323,28 +323,28 @@ test('fs copy', async () => {
   expect(await tsx('fs', ['copy', 'one'])).toMatchInlineSnapshot(`"Expected string at position 1, got undefined"`)
   expect(await tsx('fs', ['copy', 'one', 'uno'])).toMatchInlineSnapshot(
     `
-    "{
-      "source": "one",
-      "destination": "uno",
-      "options": {
-        "force": false
-      }
-    }"
-  `,
+      "{
+        "source": "one",
+        "destination": "uno",
+        "options": {
+          "force": false
+        }
+      }"
+    `,
   )
   expect(await tsx('fs', ['copy', 'one', '--force'])).toMatchInlineSnapshot(
     `"Expected string at position 1, got undefined"`,
   )
   expect(await tsx('fs', ['copy', 'one', 'uno', '--force'])).toMatchInlineSnapshot(
     `
-    "{
-      "source": "one",
-      "destination": "uno",
-      "options": {
-        "force": true
-      }
-    }"
-  `,
+      "{
+        "source": "one",
+        "destination": "uno",
+        "options": {
+          "force": true
+        }
+      }"
+    `,
   )
 
   // invalid enum value:

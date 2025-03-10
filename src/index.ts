@@ -111,14 +111,15 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       }
     > = {}
 
-    // Function to configure a command with its options and help settings
+    const _process = runParams?.process || process
     const configureCommand = (
       command: Command,
       procedurePath: string,
       {procedure, procedureInputs, flagJsonSchemaProperties, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
       command.exitOverride(ec => {
-        runParams?.process?.exit(ec.exitCode)
+        _process.exit(ec.exitCode)
+        throw new FailedToExitError(`Command ${command.name()} exitOverride`, {cause: ec})
       })
       command.configureOutput({
         writeErr: str => {
@@ -351,8 +352,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = buildProgram(runParams)
     program.exitOverride(exit => {
-      // logger.error?.('Root command exitOverride', {exit})
       _process.exit(exit.exitCode)
+      throw new FailedToExitError('Root command exitOverride', {cause: exit})
     })
     program.configureOutput({
       writeErr: str => logger.error?.(str),
@@ -362,9 +363,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const message = looksLikeInstanceof(err, Error) ? err.message : `Non-error of type ${typeof err} thrown: ${err}`
       logger.error?.(message)
       _process.exit(1)
-      const noExitMessage =
-        'An error was thrown but the process did not exit. This may be because a custom `process` parameter was used. The Previous error is in the `cause`.'
-      throw new Error(noExitMessage, {cause: err})
+      throw new FailedToExitError(`Program parse catch block`, {cause: err})
     })
     _process.exit(0)
   }
@@ -375,6 +374,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {
   const meta: Partial<TrpcCliMeta> | undefined = procedure._def.meta
   return meta?.cliMeta || meta || {}
+}
+
+class FailedToExitError extends Error {
+  constructor(message: string, {cause}: {cause?: unknown}) {
+    super(
+      message +
+        '. An error was thrown but the process did not exit. This may be because a custom `process` parameter was used. The Previous error is in the `cause`.',
+      {cause},
+    )
+  }
 }
 
 /** @deprecated renamed to `createCli` */
