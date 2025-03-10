@@ -815,8 +815,6 @@ const runCli = async (argv: string[]) => {
 }
 ```
 
->Note that even if you do this, help text is handled by [cleye](https://npmjs.com/package/cleye) which prints directly to stdout and exits the process. In a future version this will be solved by either exposing some `cleye` configuration to the `run` method, or controlling the help text rendering directly.
-
 ## Out of scope
 
 - No stdin reading - I'd recommend using [`@inquirer/prompts`](https://npmjs.com/package/@inquirer/prompts) which is type safe and easy to use

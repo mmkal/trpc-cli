@@ -7,9 +7,9 @@ export type TrpcCliParams<R extends AnyRouter> = {
   router: R
   /** Context to be supplied when invoking the router. */
   context?: inferRouterContext<R>
-  /** @deprecated use `aliases` on each procedure `meta` instead */
+  /** @deprecated this is actually **removed** not deprecated; use `aliases` on each procedure `meta` instead */
   alias?: never // ((fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined)
-  /** @deprecated set `default: true` on the procedure `meta` instead */
+  /** @deprecated this is actually **removed** not deprecated; set `default: true` on the procedure `meta` instead */
   _default?: never // {procedure: Extract<keyof R['_def']['procedures'], string>}
 
   /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v11. */
