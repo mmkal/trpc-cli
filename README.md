@@ -250,7 +250,7 @@ const cli = createCli({router})
 cli.run()
 ```
 
-The above can be invoked with either `yarn` or `yarn install`. In future, you'll be able to set `default: true` on subcommands, but for now there is a check to ensure only one command is set as the default.
+The above can be invoked with either `yarn` or `yarn install`. You can also set `default: true` on subcommands, which makes them the default for their parent.
 
 ### Ignored procedures
 
@@ -289,7 +289,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L54)
+#### [createCli](./src/index.ts#L52)
 
 Run a trpc router as a CLI.
 
@@ -299,8 +299,6 @@ Run a trpc router as a CLI.
 |-------|-----------------------------------------------------------------------------------------|
 |router |A trpc router                                                                            |
 |context|The context to use when calling the procedures - needed if your router requires a context|
-|alias  |A function that can be used to provide aliases for flags.                                |
-|default|A procedure to use as the default command when the user doesn't specify one.             |
 
 ##### Returns
 

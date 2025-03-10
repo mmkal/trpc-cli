@@ -47,8 +47,6 @@ export interface TrpcCli {
  *
  * @param router A trpc router
  * @param context The context to use when calling the procedures - needed if your router requires a context
- * @param alias A function that can be used to provide aliases for flags.
- * @param default A procedure to use as the default command when the user doesn't specify one.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
