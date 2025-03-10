@@ -88,17 +88,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     return typeof v === 'string' ? [] : [[k, v] as const]
   })
 
-  const procedureMap = Object.fromEntries(procedureEntries)
-
   const ignoredProcedures = procedures.flatMap(([k, v]) => (typeof v === 'string' ? [{procedure: k, reason: v}] : []))
 
   function buildProgram(runParams?: {logger?: Logger; process?: {exit: (code: number) => never}}) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    const verboseErrors: boolean = false
-
     const program = new Command()
-    program.showHelpAfterError()
-    program.option('--verbose-errors', 'Throw raw errors (by default errors are summarised)')
     program.showHelpAfterError()
     program.showSuggestionAfterError()
 
@@ -158,9 +152,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
 
         let flags = `--${propertyKey}`
-        const alias =
-          meta.aliases?.flags?.[propertyKey] ??
-          params.alias?.(propertyKey, {command: procedurePath, flags: flagJsonSchemaProperties})
+        const alias = meta.aliases?.flags?.[propertyKey]
         if (alias && alias.length !== 1) {
           throw new Error(`Flag alias must be a single character, got ${alias} for flag ${propertyKey}`)
         }
@@ -359,7 +351,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = buildProgram(runParams)
     program.exitOverride(exit => {
-      logger.error?.('Root command exitOverride', {exit})
+      // logger.error?.('Root command exitOverride', {exit})
       _process.exit(exit.exitCode)
     })
     program.configureOutput({
@@ -412,7 +404,7 @@ function transformError(err: unknown, command: Command) {
           issueSeparator: '\n  - ',
         })
 
-        return new ValidationError(validationError.message) // don't include cause
+        return new ValidationError(validationError.message + '\n\n' + command.helpInformation()) // don't include cause
       } finally {
         cause.issues = originalIssues
       }

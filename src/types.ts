@@ -7,23 +7,10 @@ export type TrpcCliParams<R extends AnyRouter> = {
   router: R
   /** Context to be supplied when invoking the router. */
   context?: inferRouterContext<R>
-  /**
-   * @deprecated use `aliases` on each procedure `meta` instead
-   * A function that will be called for every flag, for every command. Used to provide single-character aliases for flags.
-   * Return a single-character string to alias a flag to that character.
-   * @param fullName The full-length name of the flag
-   * @param meta Metadata about the command and flags. Includes the command name and all the other flags for the command (so you can avoid clashes you might get with `return fullName[0]`).
-   * @returns A single-letter string to alias the flag to that character, or `void`/`undefined` to not alias the flag.
-   */
-  alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined
-  /**
-   * @deprecated
-   * The name of the "default" command - this procedure will be run if no command is specified. Default value is `default`, if such a procedure exists. Otherwise there is no default procedure.
-   * Set to `false` to disable the default command, even when there's a procedure named `'default'`.
-   */
-  _default?: {
-    procedure: Extract<keyof R['_def']['procedures'], string>
-  }
+  /** @deprecated use `aliases` on each procedure `meta` instead */
+  alias?: never // ((fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined)
+  /** @deprecated set `default: true` on the procedure `meta` instead */
+  _default?: never // {procedure: Extract<keyof R['_def']['procedures'], string>}
 
   /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v11. */
   createCallerFactory?: CreateCallerFactoryLike
