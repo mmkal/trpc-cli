@@ -8,6 +8,7 @@ export type TrpcCliParams<R extends AnyRouter> = {
   /** Context to be supplied when invoking the router. */
   context?: inferRouterContext<R>
   /**
+   * @deprecated use `aliases` on each procedure `meta` instead
    * A function that will be called for every flag, for every command. Used to provide single-character aliases for flags.
    * Return a single-character string to alias a flag to that character.
    * @param fullName The full-length name of the flag
@@ -43,8 +44,12 @@ export interface TrpcCliMeta {
   examples?: string | string[]
   /** If true, this command will be run if no command is specified. */
   default?: boolean
-  /** Aliases for the command. Note: take care to avoid conflicts with other commands. */
-  aliases?: string[]
+  aliases?: {
+    /** Aliases for the command. Note: take care to avoid conflicts with other commands. */
+    command?: string[]
+    /** Aliases for the flags. Note: take care to avoid conflicts with other flags. An error will be thrown if an alias is defined for a non-existent flag. */
+    flags?: Record<string, string>
+  }
   /** Sub-property for the CLI meta. If present, will take precedence over the top-level meta, to avoid conflicts with other tools. */
   cliMeta?: TrpcCliMeta
 }

@@ -276,19 +276,14 @@ test('single character flag', async () => {
       .query(({input}) => JSON.stringify(input || null)),
   })
 
-  // todo: support this somehow, not sure why this restriction exists. it comes from type-flag.
-  await expect(run(router, ['foo', 'hello', '123', '--a', 'b'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: Logs: error: too many arguments for 'foo'. Expected 0 arguments but got 2.
-    `,
-  )
+  await expect(run(router, ['foo', '--a', 'b'])).resolves.toEqual(`{"a":"b"}`)
+  await expect(run(router, ['foo', '--a', 'b'])).resolves.toEqual(`{"a":"b"}`)
 })
 
 test('custom default procedure', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({default: true, aliases: ['i']})
+      .meta({default: true})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -300,9 +295,64 @@ test('custom default procedure', async () => {
 
   const yarnInstallOutput = await runWith(params, ['install', '--frozenLockfile'])
   expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+})
+
+test('command alias', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {command: ['i']}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
   const yarnIOutput = await runWith(params, ['i', '--frozenLockfile'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+})
+
+test('flag alias', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {flags: {frozenLockfile: 'x'}}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnIOutput = await runWith(params, ['install', '-x'])
+  expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+})
+
+test('flag alias typo', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {flags: {frooozenLockfile: 'x'}}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
+    `Invalid flag aliases: frooozenLockfile: x`,
+  )
+})
+
+test('flag alias too long', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
+    `Flag alias must be a single character, got xx for flag frozenLockfile`,
+  )
 })
 
 test('validation', async () => {

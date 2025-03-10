@@ -135,7 +135,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       const meta = getMeta(procedure)
 
-      meta?.aliases?.forEach(alias => {
+      meta?.aliases?.command?.forEach(alias => {
         command.alias(alias)
       })
 
@@ -148,7 +148,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         command.addArgument(argument)
       })
 
-      // Add flags
+      const unusedFlagAliases: Record<string, string> = {...meta.aliases?.flags}
       Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
         let description = getDescription(propertyValue)
         const isRequired =
@@ -158,9 +158,15 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
 
         let flags = `--${propertyKey}`
-        const alias = params.alias?.(propertyKey, {command: procedurePath, flags: flagJsonSchemaProperties})
+        const alias =
+          meta.aliases?.flags?.[propertyKey] ??
+          params.alias?.(propertyKey, {command: procedurePath, flags: flagJsonSchemaProperties})
+        if (alias && alias.length !== 1) {
+          throw new Error(`Flag alias must be a single character, got ${alias} for flag ${propertyKey}`)
+        }
         if (alias) {
           flags = `-${alias}, ${flags}`
+          delete unusedFlagAliases[propertyKey]
         }
 
         const propertyType = 'type' in propertyValue ? propertyValue.type : null
@@ -217,6 +223,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           command.setOptionValueWithSource(propertyKey, propertyValue.default, 'default')
         }
       })
+
+      const invalidFlagAliases = Object.entries(unusedFlagAliases).map(([flag, alias]) => `${flag}: ${alias}`)
+      if (invalidFlagAliases.length) {
+        throw new Error(`Invalid flag aliases: ${invalidFlagAliases.join(', ')}`)
+      }
 
       // Set the action for this command
       command.action(async (...args) => {
