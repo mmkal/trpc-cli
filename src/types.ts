@@ -43,6 +43,10 @@ export interface TrpcCliMeta {
   examples?: string | string[]
   /** If true, this command will be run if no command is specified. */
   default?: boolean
+  /** Aliases for the command. Note: take care to avoid conflicts with other commands. */
+  aliases?: string[]
+  /** Sub-property for the CLI meta. If present, will take precedence over the top-level meta, to avoid conflicts with other tools. */
+  cliMeta?: TrpcCliMeta
 }
 
 export interface ParsedProcedure {

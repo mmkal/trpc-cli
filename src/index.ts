@@ -24,8 +24,21 @@ export * as trpcServer from '@trpc/server'
 
 export {AnyRouter, AnyProcedure} from './trpc-compat'
 
+type TrpcCliRunParams = {
+  argv?: string[]
+  logger?: Logger
+  process?: {
+    exit: (code: number) => never
+  }
+}
+
+type CommanderProgramLike = {
+  parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
+}
+
 export interface TrpcCli {
-  run: (params?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) => Promise<void>
+  run: (params?: TrpcCliRunParams) => Promise<void>
+  buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
   ignoredProcedures: {procedure: string; reason: string}[]
 }
 
@@ -46,7 +59,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     }
 
     const procedureInputs = procedureInputsResult.value
-    const properties = flattenedProperties(procedureInputs.flagsSchema)
+    const flagJsonSchemaProperties = flattenedProperties(procedureInputs.flagsSchema)
     const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.flagsSchema)
 
     // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
@@ -67,7 +80,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     return [
       procedurePath,
-      {name: procedurePath, procedure, procedureInputs, properties, incompatiblePairs, type},
+      {name: procedurePath, procedure, procedureInputs, flagJsonSchemaProperties, incompatiblePairs, type},
     ] as const
   })
 
@@ -79,12 +92,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
   const ignoredProcedures = procedures.flatMap(([k, v]) => (typeof v === 'string' ? [{procedure: k, reason: v}] : []))
 
-  async function run(runParams?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) {
+  function buildProgram(runParams?: {logger?: Logger; process?: {exit: (code: number) => never}}) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    const _process = runParams?.process || process
     const verboseErrors: boolean = false
 
     const program = new Command()
+    program.showHelpAfterError()
     program.option('--verbose-errors', 'Throw raw errors (by default errors are summarised)')
     program.showHelpAfterError()
     program.showSuggestionAfterError()
@@ -108,19 +121,26 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const configureCommand = (
       command: Command,
       procedurePath: string,
-      {procedure, procedureInputs, properties, incompatiblePairs}: (typeof procedureEntries)[0][1],
+      {procedure, procedureInputs, flagJsonSchemaProperties, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
-      // Configure help settings for this command
-      command.showHelpAfterError().showSuggestionAfterError()
+      command.exitOverride(ec => {
+        runParams?.process?.exit(ec.exitCode)
+      })
+      command.configureOutput({
+        writeErr: str => {
+          logger.error?.(str)
+        },
+      })
+      command.showHelpAfterError()
 
-      const meta = procedure._def.meta as Partial<TrpcCliMeta> | undefined
+      const meta = getMeta(procedure)
+
+      meta?.aliases?.forEach(alias => {
+        command.alias(alias)
+      })
 
       command.description(meta?.description || '')
 
-      // Add positional parameters
-      // procedureInputs.parameters.forEach(param => {
-      //   command.argument(param)
-      // })
       procedureInputs.positionalParameters.forEach(param => {
         const argument = new Argument(param.name, param.description + (param.required ? ` (required)` : ' (optional)'))
         argument.required = param.required
@@ -129,16 +149,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       })
 
       // Add flags
-      Object.entries(properties).forEach(([propertyKey, propertyValue]) => {
+      Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
         let description = getDescription(propertyValue)
-        const isOptional =
-          'required' in procedureInputs.flagsSchema && !procedureInputs.flagsSchema.required?.includes(propertyKey)
-        if (isOptional) {
+        const isRequired =
+          'required' in procedureInputs.flagsSchema && procedureInputs.flagsSchema.required?.includes(propertyKey)
+        if (!isRequired) {
           description = `${description} (optional)`.trim()
         }
 
         let flags = `--${propertyKey}`
-        const alias = params.alias?.(propertyKey, {command: procedurePath, flags: properties})
+        const alias = params.alias?.(propertyKey, {command: procedurePath, flags: flagJsonSchemaProperties})
         if (alias) {
           flags = `-${alias}, ${flags}`
         }
@@ -147,6 +167,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         let option: Option
 
         switch (propertyType) {
+          case 'string': {
+            option = new Option(`${flags} <string>`, description)
+            break
+          }
           case 'boolean': {
             // For boolean flags, no value required
             option = new Option(flags, description)
@@ -155,33 +179,34 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           case 'number':
           case 'integer': {
             // For number flags, use a custom parser
-            option = new Option(`${flags} <value>`, description)
-            option.argParser(Number)
+            option = new Option(`${flags} <number>`, description)
+            option.argParser(val => {
+              const number = Number(val)
+              if (Number.isNaN(number)) return val
+
+              return number
+            })
             break
           }
           case 'array': {
             // For array flags, collect values
             // todo: check this is right
-            option = new Option(`${flags} <value>`, description)
+            option = new Option(`${flags} <values...>`, description)
             option.argParser((value: string, previous: string[] = []) => {
               previous.push(value)
               return previous
             })
             break
           }
-          case 'object': {
-            // For object flags, parse as JSON
+          default: {
+            // For any other flags, parse as JSON
             option = new Option(`${flags} <json>`, description)
             option.argParser((value: string) => JSON.parse(value) as {})
             break
           }
-          default: {
-            // Default case (string or any other type)
-            option = new Option(`${flags} <value>`, description)
-          }
         }
 
-        if (!isOptional) {
+        if (isRequired) {
           option.makeOptionMandatory()
         }
 
@@ -198,9 +223,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const options = command.opts()
 
         if (args.at(-2) !== options) {
+          // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break
           throw new Error(`Unexpected args format, second last arg is not the options object`, {cause: args})
         }
         if (args.at(-1) !== command) {
+          // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break
           throw new Error(`Unexpected args format, last arg is not the Command instance`, {cause: args})
         }
 
@@ -213,18 +240,15 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
 
         if (incompatibleMessages?.length) {
-          die(incompatibleMessages.join('\n'), {currentCommand: command})
-          return
+          command.showHelpAfterError()
+          throw new Error(incompatibleMessages.join('\n'))
         }
 
         const input = procedureInputs.getInput({positionalValues: positionalArgs, flags: options}) as never
-        try {
-          const result = await caller[procedurePath](input)
-          if (result != null) logger.info?.(result)
-          _process.exit(0)
-        } catch (err) {
-          throw transformError(err)
-        }
+        const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
+          throw transformError(err, command)
+        })
+        if (result != null) logger.info?.(result)
       })
     }
 
@@ -243,9 +267,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         if (!commandTree[currentPath]) {
           const parentCommand = commandTree[parentPath]
           const newCommand = new Command(segment)
-            // Configure help settings for parent commands too
-            .showHelpAfterError()
-            .showSuggestionAfterError()
+          newCommand.showHelpAfterError()
           parentCommand.addCommand(newCommand)
           commandTree[currentPath] = newCommand
         }
@@ -261,13 +283,17 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       parentCommand.addCommand(leafCommand)
 
       // Check if this command should be the default for its parent
-      const meta = commandConfig.procedure._def.meta as Partial<TrpcCliMeta> | undefined
-      if (meta?.default === true) {
+      const meta = getMeta(commandConfig.procedure)
+      if (meta.default === true) {
+        // this is the default command for the parent, so just configure the parent command to do the same action
         configureCommand(parentCommand, procedurePath, commandConfig)
+
+        // ancestors need to support positional options to pass through the positional args
         for (let ancestor = parentCommand.parent, i = 0; ancestor && i < 10; ancestor = ancestor.parent, i++) {
           ancestor.enablePositionalOptions()
         }
         parentCommand.passThroughOptions()
+
         defaultCommands[parentPath] = {
           procedurePath: procedurePath,
           config: commandConfig,
@@ -314,48 +340,46 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     const caller = createCallerFactory(router)(params.context)
 
-    const die: Fail = (
-      message: string,
-      {cause, help = true, currentCommand = program}: {cause?: unknown; help?: boolean; currentCommand?: Command} = {},
-    ) => {
-      console.log('dying', {message, cause, help, currentCommand})
-      if (verboseErrors !== undefined && verboseErrors) {
-        throw (cause as Error) || new Error(message)
-      }
-      logger.error?.(colors.red(message))
-      if (help) {
-        currentCommand.help()
-      }
-      _process.exit(11)
-      throw new Error(`Failed to exit`)
-    }
-
-    program.exitOverride(error => {
-      _process.exit(error.exitCode)
-    })
-
-    try {
-      if (runParams?.argv) {
-        await program.parseAsync(runParams.argv, {from: 'user'})
-      } else {
-        await program.parseAsync(process.argv)
-      }
-      _process.exit(0)
-    } catch (err) {
-      logger.error?.(colors.red(String(err)))
-      _process.exit(12)
-    }
+    return program
   }
 
-  return {run, ignoredProcedures}
+  async function run(runParams?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) {
+    const _process = runParams?.process || process
+    const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
+    const program = buildProgram(runParams)
+    program.exitOverride(exit => {
+      logger.error?.('Root command exitOverride', {exit})
+      _process.exit(exit.exitCode)
+    })
+    program.configureOutput({
+      writeErr: str => {
+        logger.error?.('writeErr', str)
+      },
+    })
+    const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
+    await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {
+      const message = looksLikeInstanceof(err, Error) ? err.message : `Non-error of type ${typeof err} thrown: ${err}`
+      logger.error?.(message)
+      _process.exit(1)
+      const noExitMessage =
+        'An error was thrown but the process did not exit. This may be because a custom `process` parameter was used. The Previous error is in the `cause`.'
+      throw new Error(noExitMessage, {cause: err})
+    })
+    _process.exit(0)
+  }
+
+  return {run, ignoredProcedures, buildProgram}
+}
+
+function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {
+  const meta: Partial<TrpcCliMeta> | undefined = procedure._def.meta
+  return meta?.cliMeta || meta || {}
 }
 
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-type Fail = (message: string, options?: {cause?: unknown; help?: boolean; currentCommand?: Command}) => never
-
-function transformError(err: unknown) {
+function transformError(err: unknown, command: Command) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error('createCallerFactory version mismatch - pass in createCallerFactory explicitly', {cause: err})
   }
@@ -372,12 +396,12 @@ function transformError(err: unknown) {
           }
         })
 
-        const prettyError = zodValidationError.fromError(cause, {
+        const validationError = zodValidationError.fromError(cause, {
           prefixSeparator: '\n  - ',
           issueSeparator: '\n  - ',
         })
 
-        return new Error(prettyError.message) // don't include cause
+        return new ValidationError(validationError.message) // don't include cause
       } finally {
         cause.issues = originalIssues
       }
@@ -388,3 +412,5 @@ function transformError(err: unknown) {
   }
   return err
 }
+
+class ValidationError extends Error {}

@@ -42,7 +42,7 @@ const runWith = <R extends Router<any>>(params: TrpcCliParams<R>, argv: string[]
                 }),
               )
             }
-            return code as never
+            throw new Error('Throwing to simulate process.exit')
           },
         },
       })
@@ -256,8 +256,19 @@ test('tuple input with flags', async () => {
   )
   await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
-      - Required at "[2].foo"
+      Caused by: Logs: error: required option '--foo <string>' not specified
+
+
+
+    Usage: program foo [options] <parameter_1> <parameter_2>
+
+    Arguments:
+      parameter_1      (required)
+      parameter_2      (required)
+
+    Options:
+      --foo <string>
+      -h, --help      display help for command
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -266,9 +277,19 @@ test('tuple input with flags', async () => {
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
-      - Expected number, received string at index 1
-      - Required at "[2].foo"
+      Caused by: Logs: error: required option '--foo <string>' not specified
+
+
+
+    Usage: program foo [options] <parameter_1> <parameter_2>
+
+    Arguments:
+      parameter_1      (required)
+      parameter_2      (required)
+
+    Options:
+      --foo <string>
+      -h, --help      display help for command
   `)
 })
 
@@ -281,25 +302,39 @@ test('single character flag', async () => {
 
   // todo: support this somehow, not sure why this restriction exists. it comes from type-flag.
   await expect(run(router, ['foo', 'hello', '123', '--a', 'b'])).rejects.toMatchInlineSnapshot(
-    `Flag name "a" must be longer than a character`,
+    `
+      CLI exited with code 1
+        Caused by: Logs: error: too many arguments for 'foo'. Expected 0 arguments but got 2.
+
+
+
+      Usage: program foo [options]
+
+      Options:
+        --a <string>
+        -h, --help    display help for command
+    `,
   )
 })
 
 test('custom default procedure', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({default: true})
+      .meta({default: true, aliases: ['i']})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
-  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
+  const yarnOutput = await runWith(params, ['--frozenLockfile'])
   expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 
-  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
+  const yarnInstallOutput = await runWith(params, ['install', '--frozenLockfile'])
   expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+
+  const yarnIOutput = await runWith(params, ['i', '--frozenLockfile'])
+  expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('validation', async () => {

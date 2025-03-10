@@ -9,10 +9,10 @@ const router = trpc.router({
   foo: t.procedure
     .input(
       z.tuple([
-        z.array(z.number().int().describe('numbers')), //,
+        z.array(z.number().int().describe('numbers')).min(3), //,
         z.object({
           xx: z.string(),
-          yy: z.string(),
+          yy: z.number().int(),
         }),
       ]),
     ) //

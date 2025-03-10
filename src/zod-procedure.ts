@@ -183,7 +183,7 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
     }
   }
 
-  const flagsSchema = tuple.items.at(flagsSchemaIndex)
+  const flagsSchema = flagsSchemaIndex === -1 ? null : tuple.items[flagsSchemaIndex]
 
   if (flagsSchema && !acceptsObject(flagsSchema)) {
     return {
@@ -271,6 +271,7 @@ const convertPositional = (schema: z.ZodType, value: string) => {
     return value // we converted successfully, but the type is wrong. However strings are also accepted, so return the string original value, it might be ok.
   }
 
+  console.log('preprocessed', preprocessed)
   // we converted successfully, but the type is wrong. However, strings are also not accepted, so don't return the string original value. Return the preprocessed value even though it will fail - it's probably a number failing because of a `.refine(...)` or `.int()` or `.positive()` or `.min(1)` etc. - so better to have a "must be greater than zero" error than "expected number, got string"
   return preprocessed
 }
