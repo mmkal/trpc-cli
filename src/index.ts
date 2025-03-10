@@ -355,9 +355,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       _process.exit(exit.exitCode)
     })
     program.configureOutput({
-      writeErr: str => {
-        logger.error?.('writeErr', str)
-      },
+      writeErr: str => logger.error?.(str),
     })
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
     await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {

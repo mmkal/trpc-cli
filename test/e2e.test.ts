@@ -131,12 +131,12 @@ test('cli divide failure', async () => {
 test('cli non-existent command', async () => {
   const output = await tsx('calculator', ['multiploo', '2', '3'])
   expect(output).toMatchInlineSnapshot(`
-    "writeErr error: unknown command 'multiploo'
+    "error: unknown command 'multiploo'
     (Did you mean multiply?)
 
-    writeErr 
 
-    writeErr Usage: calculator [options] [command]
+
+    Usage: calculator [options] [command]
 
     Options:
       -h, --help                            display help for command
@@ -165,7 +165,7 @@ test('cli non-existent command', async () => {
 test('cli no command', async () => {
   const output = await tsx('calculator', [])
   expect(output).toMatchInlineSnapshot(`
-    "writeErr Usage: calculator [options] [command]
+    "Usage: calculator [options] [command]
 
     Options:
       -h, --help                            display help for command
@@ -263,11 +263,11 @@ test('migrations search.byName', async () => {
 test('migrations search.byContent', async () => {
   const output = await tsx('migrations', ['search.byContent', '--searchTerm', 'create table'])
   expect(output).toMatchInlineSnapshot(`
-    "writeErr error: unknown command 'search.byContent'
+    "error: unknown command 'search.byContent'
 
-    writeErr 
 
-    writeErr Usage: migrations [options] [command]
+
+    Usage: migrations [options] [command]
 
     Options:
       -h, --help        display help for command
