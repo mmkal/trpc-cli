@@ -289,7 +289,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L41)
+#### [createCli](./src/index.ts#L54)
 
 Run a trpc router as a CLI.
 
@@ -374,9 +374,7 @@ Run `node path/to/cli --help` for formatted help text for the `sum` and `divide`
 Usage: calculator [options] [command]
 
 Options:
-  --verbose-errors                      Throw raw errors (by default errors are
-                                        summarised)
-  -h, --help                            Show help
+  -h, --help                            display help for command
 
 Commands:
   add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
@@ -409,8 +407,12 @@ Usage: calculator add [options] <parameter_1> <parameter_2>
 Add two numbers. Use this if you and your friend both have apples, and you want
 to know how many apples there are in total.
 
+Arguments:
+  parameter_1   (required)
+  parameter_2   (required)
+
 Options:
-  -h, --help  display help for command
+  -h, --help   display help for command
 ```
 <!-- codegen:end -->
 
@@ -430,15 +432,21 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
+Validation error
+  - Expected number, received string at index 1
+
 Usage: calculator add [options] <parameter_1> <parameter_2>
 
 Add two numbers. Use this if you and your friend both have apples, and you want
 to know how many apples there are in total.
 
+Arguments:
+  parameter_1   (required)
+  parameter_2   (required)
+
 Options:
-  -h, --help  display help for command
-Validation error
-  - Expected number, received string at index 1
+  -h, --help   display help for command
+
 ```
 <!-- codegen:end -->
 
@@ -730,8 +738,7 @@ Here's how the CLI will work:
 Usage: migrations [options] [command]
 
 Options:
-  --verbose-errors  Throw raw errors (by default errors are summarised)
-  -h, --help        Show help
+  -h, --help        display help for command
 
 Commands:
   up [options]      Apply migrations. By default all pending migrations will be
@@ -750,8 +757,7 @@ Commands:
 Usage: migrations [options] [command]
 
 Options:
-  --verbose-errors  Throw raw errors (by default errors are summarised)
-  -h, --help        Show help
+  -h, --help        display help for command
 
 Commands:
   up [options]      Apply migrations. By default all pending migrations will be
@@ -770,8 +776,7 @@ Commands:
 Usage: migrations [options] [command]
 
 Options:
-  --verbose-errors  Throw raw errors (by default errors are summarised)
-  -h, --help        Show help
+  -h, --help        display help for command
 
 Commands:
   up [options]      Apply migrations. By default all pending migrations will be
