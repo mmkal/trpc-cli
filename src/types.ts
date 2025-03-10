@@ -17,7 +17,6 @@ export type TrpcCliParams<R extends AnyRouter> = {
 }
 /**
  * Optional interface for describing procedures via meta - if your router conforms to this meta shape, it will contribute to the CLI help text.
- * Based on @see `import('cleye').HelpOptions`
  */
 
 export interface TrpcCliMeta {

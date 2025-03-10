@@ -280,7 +280,7 @@ const parameterName = (s: z.ZodType, position: number): string => {
     const elementName = parameterName(s.element, position)
     return `[${elementName.slice(1, -1)}...]`
   }
-  // cleye requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
+  // commander requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
   const name = s.description || `parameter_${position}`.replaceAll(/\W+/g, ' ').trim()
   return s.isOptional() ? `[${name}]` : `<${name}>`
 }

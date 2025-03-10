@@ -824,7 +824,7 @@ const runCli = async (argv: string[]) => {
 
 ### Implementation and dependencies
 
-- [cleye](https://npmjs.com/package/cleye) for parsing arguments before passing to trpc
+- [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
 - [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod schemas to make them easier to recurse and format help text from
 - [zod-validation-error](https://npmjs.com/package/zod-validation-error) to make bad inputs have readable error messages
 

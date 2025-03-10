@@ -128,6 +128,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       const meta = getMeta(procedure)
 
+      if (meta.usage) command.usage([meta.usage].flat().join('\n'))
+      if (meta.examples) command.addHelpText('after', `\nExamples:\n${[meta.examples].flat().join('\n')}`)
+
       meta?.aliases?.command?.forEach(alias => {
         command.alias(alias)
       })
