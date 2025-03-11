@@ -50,7 +50,10 @@ test('can create cli from trpc v10', async () => {
 
   const log = vi.fn()
   const exit = vi.fn()
-  await cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}})
+  await expect(
+    cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}}),
+  ).rejects.toThrowError(/Program exit/)
+
   expect(exit).toHaveBeenCalledWith(0)
   expect(log).toHaveBeenCalledWith(3)
 })
@@ -109,7 +112,9 @@ test('can create cli from trpc v11', async () => {
 
   const log = vi.fn()
   const exit = vi.fn()
-  await cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}})
+  await expect(
+    cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}}),
+  ).rejects.toThrowError(/Program exit/)
   expect(exit).toHaveBeenCalledWith(0)
   expect(log).toHaveBeenCalledWith(3)
 })

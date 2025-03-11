@@ -43,7 +43,7 @@ test('override of process.exit and pass in bad option', async () => {
     .catch(err => err)
 
   expect(result).toMatchInlineSnapshot(
-    `[Error: Program parse catch block. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The Previous error is in the \`cause\`.]`,
+    `[Error: Program parse catch block. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
   expect(result.cause).toMatchInlineSnapshot(`
     [Error: Validation error
@@ -75,10 +75,10 @@ test('override of process.exit with parse error', async () => {
     .catch(err => err)
 
   expect(result).toMatchInlineSnapshot(
-    `[Error: Program parse catch block. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The Previous error is in the \`cause\`.]`,
+    `[Error: Program parse catch block. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
   expect(result.cause).toMatchInlineSnapshot(
-    `[Error: Root command exitOverride. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The Previous error is in the \`cause\`.]`,
+    `[Error: Root command exitOverride. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
   expect(result.cause.cause).toMatchInlineSnapshot(`[CommanderError: error: unknown command 'footypo']`)
 })

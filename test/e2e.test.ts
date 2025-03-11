@@ -72,7 +72,10 @@ test('cli help divide', async () => {
       denominator  denominator (required)
 
     Options:
-      -h, --help   display help for command"
+      -h, --help   display help for command
+
+    Examples:
+    divide --left 8 --right 4"
   `)
 })
 
