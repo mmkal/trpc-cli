@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer from '@trpc/server'
 import {Argument, Command, Option} from 'commander'
-import colors from 'picocolors'
 import {ZodError} from 'zod'
 import * as zodValidationError from 'zod-validation-error'
+import {addCompletions} from './completions'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
@@ -169,6 +169,14 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         switch (propertyType) {
           case 'string': {
             option = new Option(`${flags} <string>`, description)
+            if ('enum' in propertyValue) {
+              option = option.choices(
+                propertyValue.enum
+                  .flat()
+                  .map(s => s?.toString() || '')
+                  .filter(Boolean),
+              )
+            }
             break
           }
           case 'boolean': {
@@ -307,6 +315,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       }
     })
 
+    addCompletions(program)
+
     // After all commands are added, generate descriptions for parent commands
     Object.entries(commandTree).forEach(([path, command]) => {
       // Skip the root command and leaf commands (which already have descriptions)
@@ -327,14 +337,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const existingDescription = command.description() || ''
 
       // Only add the subcommand list if it's not already part of the description
-      if (!existingDescription.includes('Available subcommands:')) {
-        const baseDescription = existingDescription.replace(/\s*\(Default:.*?\)/, '').trim()
-        const newDescription = baseDescription
-          ? `${baseDescription}\nAvailable subcommands: ${formattedSubcommands}`
-          : `Available subcommands: ${formattedSubcommands}`
+      const descriptionParts = [existingDescription, `Available subcommands: ${formattedSubcommands}`]
 
-        command.description(newDescription)
-      }
+      command.description(descriptionParts.filter(Boolean).join('\n'))
     })
 
     type Context = NonNullable<typeof params.context>
@@ -360,6 +365,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       writeErr: str => logger.error?.(str),
     })
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
+    if (process.argv.includes('--completion')) return
     await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {
       const message = looksLikeInstanceof(err, Error) ? err.message : `Non-error of type ${typeof err} thrown: ${err}`
       logger.error?.(message)
@@ -367,6 +373,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       throw new FailedToExitError(`Program parse catch block`, {cause: err})
     })
     _process.exit(0)
+    throw new FailedToExitError('Program exit', {cause: new Error('Program exit after successful run')})
   }
 
   return {run, ignoredProcedures, buildProgram}
@@ -378,10 +385,9 @@ function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {
 }
 
 class FailedToExitError extends Error {
-  constructor(message: string, {cause}: {cause?: unknown}) {
+  constructor(message: string, {cause}: {cause: unknown}) {
     super(
-      message +
-        '. An error was thrown but the process did not exit. This may be because a custom `process` parameter was used. The Previous error is in the `cause`.',
+      `${message}. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.`,
       {cause},
     )
   }

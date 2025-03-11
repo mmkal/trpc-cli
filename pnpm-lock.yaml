@@ -11,9 +11,15 @@ importers:
       '@trpc/server':
         specifier: ^10.45.2
         version: 10.45.2
+      '@types/omelette':
+        specifier: ^0.4.4
+        version: 0.4.4
       commander:
         specifier: ^13.1.0
         version: 13.1.0
+      omelette:
+        specifier: ^0.4.17
+        version: 0.4.17
       picocolors:
         specifier: ^1.0.1
         version: 1.1.0
@@ -851,6 +857,9 @@ packages:
 
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
+
+  '@types/omelette@0.4.4':
+    resolution: {integrity: sha512-aEZ+4w3lvomNt6hX+H+VZey8a3fXa/jL6zZdu0vHrc7aGIe2yIybHQgIl7eXcMPchVaPekebQQ2Con7wGgB3mQ==}
 
   '@types/semver@7.5.8':
     resolution: {integrity: sha512-I8EUhyrgfLrcTkzV3TSsGyl1tSuPrEDzr0yd5m90UgNxQkyDXULk3b6MlQqTCpZpNtWe1K0hzclnZkTcLBe2UQ==}
@@ -2924,6 +2933,10 @@ packages:
     resolution: {integrity: sha512-yBYjY9QX2hnRmZHAjG/f13MzmBzxzYgQhFrke06TTyKY5zSTEqkOeukBzIdVA3j3ulu8Qa3MbVFShV7T2RmGtQ==}
     engines: {node: '>= 0.4'}
 
+  omelette@0.4.17:
+    resolution: {integrity: sha512-UlU69G6Bhu0XFjw3tjFZ0qyiMUjAOR+rdzblA1nLQ8xiqFtxOVlkhM39BlgTpLFx9fxkm6rnxNNRsS5GxE/yww==}
+    engines: {node: '>=0.8.0'}
+
   once@1.4.0:
     resolution: {integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==}
 
@@ -4619,6 +4632,8 @@ snapshots:
       undici-types: 6.19.8
 
   '@types/normalize-package-data@2.4.4': {}
+
+  '@types/omelette@0.4.4': {}
 
   '@types/semver@7.5.8': {}
 
@@ -7150,6 +7165,8 @@ snapshots:
       call-bind: 1.0.7
       define-properties: 1.2.1
       es-object-atoms: 1.0.0
+
+  omelette@0.4.17: {}
 
   once@1.4.0:
     dependencies:
