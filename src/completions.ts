@@ -1,9 +1,9 @@
+import {OmeletteInstanceLike} from '.'
 import {Command} from 'commander'
-import omelette from 'omelette'
+import type omelette from 'omelette'
 
 /** uses omelette to add completions to a commander program */
-export function addCompletions(program: Command) {
-  const completion = omelette('githubber')
+export function addCompletions(program: Command, completion: OmeletteInstanceLike) {
   const commandSymbol = Symbol('command')
 
   type TreeNode = omelette.TreeValue & {[commandSymbol]?: Command}

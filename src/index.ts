@@ -7,7 +7,7 @@ import {addCompletions} from './completions'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {Logger, TrpcCliMeta, TrpcCliParams} from './types'
+import {Logger, OmeletteInstanceLike, TrpcCliMeta, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
 
@@ -27,6 +27,7 @@ export {AnyRouter, AnyProcedure} from './trpc-compat'
 type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
+  completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
   process?: {
     exit: (code: number) => never
   }
@@ -88,7 +89,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
   const ignoredProcedures = procedures.flatMap(([k, v]) => (typeof v === 'string' ? [{procedure: k, reason: v}] : []))
 
-  function buildProgram(runParams?: {logger?: Logger; process?: {exit: (code: number) => never}}) {
+  function buildProgram(runParams?: TrpcCliRunParams) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = new Command()
     program.showHelpAfterError()
@@ -315,8 +316,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       }
     })
 
-    addCompletions(program)
-
     // After all commands are added, generate descriptions for parent commands
     Object.entries(commandTree).forEach(([path, command]) => {
       // Skip the root command and leaf commands (which already have descriptions)
@@ -353,7 +352,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     return program
   }
 
-  async function run(runParams?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) {
+  async function run(runParams?: TrpcCliRunParams) {
     const _process = runParams?.process || process
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = buildProgram(runParams)
@@ -365,7 +364,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       writeErr: str => logger.error?.(str),
     })
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
-    if (process.argv.includes('--completion')) return
+
+    if (runParams?.completion) {
+      const completion =
+        typeof runParams.completion === 'function' ? await runParams.completion() : runParams.completion
+      addCompletions(program, completion)
+    }
+
     await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {
       const message = looksLikeInstanceof(err, Error) ? err.message : `Non-error of type ${typeof err} thrown: ${err}`
       logger.error?.(message)

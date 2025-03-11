@@ -72,3 +72,43 @@ export interface Logger {
   info?: Log
   error?: Log
 }
+
+/**
+ * Slim reconstruction of an `omelette` instance. Hand-written here to avoid a hard dependency on `omelette` or its types.
+ * Usually you will just pass in an `omelette` instance by doing something like
+ *
+ * ```ts
+ * import omelette from 'omelette'
+ * import {createCli} from 'trpc-cli'
+ *
+ * const cli = createCli({
+ *   router: myRouter,
+ *   completion: omelette('myprogram'),
+ * })
+ * ```
+ *
+ * Or it also accepts an async function that resolves to an `omelette` instance, so you can use dynamic import:
+ *
+ * ```ts
+ * import {createCli} from 'trpc-cli'
+ *
+ * const cli = await createCli({
+ *   router: myRouter,
+ *   completion: () => import('omelette').then(omelette => omelette.default('myprogram')),
+ * })
+ * ```
+ */
+export interface OmeletteInstanceLike {
+  on: (
+    event: 'complete',
+    callback: (
+      fragment: string,
+      params: {line: string; fragment: number; reply: (suggestions: string[]) => void},
+    ) => void,
+  ) => void
+  init: () => void
+  setupShellInitFile: () => void
+  cleanupShellInitFile: () => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tree: (value: any) => this
+}

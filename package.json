@@ -34,14 +34,25 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
+    "omelette": ">=0.4.17",
     "@trpc/server": ">=10",
     "zod": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "omelette": {
+      "optional": true
+    },
+    "@trpc/server": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@trpc/server": "^10.45.2",
     "@types/omelette": "^0.4.4",
     "commander": "^13.1.0",
-    "omelette": "^0.4.17",
     "picocolors": "^1.0.1",
     "zod": "^3.23.8",
     "zod-to-json-schema": "^3.23.0",
