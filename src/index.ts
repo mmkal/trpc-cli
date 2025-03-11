@@ -139,7 +139,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.description(meta?.description || '')
 
       procedureInputs.positionalParameters.forEach(param => {
-        const argument = new Argument(param.name, param.description + (param.required ? ` (required)` : ' (optional)'))
+        const argument = new Argument(param.name, param.description + (param.required ? ` (required)` : ''))
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
@@ -148,11 +148,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const unusedFlagAliases: Record<string, string> = {...meta.aliases?.flags}
       Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
         let description = getDescription(propertyValue)
+        const propertyType = 'type' in propertyValue ? propertyValue.type : null
         const isRequired =
           'required' in procedureInputs.optionsJsonSchema &&
-          procedureInputs.optionsJsonSchema.required?.includes(propertyKey)
-        if (!isRequired) {
-          description = `${description} (optional)`.trim()
+          procedureInputs.optionsJsonSchema.required?.includes(propertyKey) &&
+          propertyType !== 'boolean'
+        if (isRequired) {
+          description = `${description} (required)`.trim()
         }
 
         let flags = `--${propertyKey}`
@@ -166,7 +168,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           delete unusedFlagAliases[propertyKey]
         }
 
-        const propertyType = 'type' in propertyValue ? propertyValue.type : null
         let option: Option
 
         switch (propertyType) {
@@ -183,9 +184,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             break
           }
           case 'boolean': {
-            // For boolean flags, no value required
             option = new Option(flags, description)
-            if (!option.isBoolean()) throw new Error(`Boolean flag ${flags} is not a boolean`)
             break
           }
           case 'number':
@@ -212,7 +211,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }
           default: {
             // For any other flags, parse as JSON
-            option = new Option(`${flags} <json>`, description)
+            option = new Option(
+              `${flags} [json]`,
+              `${description} (JSON - use quotes for strings etc., json-schema type: ${propertyType})`,
+            )
             option.argParser((value: string) => JSON.parse(value) as {})
             break
           }
@@ -230,12 +232,17 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }),
         )
 
-        command.addOption(option)
-
-        // Set default value if specified
-        if (propertyValue.default !== undefined) {
-          command.setOptionValueWithSource(propertyKey, propertyValue.default, 'default')
+        if ('default' in propertyValue) {
+          option.default(propertyValue.default)
+        } else if (option.isBoolean()) {
+          option.default(false)
         }
+
+        if (option.isBoolean() && option.defaultValue) {
+          option = new Option(`--no-${propertyKey}`, `Negate \`${propertyKey}\` property ${description || ''}`.trim())
+        }
+
+        command.addOption(option)
       })
 
       const invalidFlagAliases = Object.entries(unusedFlagAliases).map(([flag, alias]) => `${flag}: ${alias}`)

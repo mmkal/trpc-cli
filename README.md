@@ -177,7 +177,7 @@ Strings:
 Booleans:
 
 - `z.object({foo: z.boolean()})` will map:
-   - `--foo` or `--foo=true` to `{foo: true}`
+   - `--foo` `{foo: true}`
    - `--foo=false` to `{foo: false}`
 
 >Note: it's usually better to use `z.boolean().default(false)` or `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false` explicitly.
