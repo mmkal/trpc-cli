@@ -54,7 +54,25 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
     const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[])
     if (!procedureInputsResult.success) {
-      return [procedurePath, procedureInputsResult.error] as const
+      // we couldn't parse the inputs into a "friendly" format, so the user will just have to pass in JSON
+      return [
+        procedurePath,
+        {
+          name: procedurePath,
+          procedure: procedure,
+          procedureInputs: {
+            positionalParameters: [
+              {name: 'json', description: 'Inputs formatted as JSON', required: true, array: false, type: 'string'},
+            ],
+            parameters: [],
+            optionsJsonSchema: {},
+            getPojoInput: parsedCliParams => JSON.parse(parsedCliParams.positionalValues[0] as string) as {},
+          },
+          flagJsonSchemaProperties: {},
+          incompatiblePairs: [],
+          type: 'mutation',
+        },
+      ] as typeof result
     }
 
     const procedureInputs = procedureInputsResult.value
@@ -77,10 +95,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
     }
 
-    return [
+    const result = [
       procedurePath,
       {name: procedurePath, procedure, procedureInputs, flagJsonSchemaProperties, incompatiblePairs, type},
     ] as const
+    return result
   })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
@@ -152,7 +171,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const isRequired =
           'required' in procedureInputs.optionsJsonSchema &&
           procedureInputs.optionsJsonSchema.required?.includes(propertyKey) &&
-          propertyType !== 'boolean'
+          ![propertyType].flat().includes('boolean')
         if (isRequired) {
           description = `${description} (required)`.trim()
         }
@@ -170,57 +189,24 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         let option: Option
 
-        switch (propertyType) {
-          case 'string': {
-            option = new Option(`${flags} <string>`, description)
-            if ('enum' in propertyValue) {
-              option = option.choices(
-                propertyValue.enum
-                  .flat()
-                  .map(s => s?.toString() || '')
-                  .filter(Boolean),
-              )
-            }
-            break
-          }
-          case 'boolean': {
-            option = new Option(flags, description)
-            break
-          }
-          case 'number':
-          case 'integer': {
-            // For number flags, use a custom parser
-            option = new Option(`${flags} <number>`, description)
-            option.argParser(val => {
-              const number = Number(val)
-              if (Number.isNaN(number)) return val
-
-              return number
-            })
-            break
-          }
-          case 'array': {
-            // For array flags, collect values
-            // todo: check this is right
-            option = new Option(`${flags} <values...>`, description)
-            option.argParser((value: string, previous: string[] = []) => {
-              previous.push(value)
-              return previous
-            })
-            break
-          }
-          default: {
-            // For any other flags, parse as JSON
-            option = new Option(
-              `${flags} [json]`,
-              `${description} (JSON - use quotes for strings etc., json-schema type: ${propertyType})`,
-            )
-            option.argParser((value: string) => JSON.parse(value) as {})
-            break
+        // eslint-disable-next-line unicorn/prefer-switch
+        if (propertyType === 'string') {
+          option = new Option(`${flags} <string>`, description)
+        } else if (propertyType === 'boolean') {
+          option = new Option(flags, description)
+        } else if (propertyType === 'number' || propertyType === 'integer') {
+          option = new Option(`${flags} <number>`, description)
+        } else if (propertyType === 'array') {
+          option = new Option(`${flags} <values...>`, description)
+        } else if (Array.isArray(propertyType)) {
+          const canBeBoolean = propertyType.includes('boolean')
+          if (canBeBoolean && propertyType.length === 2) {
+            option = new Option(`${flags} [value]`, description)
           }
         }
+        option ||= new Option(`${flags} [json]`, description)
 
-        if (isRequired) {
+        if (option.flags.includes('<')) {
           option.makeOptionMandatory()
         }
 
@@ -232,13 +218,15 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }),
         )
 
+        const acceptsBoolean = option.isBoolean() || option.flags.match(/\[.*]$/)
+
         if ('default' in propertyValue) {
           option.default(propertyValue.default)
-        } else if (option.isBoolean()) {
+        } else if (acceptsBoolean) {
           option.default(false)
         }
 
-        if (option.isBoolean() && option.defaultValue) {
+        if (acceptsBoolean && option.defaultValue) {
           option = new Option(`--no-${propertyKey}`, `Negate \`${propertyKey}\` property ${description || ''}`.trim())
         }
 
