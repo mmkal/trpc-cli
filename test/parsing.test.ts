@@ -325,6 +325,20 @@ test('flag alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
+test('flag alias can be two characters', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnIOutput = await runWith(params, ['install', '--xx'])
+  expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+})
+
 test('flag alias typo', async () => {
   const yarn = t.router({
     install: t.procedure
@@ -337,21 +351,6 @@ test('flag alias typo', async () => {
 
   await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
     `Invalid flag aliases: frooozenLockfile: x`,
-  )
-})
-
-test('flag alias too long', async () => {
-  const yarn = t.router({
-    install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
-      .input(z.object({frozenLockfile: z.boolean().optional()}))
-      .query(({input}) => 'install: ' + JSON.stringify(input)),
-  })
-
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
-    `Flag alias must be a single character, got xx for flag frozenLockfile`,
   )
 })
 

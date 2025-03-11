@@ -51,12 +51,12 @@ export interface ParsedProcedure {
   /** positional parameters */
   parameters: string[]
   /** JSON Schema type describing the flags for the procedure */
-  flagsSchema: JsonSchema7Type
+  optionsJsonSchema: JsonSchema7Type
   /**
-   * Function for taking commander parsed argv output and transforming it so it can be passed into the procedure.
+   * Function for taking parsed argv output and transforming it so it can be passed into the procedure.
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
-  getInput: (argv: {positionalValues: Array<string | string[]>; flags: Record<string, unknown>}) => unknown
+  getPojoInput: (argv: {positionalValues: Array<string | string[]>; options: Record<string, unknown>}) => unknown
 }
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}

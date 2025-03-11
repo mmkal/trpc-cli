@@ -58,8 +58,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     }
 
     const procedureInputs = procedureInputsResult.value
-    const flagJsonSchemaProperties = flattenedProperties(procedureInputs.flagsSchema)
-    const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.flagsSchema)
+    const flagJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
+    const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
 
     // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
     const trpcProcedure = router._def.procedures[procedurePath] as AnyProcedure
@@ -149,7 +149,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
         let description = getDescription(propertyValue)
         const isRequired =
-          'required' in procedureInputs.flagsSchema && procedureInputs.flagsSchema.required?.includes(propertyKey)
+          'required' in procedureInputs.optionsJsonSchema &&
+          procedureInputs.optionsJsonSchema.required?.includes(propertyKey)
         if (!isRequired) {
           description = `${description} (optional)`.trim()
         }
@@ -184,6 +185,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           case 'boolean': {
             // For boolean flags, no value required
             option = new Option(flags, description)
+            if (!option.isBoolean()) throw new Error(`Boolean flag ${flags} is not a boolean`)
             break
           }
           case 'number':
@@ -220,6 +222,14 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option.makeOptionMandatory()
         }
 
+        option.conflicts(
+          incompatiblePairs.flatMap(pair => {
+            const filtered = pair.filter(p => p !== propertyKey)
+            if (filtered.length === pair.length) return []
+            return filtered
+          }),
+        )
+
         command.addOption(option)
 
         // Set default value if specified
@@ -247,19 +257,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
 
         // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
-        const positionalArgs = args.slice(0, -2)
+        const positionalValues = args.slice(0, -2)
 
-        // Check for incompatible flag pairs
-        const incompatibleMessages = incompatiblePairs
-          .filter(([a, b]) => options[a] !== undefined && options[b] !== undefined)
-          .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
-
-        if (incompatibleMessages?.length) {
-          command.showHelpAfterError()
-          throw new Error(incompatibleMessages.join('\n'))
-        }
-
-        const input = procedureInputs.getInput({positionalValues: positionalArgs, flags: options}) as never
+        const input = procedureInputs.getPojoInput({positionalValues, options})
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
           throw transformError(err, command)
         })

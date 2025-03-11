@@ -24,8 +24,8 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
       value: {
         positionalParameters: [],
         parameters: [],
-        flagsSchema: {},
-        getInput: () => ({}),
+        optionsJsonSchema: {},
+        getPojoInput: () => ({}),
       },
     }
   }
@@ -70,8 +70,8 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     value: {
       positionalParameters: [],
       parameters: [],
-      flagsSchema: zodToJsonSchema(mergedSchema),
-      getInput: argv => argv.flags,
+      optionsJsonSchema: zodToJsonSchema(mergedSchema),
+      getPojoInput: argv => argv.options,
     },
   }
 }
@@ -92,8 +92,8 @@ function parseLiteralInput(schema: z.ZodType<string> | z.ZodType<number>): Resul
         },
       ],
       parameters: [schema.isOptional() ? `[${name}]` : `<${name}>`],
-      flagsSchema: {},
-      getInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
+      optionsJsonSchema: {},
+      getPojoInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
     },
   }
 }
@@ -127,13 +127,13 @@ function parseMultiInputs(inputs: z.ZodType[]): Result<ParsedProcedure> {
     value: {
       positionalParameters: [],
       parameters: [],
-      flagsSchema: {
+      optionsJsonSchema: {
         allOf: parsedIndividually.map(p => {
           const successful = p as Extract<typeof p, {success: true}>
-          return successful.value.flagsSchema
+          return successful.value.optionsJsonSchema
         }),
       },
-      getInput: argv => argv.flags,
+      getPojoInput: argv => argv.options,
     },
   }
 }
@@ -158,8 +158,8 @@ function parseArrayInput(array: z.ZodArray<z.ZodType>): Result<ParsedProcedure> 
         },
       ],
       parameters: [parameterName(array, 1)],
-      flagsSchema: {},
-      getInput: argv => (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.element, s)),
+      optionsJsonSchema: {},
+      getPojoInput: argv => (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.element, s)),
     },
   }
 }
@@ -207,8 +207,8 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
         type: 'string',
       })),
       parameters: parameterNames,
-      flagsSchema: flagsSchema ? zodToJsonSchema(flagsSchema) : {},
-      getInput: commandArgs => {
+      optionsJsonSchema: flagsSchema ? zodToJsonSchema(flagsSchema) : {},
+      getPojoInput: commandArgs => {
         const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
           const correspondingSchema = positionalSchemas[i]
           if (looksLikeArray(correspondingSchema)) {
@@ -224,7 +224,7 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
         })
 
         if (flagsSchema) {
-          inputs.push(commandArgs.flags)
+          inputs.push(commandArgs.options)
         }
         return inputs
       },

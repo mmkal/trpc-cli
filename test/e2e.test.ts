@@ -288,8 +288,22 @@ test('migrations search.byContent', async () => {
 
 test('migrations incompatible flags', async () => {
   const output = await tsx('migrations', ['up', '--to', 'four', '--step', '1'])
-  expect(output).toContain('--step and --to are incompatible')
-  expect(output).toMatchInlineSnapshot(`"--step and --to are incompatible and cannot be used together"`)
+  expect(output).toMatchInlineSnapshot(`
+    "error: option '--to <string>' cannot be used with option '--step <number>'
+
+
+
+    Usage: migrations up [options]
+
+    Apply migrations. By default all pending migrations will be applied.
+
+    Options:
+      --to <string>    Mark migrations up to this one as exectued (optional)
+      --step <number>  Mark this many migrations as executed; Exclusive minimum: 0
+                       (optional)
+      -h, --help       display help for command
+    "
+  `)
 })
 
 test('fs help', async () => {
