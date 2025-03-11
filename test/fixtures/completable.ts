@@ -3,7 +3,6 @@ import {z} from 'zod'
 import {createCli, type TrpcCliMeta} from '../../src'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
-const t = trpc
 
 const router = trpc.router({
   deeply: trpc.router({
@@ -61,52 +60,6 @@ void createCli({
     }
     if (process.argv.includes('--removeCompletions')) {
       completion.cleanupShellInitFile(process.env.SHELL_INIT_FILE)
-    }
-    // Higher-level test command that doesn't require env variables
-    if (process.argv.includes('--testComplete')) {
-      const fragment = process.argv[process.argv.indexOf('--testComplete') + 1] || ''
-      const parts = fragment.split(' ')
-
-      // Generate completions for the given fragment
-      const results: string[] = []
-      completion.on('complete', (fragment, callback) => {
-        // Simulate omelette's internal fragment handling
-        switch (parts.length) {
-          case 1: {
-            // First-level commands
-            callback(Object.keys(router))
-
-            break
-          }
-          case 2: {
-            // Second-level commands
-            const firstLevel = router[parts[0]] as any
-            if (firstLevel) {
-              callback(Object.keys(firstLevel))
-            }
-
-            break
-          }
-          case 3: {
-            // Third-level commands
-            const firstLevel = router[parts[0]] as any
-            if (firstLevel && firstLevel[parts[1]]) {
-              callback(Object.keys(firstLevel[parts[1]]))
-            }
-
-            break
-          }
-          // No default
-        }
-      })
-
-      // Get and output the completions
-      completion.next(() => {
-        console.log(results.join('\n'))
-        process.exit(0)
-      })
-
-      return completion
     }
     return completion
   },

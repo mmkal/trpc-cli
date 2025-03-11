@@ -5,15 +5,6 @@ import stripAnsi from 'strip-ansi'
 import {expect, test} from 'vitest'
 import '../src' // make sure vitest reruns this file after every change
 
-const tsx = async (file: string, args: string[]) => {
-  const {all} = await execa('./node_modules/.bin/tsx', ['test/fixtures/' + file, ...args], {
-    all: true,
-    reject: false,
-    cwd: path.join(__dirname, '..'),
-  })
-  return stripAnsi(all)
-}
-
 const execAll = async (program: string, args: string[], options: import('execa').Options = {}) => {
   const {all} = await execa(program, args, {
     reject: false,
