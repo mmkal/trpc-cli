@@ -156,11 +156,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         let flags = `--${propertyKey}`
         const alias = meta.aliases?.flags?.[propertyKey]
-        if (alias && alias.length !== 1) {
-          throw new Error(`Flag alias must be a single character, got ${alias} for flag ${propertyKey}`)
-        }
         if (alias) {
-          flags = `-${alias}, ${flags}`
+          let prefix = '-'
+          if (alias.startsWith('-')) prefix = ''
+          else if (alias.length > 1) prefix = '--'
+
+          flags = `${prefix}${alias}, ${flags}`
           delete unusedFlagAliases[propertyKey]
         }
 
