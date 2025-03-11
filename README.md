@@ -1,6 +1,6 @@
 # trpc-cli [![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg) [![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli) [![X Follow](https://img.shields.io/twitter/follow/mmkalmmkal)](https://x.com/mmkalmmkal)
 
-Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
+Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI with autocomplete support.
 
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
 - [Motivation](#motivation)
@@ -20,6 +20,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
 - [More Examples](#more-examples)
    - [Migrator example](#migrator-example)
 - [Programmatic usage](#programmatic-usage)
+- [Completions](#completions)
 - [Out of scope](#out-of-scope)
 - [Contributing](#contributing)
    - [Implementation and dependencies](#implementation-and-dependencies)
@@ -45,7 +46,7 @@ npm install trpc-cli
 The fastest way to get going is to write a normal tRPC router, using `trpcServer` and `zod` exports from this library, and turn it into a fully-functional CLI by passing it to `createCli`:
 
 ```ts
-import {trpcServer, zod as z, createCli, TrpcCliMeta} from 'trpc-cli'
+import {createCli, trpcServer, zod as z, type TrpcCliMeta} from 'trpc-cli'
 
 const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -289,7 +290,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L52)
+#### [createCli](./src/index.ts#L53)
 
 Run a trpc router as a CLI.
 
@@ -814,6 +815,56 @@ const runCli = async (argv: string[]) => {
   })
 }
 ```
+
+## Completions
+
+Completions are supported via [omelette](https://npmjs.com/package/omelette), which is an optional peer dependency. How to get them working:
+
+```bash
+npm install omelette @types/omelette
+```
+
+Then, pass in an `omelette` instance to the `completion` option:
+
+```ts
+import omelette from 'omelette'
+import {createCli} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+cli.run({
+  completion: async () => {
+    const completion = omelette('myprogram')
+    if (process.argv.includes('--setupCompletions')) {
+      completion.setupShellInitFile()
+    }
+    if (process.argv.includes('--removeCompletions')) {
+      completion.cleanupShellInitFile()
+    }
+    return completion
+  },
+})
+```
+
+Write the completions to your shell init file by running:
+
+```bash
+node path/to/myprogram --setupCompletions
+```
+
+Then add an alias for the program corresponding to your `omelette` instance (in the example above, `omelette('myprogram')`):
+
+```bash
+echo 'myprogram() { node path/to/myprogram.js "$@" }' >> ~/.zshrc
+```
+
+Then reload your shell:
+
+```bash
+source ~/.zshrc
+```
+
+You can then use tab-completion to autocomplete commands and flags.
 
 ## Out of scope
 
