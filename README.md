@@ -176,7 +176,7 @@ Strings:
 
 Booleans:
 
-- `z.object({foo: z.boolean()})` will map:
+- `z.object({foo: z.boolean()})` or `z.object({foo: z.boolean().default(false)})` will map:
    - no option supplied to `{foo: false}`
    - `--foo` `{foo: true}`
 
@@ -184,7 +184,10 @@ Booleans:
    - no option supplied to `{foo: true}`
    - `--no-foo` `{foo: false}`
 
-- `z.objec
+- `z.object({foo: z.boolean().optional()})` will map:
+  - no option supplied to `{}` (foo is undefined)
+  - `--foo` to `{foo: true}`
+  - `--foo false` to `{foo: false}` (note: `--no-foo` doesn't work here, because its existence prevents `{}` from being the default value)
 
 Numbers:
 
@@ -236,6 +239,12 @@ path/to/cli copy a.txt b.txt --mkdirp
 Procedures with incompatible inputs will be returned in the `ignoredProcedures` property.
 
 >You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
+
+#### JSON input
+
+Some procedures have complex inputs that can't be mapped directly to positional parameters and flags. When this happens, the procedure must be called with a single `--input` flag, followed by a JSON string. It will simply be passed through to the procedure, which will then perform the usual input validation - including by tools other than zod. It's more inconvenient to type, but just as safe and powerful.
+
+You can also set `{jsonInput: true}` on the procedure's meta to opt in to this behaviour on any procedure.
 
 ### Default command
 
@@ -294,7 +303,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L54)
+#### [createCli](./src/index.ts#L53)
 
 Run a trpc router as a CLI.
 

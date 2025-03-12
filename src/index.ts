@@ -41,7 +41,6 @@ type CommanderProgramLike = {
 export interface TrpcCli {
   run: (params?: TrpcCliRunParams) => Promise<void>
   buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
-  ignoredProcedures: {procedure: string; reason: string}[]
 }
 
 /**
@@ -54,60 +53,57 @@ export interface TrpcCli {
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
     const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[])
-    if (!procedureInputsResult.success) {
-      // we couldn't parse the inputs into a "friendly" format, so the user will just have to pass in JSON
+    // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
+    let type: 'mutation' | 'query' | 'subscription'
+    if (isTrpc11Procedure(procedure)) {
+      type = procedure._def.type
+    } else if (procedure._def.mutation) {
+      type = 'mutation'
+    } else if (procedure._def.query) {
+      type = 'query'
+    } else if (procedure._def.subscription) {
+      type = 'subscription'
+    } else {
+      const keys = Object.keys(procedure._def).join(', ')
+      throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
+    }
+
+    if (getMeta(procedure).jsonInput || !procedureInputsResult.success) {
       return [
         procedurePath,
         {
           name: procedurePath,
-          procedure: procedure,
+          procedure,
           procedureInputs: {
-            positionalParameters: [
-              {name: 'json', description: 'Inputs formatted as JSON', required: true, array: false, type: 'string'},
-            ],
+            positionalParameters: [],
             parameters: [],
-            optionsJsonSchema: {},
-            getPojoInput: parsedCliParams => JSON.parse(parsedCliParams.positionalValues[0] as string) as {},
+            optionsJsonSchema: {
+              type: 'object',
+              properties: {
+                input: {
+                  type: 'json' as string as 'string',
+                  description: 'Input formatted as JSON',
+                },
+              },
+            },
+            getPojoInput: parsedCliParams => JSON.parse(parsedCliParams.options.input as string) as {},
           },
-          flagJsonSchemaProperties: {},
           incompatiblePairs: [],
-          type: 'mutation',
+          type,
         },
       ] as typeof result
     }
 
     const procedureInputs = procedureInputsResult.value
-    const flagJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
     const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
 
-    // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
-    const trpcProcedure = router._def.procedures[procedurePath] as AnyProcedure
-    let type: 'mutation' | 'query' | 'subscription'
-    if (isTrpc11Procedure(trpcProcedure)) {
-      type = trpcProcedure._def.type
-    } else if (trpcProcedure._def.mutation) {
-      type = 'mutation'
-    } else if (trpcProcedure._def.query) {
-      type = 'query'
-    } else if (trpcProcedure._def.subscription) {
-      type = 'subscription'
-    } else {
-      const keys = Object.keys(trpcProcedure._def).join(', ')
-      throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
-    }
-
-    const result = [
-      procedurePath,
-      {name: procedurePath, procedure, procedureInputs, flagJsonSchemaProperties, incompatiblePairs, type},
-    ] as const
+    const result = [procedurePath, {name: procedurePath, procedure, procedureInputs, incompatiblePairs, type}] as const
     return result
   })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
     return typeof v === 'string' ? [] : [[k, v] as const]
   })
-
-  const ignoredProcedures = procedures.flatMap(([k, v]) => (typeof v === 'string' ? [{procedure: k, reason: v}] : []))
 
   function buildProgram(runParams?: TrpcCliRunParams) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
@@ -134,8 +130,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const configureCommand = (
       command: Command,
       procedurePath: string,
-      {procedure, procedureInputs, flagJsonSchemaProperties, incompatiblePairs}: (typeof procedureEntries)[0][1],
+      {procedure, procedureInputs, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
+      const flagJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
       command.exitOverride(ec => {
         _process.exit(ec.exitCode)
         throw new FailedToExitError(`Command ${command.name()} exitOverride`, {cause: ec})
@@ -278,7 +275,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           return
         }
         if (propertyType === 'boolean' && !isValueRequired) {
-          const option = new Option(flags, description)
+          const option = new Option(`${flags} [boolean]`, description)
+          option.argParser(value => booleanParser(value))
           // don't set a default value of `false`, because `undefined` is accepted by the procedure
           if (defaultValue.exists) option.default(defaultValue.value)
           command.addOption(option)
@@ -473,7 +471,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     throw new FailedToExitError('Program exit', {cause: new Error('Program exit after successful run')})
   }
 
-  return {run, ignoredProcedures, buildProgram}
+  return {run, buildProgram}
 }
 
 function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {

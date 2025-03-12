@@ -36,6 +36,8 @@ export interface TrpcCliMeta {
     /** Aliases for the flags. Note: take care to avoid conflicts with other flags. An error will be thrown if an alias is defined for a non-existent flag. */
     flags?: Record<string, string>
   }
+  /** If true, will use a single CLI option expect the entire input to be parsed in as JSON, e.g. `--input '{"foo": "bar"}`. Can be useful to opt out of the default mapping of input schemas to CLI options. */
+  jsonInput?: boolean
   /** Sub-property for the CLI meta. If present, will take precedence over the top-level meta, to avoid conflicts with other tools. */
   cliMeta?: TrpcCliMeta
 }
