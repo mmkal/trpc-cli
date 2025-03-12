@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer from '@trpc/server'
-import {Argument, Command, Option} from 'commander'
+import {Argument, Command, InvalidArgumentError, Option} from 'commander'
 import {ZodError} from 'zod'
+import {JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
-import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
+import {flattenedProperties, incompatiblePropertyPairs, getDescription, getPropertyTypes} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {Logger, OmeletteInstanceLike, TrpcCliMeta, TrpcCliParams} from './types'
@@ -166,15 +167,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       const unusedFlagAliases: Record<string, string> = {...meta.aliases?.flags}
       Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
-        let description = getDescription(propertyValue)
-        const propertyType = 'type' in propertyValue ? propertyValue.type : null
-        const isRequired =
-          'required' in procedureInputs.optionsJsonSchema &&
-          procedureInputs.optionsJsonSchema.required?.includes(propertyKey) &&
-          ![propertyType].flat().includes('boolean')
-        if (isRequired) {
-          description = `${description} (required)`.trim()
-        }
+        const description = getDescription(propertyValue)
 
         let flags = `--${propertyKey}`
         const alias = meta.aliases?.flags?.[propertyKey]
@@ -187,21 +180,136 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           delete unusedFlagAliases[propertyKey]
         }
 
+        const defaultValue =
+          'default' in propertyValue
+            ? ({exists: true, value: propertyValue.default} as const)
+            : ({exists: false} as const)
+
+        if (defaultValue.value === true) {
+          const negation = new Option(
+            `--no-${propertyKey}`,
+            `Negate \`${propertyKey}\` property ${description || ''}`.trim(),
+          )
+          command.addOption(negation)
+        }
+
+        const numberParser = (val: string, {fallback = val as unknown} = {}) => {
+          const number = Number(val)
+          return Number.isNaN(number) ? fallback : number
+        }
+
+        const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
+          if (val === 'true') return true
+          if (val === 'false') return false
+          return fallback
+        }
+
+        const rootTypes = getPropertyTypes(propertyValue).sort()
+
+        /** try to get a parser that can confidently parse a string into the correct type. Returns null if it can't confidently parse */
+        const getValueParser = (types: ReturnType<typeof getPropertyTypes>) => {
+          types = types.map(t => (t === 'integer' ? 'number' : t))
+          if (types.length === 2 && types[0] === 'boolean' && types[1] === 'number') {
+            return {
+              type: 'boolean|number',
+              parser: (value: string) => booleanParser(value, {fallback: null}) ?? numberParser(value),
+            } as const
+          }
+          if (types.length === 1 && types[0] === 'boolean') {
+            return {type: 'boolean', parser: (value: string) => booleanParser(value)} as const
+          }
+          if (types.length === 1 && types[0] === 'number') {
+            return {type: 'number', parser: (value: string) => numberParser(value)} as const
+          }
+          if (types.length === 1 && types[0] === 'string') {
+            return {type: 'string', parser: null} as const
+          }
+          return {
+            type: 'json',
+            parser: (value: string) => {
+              let parsed: unknown
+              try {
+                parsed = JSON.parse(value) as {}
+              } catch {
+                throw new InvalidArgumentError(`Malformed JSON.`)
+              }
+              const jsonSchemaType = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed
+              if (!types.includes(jsonSchemaType)) {
+                throw new InvalidArgumentError(`Got ${jsonSchemaType} but expected ${types.join(' or ')}`)
+              }
+              return parsed
+            },
+          } as const
+        }
+
+        const propertyType = rootTypes[0]
+        const isValueRequired =
+          'required' in procedureInputs.optionsJsonSchema &&
+          procedureInputs.optionsJsonSchema.required?.includes(propertyKey)
+        const isCliOptionRequired = isValueRequired && propertyType !== 'boolean' && !defaultValue.exists
+
+        const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
+
+        if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'string') {
+          const option = new Option(`${flags} [value]`, description)
+          option.default(defaultValue.exists ? defaultValue.value : false)
+          command.addOption(option)
+          return
+        }
+        if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'number') {
+          const option = new Option(`${flags} [value]`, description)
+          option.argParser(getValueParser(rootTypes).parser!)
+          option.default(defaultValue.exists ? defaultValue.value : false)
+          command.addOption(option)
+          return
+        }
+
+        if (rootTypes.length !== 1) {
+          const option = new Option(`${flags} ${bracketise('json')}`, `${description} (value will be parsed as JSON)`)
+          option.argParser(getValueParser(rootTypes).parser!)
+          command.addOption(option)
+          return
+        }
+
+        if (propertyType === 'boolean' && isValueRequired) {
+          const option = new Option(flags, description)
+          option.default(defaultValue.exists ? defaultValue.value : false)
+          command.addOption(option)
+          return
+        }
+        if (propertyType === 'boolean' && !isValueRequired) {
+          const option = new Option(flags, description)
+          // don't set a default value of `false`, because `undefined` is accepted by the procedure
+          if (defaultValue.exists) option.default(defaultValue.value)
+          command.addOption(option)
+          return
+        }
+
         let option: Option
 
         // eslint-disable-next-line unicorn/prefer-switch
         if (propertyType === 'string') {
-          option = new Option(`${flags} <string>`, description)
+          option = new Option(`${flags} ${bracketise('string')}`, description)
         } else if (propertyType === 'boolean') {
           option = new Option(flags, description)
         } else if (propertyType === 'number' || propertyType === 'integer') {
-          option = new Option(`${flags} <number>`, description)
+          option = new Option(`${flags} ${bracketise('number')}`, description)
+          option.argParser(value => numberParser(value))
         } else if (propertyType === 'array') {
-          option = new Option(`${flags} <values...>`, description)
-        } else if (Array.isArray(propertyType)) {
-          const canBeBoolean = propertyType.includes('boolean')
-          if (canBeBoolean && propertyType.length === 2) {
-            option = new Option(`${flags} [value]`, description)
+          option = new Option(`${flags} [values...]`, description)
+          option.default(defaultValue.exists ? defaultValue.value : [])
+          const itemTypes =
+            'items' in propertyValue && propertyValue.items
+              ? getPropertyTypes(propertyValue.items as JsonSchema7Type)
+              : []
+
+          const itemParser = getValueParser(itemTypes)
+          if (itemParser.parser) {
+            option.argParser((value, previous) => {
+              const parsed = itemParser.parser(value)
+              if (Array.isArray(previous)) return [...previous, parsed] as unknown[]
+              return [parsed] as unknown[]
+            })
           }
         }
         option ||= new Option(`${flags} [json]`, description)
@@ -217,18 +325,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             return filtered
           }),
         )
-
-        const acceptsBoolean = option.isBoolean() || option.flags.match(/\[.*]$/)
-
-        if ('default' in propertyValue) {
-          option.default(propertyValue.default)
-        } else if (acceptsBoolean) {
-          option.default(false)
-        }
-
-        if (acceptsBoolean && option.defaultValue) {
-          option = new Option(`--no-${propertyKey}`, `Negate \`${propertyKey}\` property ${description || ''}`.trim())
-        }
 
         command.addOption(option)
       })

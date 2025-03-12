@@ -68,15 +68,16 @@ export const incompatiblePropertyPairs = (sch: JsonSchema7Type): Array<[string, 
  * Tries fairly hard to build a roughly human-readable description of a json-schema type.
  * A few common properties are given special treatment, most others are just stringified and output in `key: value` format.
  */
-export const getDescription = (v: JsonSchema7Type): string => {
-  if ('items' in v) {
-    return [getDescription(v.items as JsonSchema7Type), '(array)'].filter(Boolean).join(' ')
+export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
+  if ('items' in v && v.items) {
+    const {items, ...rest} = v
+    return [getDescription(items as JsonSchema7Type, 1), getDescription(rest), 'array'].filter(Boolean).join(' ')
   }
   return (
     Object.entries(v)
       .filter(([k, vv]) => {
         if (k === 'default' || k === 'additionalProperties') return false
-        if (k === 'type' && typeof vv === 'string') return false
+        if (k === 'type' && typeof vv === 'string') return depth > 0 // don't show type: string at depth 0, that's the default
         return true
       })
       .sort(([a], [b]) => {
@@ -84,10 +85,27 @@ export const getDescription = (v: JsonSchema7Type): string => {
         return scores[0] - scores[1]
       })
       .map(([k, vv], i) => {
+        if (k === 'type' && Array.isArray(vv)) return `type: ${vv.join(' or ')}`
         if (k === 'description' && i === 0) return String(vv)
         if (k === 'properties') return `Object (json formatted)`
         return `${capitaliseFromCamelCase(k)}: ${vv}`
       })
       .join('; ') || ''
   )
+}
+
+export const getPropertyTypes = (
+  propertyValue: JsonSchema7Type,
+): Array<'string' | 'boolean' | 'number' | (string & {})> => {
+  if ('type' in propertyValue) {
+    return [propertyValue.type].flat()
+  }
+  if ('oneOf' in propertyValue) {
+    return (propertyValue.oneOf as JsonSchema7Type[]).flatMap(getPropertyTypes)
+  }
+  if ('anyOf' in propertyValue) {
+    return (propertyValue.anyOf as JsonSchema7Type[]).flatMap(getPropertyTypes)
+  }
+
+  return []
 }

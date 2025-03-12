@@ -177,10 +177,14 @@ Strings:
 Booleans:
 
 - `z.object({foo: z.boolean()})` will map:
+   - no option supplied to `{foo: false}`
    - `--foo` `{foo: true}`
-   - `--foo=false` to `{foo: false}`
 
->Note: it's usually better to use `z.boolean().default(false)` or `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false` explicitly.
+- `z.object({foo: z.boolean().default(true)})` will map:
+   - no option supplied to `{foo: true}`
+   - `--no-foo` `{foo: false}`
+
+- `z.objec
 
 Numbers:
 
@@ -290,7 +294,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L53)
+#### [createCli](./src/index.ts#L54)
 
 Run a trpc router as a CLI.
 
