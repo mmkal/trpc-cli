@@ -94,17 +94,17 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
   )
 }
 
-export const getPropertyTypes = (
+export const getSchemaTypes = (
   propertyValue: JsonSchema7Type,
 ): Array<'string' | 'boolean' | 'number' | (string & {})> => {
   if ('type' in propertyValue) {
     return [propertyValue.type].flat()
   }
   if ('oneOf' in propertyValue) {
-    return (propertyValue.oneOf as JsonSchema7Type[]).flatMap(getPropertyTypes)
+    return (propertyValue.oneOf as JsonSchema7Type[]).flatMap(getSchemaTypes)
   }
   if ('anyOf' in propertyValue) {
-    return (propertyValue.anyOf as JsonSchema7Type[]).flatMap(getPropertyTypes)
+    return (propertyValue.anyOf as JsonSchema7Type[]).flatMap(getSchemaTypes)
   }
 
   return []

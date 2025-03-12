@@ -5,7 +5,7 @@ import {ZodError} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
-import {flattenedProperties, incompatiblePropertyPairs, getDescription, getPropertyTypes} from './json-schema'
+import {flattenedProperties, incompatiblePropertyPairs, getDescription, getSchemaTypes} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {Logger, OmeletteInstanceLike, TrpcCliMeta, TrpcCliParams} from './types'
@@ -201,10 +201,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           return fallback
         }
 
-        const rootTypes = getPropertyTypes(propertyValue).sort()
+        const rootTypes = getSchemaTypes(propertyValue).sort()
 
         /** try to get a parser that can confidently parse a string into the correct type. Returns null if it can't confidently parse */
-        const getValueParser = (types: ReturnType<typeof getPropertyTypes>) => {
+        const getValueParser = (types: ReturnType<typeof getSchemaTypes>) => {
           types = types.map(t => (t === 'integer' ? 'number' : t))
           if (types.length === 2 && types[0] === 'boolean' && types[1] === 'number') {
             return {
@@ -298,7 +298,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option.default(defaultValue.exists ? defaultValue.value : [])
           const itemTypes =
             'items' in propertyValue && propertyValue.items
-              ? getPropertyTypes(propertyValue.items as JsonSchema7Type)
+              ? getSchemaTypes(propertyValue.items as JsonSchema7Type)
               : []
 
           const itemParser = getValueParser(itemTypes)

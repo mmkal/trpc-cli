@@ -289,7 +289,7 @@ test('migrations search.byContent', async () => {
 test('migrations incompatible flags', async () => {
   const output = await tsx('migrations', ['up', '--to', 'four', '--step', '1'])
   expect(output).toMatchInlineSnapshot(`
-    "error: option '--to <string>' cannot be used with option '--step <number>'
+    "error: option '--to [string]' cannot be used with option '--step [number]'
 
 
 
@@ -298,9 +298,8 @@ test('migrations incompatible flags', async () => {
     Apply migrations. By default all pending migrations will be applied.
 
     Options:
-      --to <string>    Mark migrations up to this one as exectued (optional)
-      --step <number>  Mark this many migrations as executed; Exclusive minimum: 0
-                       (optional)
+      --to [string]    Mark migrations up to this one as exectued
+      --step [number]  Mark this many migrations as executed; Exclusive minimum: 0
       -h, --help       display help for command
     "
   `)
@@ -327,12 +326,12 @@ test('fs copy help', async () => {
     "Usage: fs copy [options] <Source path> [Destination path]
 
     Arguments:
-      Source path       Source path (required)
-      Destination path  Destination path (optional)
+      Source path        Source path (required)
+      Destination path   Destination path
 
     Options:
-      --force           Overwrite destination if it exists (optional)
-      -h, --help        display help for command"
+      --force [boolean]  Overwrite destination if it exists (default: false)
+      -h, --help         display help for command"
   `)
 })
 
@@ -372,13 +371,13 @@ test('fs copy', async () => {
     Usage: fs diff [options] <Base path> <Head path>
 
     Arguments:
-      Base path           Base path (required)
-      Head path           Head path (required)
+      Base path                     Base path (required)
+      Head path                     Head path (required)
 
     Options:
-      --ignoreWhitespace  Ignore whitespace changes (optional)
-      --trim              Trim start/end whitespace (optional)
-      -h, --help          display help for command
+      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
+      --trim [boolean]              Trim start/end whitespace (default: false)
+      -h, --help                    display help for command
     "
   `)
 })
@@ -388,13 +387,13 @@ test('fs diff', async () => {
     "Usage: fs diff [options] <Base path> <Head path>
 
     Arguments:
-      Base path           Base path (required)
-      Head path           Head path (required)
+      Base path                     Base path (required)
+      Head path                     Head path (required)
 
     Options:
-      --ignoreWhitespace  Ignore whitespace changes (optional)
-      --trim              Trim start/end whitespace (optional)
-      -h, --help          display help for command"
+      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
+      --trim [boolean]              Trim start/end whitespace (default: false)
+      -h, --help                    display help for command"
   `)
   expect(await tsx('fs', ['diff', 'one', 'two'])).toMatchInlineSnapshot(`""`)
   expect(await tsx('fs', ['diff', 'one', 'three'])).toMatchInlineSnapshot(
@@ -410,13 +409,13 @@ test('fs diff', async () => {
     Usage: fs diff [options] <Base path> <Head path>
 
     Arguments:
-      Base path           Base path (required)
-      Head path           Head path (required)
+      Base path                     Base path (required)
+      Head path                     Head path (required)
 
     Options:
-      --ignoreWhitespace  Ignore whitespace changes (optional)
-      --trim              Trim start/end whitespace (optional)
-      -h, --help          display help for command
+      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
+      --trim [boolean]              Trim start/end whitespace (default: false)
+      -h, --help                    display help for command
     "
   `)
 })
