@@ -6,6 +6,11 @@ const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 const migrations = getMigrations()
 
 const searchProcedure = trpc.procedure
+  .meta({
+    aliases: {
+      flags: {status: 's'},
+    },
+  })
   .input(
     z.object({
       status: z.enum(['executed', 'pending']).optional().describe('Filter to only show migrations with this status'),
@@ -64,7 +69,12 @@ const router = trpc.router({
         return ctx.filter(migrations.filter(m => m.name === input.name))
       }),
     byContent: searchProcedure
-      .meta({description: 'Look for migrations by their script content'})
+      .meta({
+        description: 'Look for migrations by their script content',
+        aliases: {
+          flags: {searchTerm: 'q'},
+        },
+      })
       .input(
         z.object({searchTerm: z.string().describe('Only show migrations whose `content` value contains this string')}),
       )
@@ -74,18 +84,7 @@ const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc10RouterLike
 
-const cli = createCli({
-  router,
-  alias: (fullName, {command}) => {
-    if (fullName === 'status') {
-      return 's'
-    }
-    if (fullName === 'searchTerm' && command.startsWith('search.')) {
-      return 'q'
-    }
-    return undefined
-  },
-})
+const cli = createCli({router})
 
 void cli.run()
 

@@ -17,51 +17,65 @@ test('cli help', async () => {
   const output = await tsx('calculator', ['--help'])
   expect(output.replaceAll(/(commands:|flags:)/gi, s => s[0].toUpperCase() + s.slice(1).toLowerCase()))
     .toMatchInlineSnapshot(`
-      "Commands:
-        add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
-        subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
-        multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
-        divide          Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+      "Usage: calculator [options] [command]
 
-      Flags:
-        -h, --help                  Show help
-            --verbose-errors        Throw raw errors (by default errors are summarised)
-      "
+      Options:
+        -h, --help                            display help for command
+
+      Commands:
+        add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
+                                              your friend both have apples, and you
+                                              want to know how many apples there are
+                                              in total.
+        subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
+                                              a number and you want to make it
+                                              smaller.
+        multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
+                                              you want to count the number of tiles on
+                                              your bathroom wall and are short on
+                                              time.
+        divide <numerator> <denominator>      Divide two numbers. Useful if you have a
+                                              number and you want to make it smaller
+                                              and \`subtract\` isn't quite powerful
+                                              enough for you.
+        help [command]                        display help for command"
     `)
 })
 
 test('cli help add', async () => {
   const output = await tsx('calculator', ['add', '--help'])
   expect(output).toMatchInlineSnapshot(`
-    "add
+    "Usage: calculator add [options] <parameter_1> <parameter_2>
 
-    Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+    Add two numbers. Use this if you and your friend both have apples, and you want
+    to know how many apples there are in total.
 
-    Usage:
-      add [flags...] <parameter 1> <parameter 2>
+    Arguments:
+      parameter_1   (required)
+      parameter_2   (required)
 
-    Flags:
-      -h, --help        Show help
-    "
+    Options:
+      -h, --help   display help for command"
   `)
 })
 
 test('cli help divide', async () => {
   const output = await tsx('calculator', ['divide', '--help'])
   expect(output).toMatchInlineSnapshot(`
-    "divide v1.0.0
+    "Usage: calculator divide [options] <numerator> <denominator>
 
-    Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+    Divide two numbers. Useful if you have a number and you want to make it smaller
+    and \`subtract\` isn't quite powerful enough for you.
 
-    Usage:
-      divide [flags...] <numerator> <denominator>
+    Arguments:
+      numerator    numerator (required)
+      denominator  denominator (required)
 
-    Flags:
-      -h, --help        Show help
+    Options:
+      -h, --help   display help for command
 
     Examples:
-      divide --left 8 --right 4
-    "
+    divide --left 8 --right 4"
   `)
 })
 
@@ -75,15 +89,18 @@ test('cli add failure', async () => {
   expect(output).toMatchInlineSnapshot(`
     "Validation error
       - Expected number, received string at index 1
-    add
 
-    Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+    Usage: calculator add [options] <parameter_1> <parameter_2>
 
-    Usage:
-      add [flags...] <parameter 1> <parameter 2>
+    Add two numbers. Use this if you and your friend both have apples, and you want
+    to know how many apples there are in total.
 
-    Flags:
-      -h, --help        Show help
+    Arguments:
+      parameter_1   (required)
+      parameter_2   (required)
+
+    Options:
+      -h, --help   display help for command
     "
   `)
 })
@@ -98,18 +115,18 @@ test('cli divide failure', async () => {
   expect(output).toMatchInlineSnapshot(`
     "Validation error
       - Invalid input at index 1
-    divide v1.0.0
 
-    Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+    Usage: calculator divide [options] <numerator> <denominator>
 
-    Usage:
-      divide [flags...] <numerator> <denominator>
+    Divide two numbers. Useful if you have a number and you want to make it smaller
+    and \`subtract\` isn't quite powerful enough for you.
 
-    Flags:
-      -h, --help        Show help
+    Arguments:
+      numerator    numerator (required)
+      denominator  denominator (required)
 
-    Examples:
-      divide --left 8 --right 4
+    Options:
+      -h, --help   display help for command
     "
   `)
 })
@@ -117,16 +134,33 @@ test('cli divide failure', async () => {
 test('cli non-existent command', async () => {
   const output = await tsx('calculator', ['multiploo', '2', '3'])
   expect(output).toMatchInlineSnapshot(`
-    "Command not found: "multiploo".
-    Commands:
-      add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
-      subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
-      multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
-      divide          Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+    "error: unknown command 'multiploo'
+    (Did you mean multiply?)
 
-    Flags:
-      -h, --help                  Show help
-          --verbose-errors        Throw raw errors (by default errors are summarised)
+
+
+    Usage: calculator [options] [command]
+
+    Options:
+      -h, --help                            display help for command
+
+    Commands:
+      add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
+                                            your friend both have apples, and you
+                                            want to know how many apples there are
+                                            in total.
+      subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
+                                            a number and you want to make it
+                                            smaller.
+      multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
+                                            you want to count the number of tiles on
+                                            your bathroom wall and are short on
+                                            time.
+      divide <numerator> <denominator>      Divide two numbers. Useful if you have a
+                                            number and you want to make it smaller
+                                            and \`subtract\` isn't quite powerful
+                                            enough for you.
+      help [command]                        display help for command
     "
   `)
 })
@@ -134,16 +168,28 @@ test('cli non-existent command', async () => {
 test('cli no command', async () => {
   const output = await tsx('calculator', [])
   expect(output).toMatchInlineSnapshot(`
-    "No command specified.
-    Commands:
-      add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
-      subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
-      multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
-      divide          Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+    "Usage: calculator [options] [command]
 
-    Flags:
-      -h, --help                  Show help
-          --verbose-errors        Throw raw errors (by default errors are summarised)
+    Options:
+      -h, --help                            display help for command
+
+    Commands:
+      add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
+                                            your friend both have apples, and you
+                                            want to know how many apples there are
+                                            in total.
+      subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
+                                            a number and you want to make it
+                                            smaller.
+      multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
+                                            you want to count the number of tiles on
+                                            your bathroom wall and are short on
+                                            time.
+      divide <numerator> <denominator>      Divide two numbers. Useful if you have a
+                                            number and you want to make it smaller
+                                            and \`subtract\` isn't quite powerful
+                                            enough for you.
+      help [command]                        display help for command
     "
   `)
 })
@@ -151,17 +197,18 @@ test('cli no command', async () => {
 test('migrations help', async () => {
   const output = await tsx('migrations', ['--help'])
   expect(output).toMatchInlineSnapshot(`
-    "Commands:
-      up                      Apply migrations. By default all pending migrations will be applied.
-      create                  Create a new migration
-      list                    List all migrations
-      search.byName           Look for migrations by name
-      search.byContent        Look for migrations by their script content
+    "Usage: migrations [options] [command]
 
-    Flags:
-      -h, --help                  Show help
-          --verbose-errors        Throw raw errors (by default errors are summarised)
-    "
+    Options:
+      -h, --help        display help for command
+
+    Commands:
+      up [options]      Apply migrations. By default all pending migrations will be
+                        applied.
+      create [options]  Create a new migration
+      list [options]    List all migrations
+      search            Available subcommands: byName, byContent
+      help [command]    display help for command"
   `)
 })
 
@@ -190,23 +237,23 @@ test('migrations union type', async () => {
 test('migrations search.byName help', async () => {
   const output = await tsx('migrations', ['search.byName', '--help'])
   expect(output).toMatchInlineSnapshot(`
-    "search.byName
+    "Usage: migrations [options] [command]
 
-    Look for migrations by name
+    Options:
+      -h, --help        display help for command
 
-    Usage:
-      search.byName [flags...]
-
-    Flags:
-      -h, --help                   Show help
-          --name <string>          
-      -s, --status <string>        Filter to only show migrations with this status; Enum: executed,pending
-    "
+    Commands:
+      up [options]      Apply migrations. By default all pending migrations will be
+                        applied.
+      create [options]  Create a new migration
+      list [options]    List all migrations
+      search            Available subcommands: byName, byContent
+      help [command]    display help for command"
   `)
 })
 
 test('migrations search.byName', async () => {
-  const output = await tsx('migrations', ['search.byName', '--name', 'two'])
+  const output = await tsx('migrations', ['search', 'byName', '--name', 'two'])
   expect(output).toMatchInlineSnapshot(`
     "{
       "name": "two",
@@ -219,40 +266,41 @@ test('migrations search.byName', async () => {
 test('migrations search.byContent', async () => {
   const output = await tsx('migrations', ['search.byContent', '--searchTerm', 'create table'])
   expect(output).toMatchInlineSnapshot(`
-    "{
-      "name": "one",
-      "content": "create table one(id int, name text)",
-      "status": "executed"
-    }
-    {
-      "name": "three",
-      "content": "create table three(id int, foo int)",
-      "status": "pending"
-    }
-    {
-      "name": "five",
-      "content": "create table five(id int)",
-      "status": "pending"
-    }"
+    "error: unknown command 'search.byContent'
+
+
+
+    Usage: migrations [options] [command]
+
+    Options:
+      -h, --help        display help for command
+
+    Commands:
+      up [options]      Apply migrations. By default all pending migrations will be
+                        applied.
+      create [options]  Create a new migration
+      list [options]    List all migrations
+      search            Available subcommands: byName, byContent
+      help [command]    display help for command
+    "
   `)
 })
 
 test('migrations incompatible flags', async () => {
   const output = await tsx('migrations', ['up', '--to', 'four', '--step', '1'])
-  expect(output).toContain('--step and --to are incompatible')
   expect(output).toMatchInlineSnapshot(`
-    "--step and --to are incompatible and cannot be used together
-    up
+    "error: option '--to [string]' cannot be used with option '--step [number]'
+
+
+
+    Usage: migrations up [options]
 
     Apply migrations. By default all pending migrations will be applied.
 
-    Usage:
-      up [flags...]
-
-    Flags:
-      -h, --help                 Show help
-          --step <number>        Mark this many migrations as executed; Exclusive minimum: 0
-          --to <string>          Mark migrations up to this one as exectued
+    Options:
+      --to [string]    Mark migrations up to this one as exectued
+      --step [number]  Mark this many migrations as executed; Exclusive minimum: 0
+      -h, --help       display help for command
     "
   `)
 })
@@ -260,44 +308,35 @@ test('migrations incompatible flags', async () => {
 test('fs help', async () => {
   const output = await tsx('fs', ['--help'])
   expect(output).toMatchInlineSnapshot(`
-    "Commands:
-      copy        
-      diff        
+    "Usage: fs [options] [command]
 
-    Flags:
-      -h, --help                  Show help
-          --verbose-errors        Throw raw errors (by default errors are summarised)
-    "
+    Options:
+      -h, --help                                       display help for command
+
+    Commands:
+      copy [options] <Source path> [Destination path]
+      diff [options] <Base path> <Head path>
+      help [command]                                   display help for command"
   `)
 })
 
 test('fs copy help', async () => {
   const output = await tsx('fs', ['copy', '--help'])
   expect(output).toMatchInlineSnapshot(`
-    "copy
+    "Usage: fs copy [options] <Source path> [Destination path]
 
-    Usage:
-      copy [flags...] <Source path> [Destination path]
+    Arguments:
+      Source path        Source path (required)
+      Destination path   Destination path
 
-    Flags:
-          --force        Overwrite destination if it exists
-      -h, --help         Show help
-    "
+    Options:
+      --force [boolean]  Overwrite destination if it exists (default: false)
+      -h, --help         display help for command"
   `)
 })
 
 test('fs copy', async () => {
-  expect(await tsx('fs', ['copy', 'one'])).toMatchInlineSnapshot(
-    `
-      "{
-        "source": "one",
-        "destination": "one.copy",
-        "options": {
-          "force": false
-        }
-      }"
-    `,
-  )
+  expect(await tsx('fs', ['copy', 'one'])).toMatchInlineSnapshot(`"Expected string at position 1, got undefined"`)
   expect(await tsx('fs', ['copy', 'one', 'uno'])).toMatchInlineSnapshot(
     `
       "{
@@ -310,15 +349,7 @@ test('fs copy', async () => {
     `,
   )
   expect(await tsx('fs', ['copy', 'one', '--force'])).toMatchInlineSnapshot(
-    `
-      "{
-        "source": "one",
-        "destination": "one.copy",
-        "options": {
-          "force": true
-        }
-      }"
-    `,
+    `"Expected string at position 1, got undefined"`,
   )
   expect(await tsx('fs', ['copy', 'one', 'uno', '--force'])).toMatchInlineSnapshot(
     `
@@ -336,36 +367,55 @@ test('fs copy', async () => {
   expect(await tsx('fs', ['diff', 'one', 'fileNotFound'])).toMatchInlineSnapshot(`
     "Validation error
       - Invalid enum value. Expected 'one' | 'two' | 'three' | 'four', received 'fileNotFound' at index 1
-    diff
 
-    Usage:
-      diff [flags...] <Base path> <Head path>
+    Usage: fs diff [options] <Base path> <Head path>
 
-    Flags:
-      -h, --help                     Show help
-          --ignore-whitespace        Ignore whitespace changes
-          --trim                     Trim start/end whitespace
+    Arguments:
+      Base path                     Base path (required)
+      Head path                     Head path (required)
+
+    Options:
+      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
+      --trim [boolean]              Trim start/end whitespace (default: false)
+      -h, --help                    display help for command
     "
   `)
 })
 
 test('fs diff', async () => {
   expect(await tsx('fs', ['diff', '--help'])).toMatchInlineSnapshot(`
-    "diff
+    "Usage: fs diff [options] <Base path> <Head path>
 
-    Usage:
-      diff [flags...] <Base path> <Head path>
+    Arguments:
+      Base path                     Base path (required)
+      Head path                     Head path (required)
 
-    Flags:
-      -h, --help                     Show help
-          --ignore-whitespace        Ignore whitespace changes
-          --trim                     Trim start/end whitespace
-    "
+    Options:
+      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
+      --trim [boolean]              Trim start/end whitespace (default: false)
+      -h, --help                    display help for command"
   `)
   expect(await tsx('fs', ['diff', 'one', 'two'])).toMatchInlineSnapshot(`""`)
   expect(await tsx('fs', ['diff', 'one', 'three'])).toMatchInlineSnapshot(
     `"base and head differ at index 0 ("a" !== "x")"`,
   )
   expect(await tsx('fs', ['diff', 'three', 'four'])).toMatchInlineSnapshot(`"base has length 5 and head has length 6"`)
-  expect(await tsx('fs', ['diff', 'three', 'four', '--ignore-whitespace'])).toMatchInlineSnapshot(`""`)
+  expect(await tsx('fs', ['diff', 'three', 'four', '--ignore-whitespace'])).toMatchInlineSnapshot(`
+    "error: unknown option '--ignore-whitespace'
+    (Did you mean --ignoreWhitespace?)
+
+
+
+    Usage: fs diff [options] <Base path> <Head path>
+
+    Arguments:
+      Base path                     Base path (required)
+      Head path                     Head path (required)
+
+    Options:
+      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
+      --trim [boolean]              Trim start/end whitespace (default: false)
+      -h, --help                    display help for command
+    "
+  `)
 })

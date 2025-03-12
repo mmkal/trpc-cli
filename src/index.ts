@@ -1,14 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer from '@trpc/server'
-import * as cleye from 'cleye'
-import colors from 'picocolors'
+import {Argument, Command, InvalidArgumentError, Option} from 'commander'
 import {ZodError} from 'zod'
-import {type JsonSchema7Type} from 'zod-to-json-schema'
+import {JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
-import {flattenedProperties, incompatiblePropertyPairs, getDescription} from './json-schema'
+import {addCompletions} from './completions'
+import {flattenedProperties, incompatiblePropertyPairs, getDescription, getSchemaTypes} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {Logger, TrpcCliParams} from './types'
+import {Logger, OmeletteInstanceLike, TrpcCliMeta, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
 import {parseProcedureInputs} from './zod-procedure'
 
@@ -25,9 +25,22 @@ export * as trpcServer from '@trpc/server'
 
 export {AnyRouter, AnyProcedure} from './trpc-compat'
 
+type TrpcCliRunParams = {
+  argv?: string[]
+  logger?: Logger
+  completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
+  process?: {
+    exit: (code: number) => never
+  }
+}
+
+type CommanderProgramLike = {
+  parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
+}
+
 export interface TrpcCli {
-  run: (params?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) => Promise<void>
-  ignoredProcedures: {procedure: string; reason: string}[]
+  run: (params?: TrpcCliRunParams) => Promise<void>
+  buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
 }
 
 /**
@@ -35,114 +48,388 @@ export interface TrpcCli {
  *
  * @param router A trpc router
  * @param context The context to use when calling the procedures - needed if your router requires a context
- * @param alias A function that can be used to provide aliases for flags.
- * @param default A procedure to use as the default command when the user doesn't specify one.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
-  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([name, procedure]) => {
-    const procedureResult = parseProcedureInputs(procedure._def.inputs as unknown[])
-    if (!procedureResult.success) {
-      return [name, procedureResult.error] as const
-    }
-
-    const jsonSchema = procedureResult.value
-    const properties = flattenedProperties(jsonSchema.flagsSchema)
-    const incompatiblePairs = incompatiblePropertyPairs(jsonSchema.flagsSchema)
-
+  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
+    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[])
     // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
-    const trpcProcedure = router._def.procedures[name] as AnyProcedure
     let type: 'mutation' | 'query' | 'subscription'
-    if (isTrpc11Procedure(trpcProcedure)) {
-      type = trpcProcedure._def.type
-    } else if (trpcProcedure._def.mutation) {
+    if (isTrpc11Procedure(procedure)) {
+      type = procedure._def.type
+    } else if (procedure._def.mutation) {
       type = 'mutation'
-    } else if (trpcProcedure._def.query) {
+    } else if (procedure._def.query) {
       type = 'query'
-    } else if (trpcProcedure._def.subscription) {
+    } else if (procedure._def.subscription) {
       type = 'subscription'
     } else {
-      const keys = Object.keys(trpcProcedure._def).join(', ')
+      const keys = Object.keys(procedure._def).join(', ')
       throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
     }
 
-    return [name, {name, procedure, jsonSchema, properties, incompatiblePairs, type}] as const
+    if (getMeta(procedure).jsonInput || !procedureInputsResult.success) {
+      return [
+        procedurePath,
+        {
+          name: procedurePath,
+          procedure,
+          procedureInputs: {
+            positionalParameters: [],
+            parameters: [],
+            optionsJsonSchema: {
+              type: 'object',
+              properties: {
+                input: {
+                  type: 'json' as string as 'string',
+                  description: 'Input formatted as JSON',
+                },
+              },
+            },
+            getPojoInput: parsedCliParams => JSON.parse(parsedCliParams.options.input as string) as {},
+          },
+          incompatiblePairs: [],
+          type,
+        },
+      ] as typeof result
+    }
+
+    const procedureInputs = procedureInputsResult.value
+    const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
+
+    const result = [procedurePath, {name: procedurePath, procedure, procedureInputs, incompatiblePairs, type}] as const
+    return result
   })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
     return typeof v === 'string' ? [] : [[k, v] as const]
   })
 
-  const procedureMap = Object.fromEntries(procedureEntries)
-
-  const ignoredProcedures = procedures.flatMap(([k, v]) => (typeof v === 'string' ? [{procedure: k, reason: v}] : []))
-
-  async function run(runParams?: {argv?: string[]; logger?: Logger; process?: {exit: (code: number) => never}}) {
+  function buildProgram(runParams?: TrpcCliRunParams) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
+    const program = new Command()
+    program.showHelpAfterError()
+    program.showSuggestionAfterError()
+
+    // Organize commands in a tree structure for nested subcommands
+    const commandTree: Record<string, Command> = {
+      '': program, // Root level
+    }
+
+    // Keep track of default commands for each parent path
+    const defaultCommands: Record<
+      string,
+      {
+        procedurePath: string
+        config: (typeof procedureEntries)[0][1]
+        command: Command
+      }
+    > = {}
+
     const _process = runParams?.process || process
-    let verboseErrors: boolean = false
+    const configureCommand = (
+      command: Command,
+      procedurePath: string,
+      {procedure, procedureInputs, incompatiblePairs}: (typeof procedureEntries)[0][1],
+    ) => {
+      const flagJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
+      command.exitOverride(ec => {
+        _process.exit(ec.exitCode)
+        throw new FailedToExitError(`Command ${command.name()} exitOverride`, {cause: ec})
+      })
+      command.configureOutput({
+        writeErr: str => {
+          logger.error?.(str)
+        },
+      })
+      command.showHelpAfterError()
 
-    const cleyeCommands = procedureEntries.map(
-      ([commandName, {procedure, jsonSchema, properties}]): CleyeCommandOptions => {
-        const flags = Object.fromEntries(
-          Object.entries(properties).map(([propertyKey, propertyValue]) => {
-            const cleyeType = getCleyeType(propertyValue)
+      const meta = getMeta(procedure)
 
-            let description: string | undefined = getDescription(propertyValue)
-            if ('required' in jsonSchema.flagsSchema && !jsonSchema.flagsSchema.required?.includes(propertyKey)) {
-              description = `${description} (optional)`.trim()
-            }
-            description ||= undefined
+      if (meta.usage) command.usage([meta.usage].flat().join('\n'))
+      if (meta.examples) command.addHelpText('after', `\nExamples:\n${[meta.examples].flat().join('\n')}`)
 
-            return [
-              propertyKey,
-              {
-                type: cleyeType,
-                description,
-                default: propertyValue.default as {},
-              },
-            ]
+      meta?.aliases?.command?.forEach(alias => {
+        command.alias(alias)
+      })
+
+      command.description(meta?.description || '')
+
+      procedureInputs.positionalParameters.forEach(param => {
+        const argument = new Argument(param.name, param.description + (param.required ? ` (required)` : ''))
+        argument.required = param.required
+        argument.variadic = param.array
+        command.addArgument(argument)
+      })
+
+      const unusedFlagAliases: Record<string, string> = {...meta.aliases?.flags}
+      Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
+        const description = getDescription(propertyValue)
+
+        let flags = `--${propertyKey}`
+        const alias = meta.aliases?.flags?.[propertyKey]
+        if (alias) {
+          let prefix = '-'
+          if (alias.startsWith('-')) prefix = ''
+          else if (alias.length > 1) prefix = '--'
+
+          flags = `${prefix}${alias}, ${flags}`
+          delete unusedFlagAliases[propertyKey]
+        }
+
+        const defaultValue =
+          'default' in propertyValue
+            ? ({exists: true, value: propertyValue.default} as const)
+            : ({exists: false} as const)
+
+        if (defaultValue.value === true) {
+          const negation = new Option(
+            `--no-${propertyKey}`,
+            `Negate \`${propertyKey}\` property ${description || ''}`.trim(),
+          )
+          command.addOption(negation)
+        }
+
+        const numberParser = (val: string, {fallback = val as unknown} = {}) => {
+          const number = Number(val)
+          return Number.isNaN(number) ? fallback : number
+        }
+
+        const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
+          if (val === 'true') return true
+          if (val === 'false') return false
+          return fallback
+        }
+
+        const rootTypes = getSchemaTypes(propertyValue).sort()
+
+        /** try to get a parser that can confidently parse a string into the correct type. Returns null if it can't confidently parse */
+        const getValueParser = (types: ReturnType<typeof getSchemaTypes>) => {
+          types = types.map(t => (t === 'integer' ? 'number' : t))
+          if (types.length === 2 && types[0] === 'boolean' && types[1] === 'number') {
+            return {
+              type: 'boolean|number',
+              parser: (value: string) => booleanParser(value, {fallback: null}) ?? numberParser(value),
+            } as const
+          }
+          if (types.length === 1 && types[0] === 'boolean') {
+            return {type: 'boolean', parser: (value: string) => booleanParser(value)} as const
+          }
+          if (types.length === 1 && types[0] === 'number') {
+            return {type: 'number', parser: (value: string) => numberParser(value)} as const
+          }
+          if (types.length === 1 && types[0] === 'string') {
+            return {type: 'string', parser: null} as const
+          }
+          return {
+            type: 'json',
+            parser: (value: string) => {
+              let parsed: unknown
+              try {
+                parsed = JSON.parse(value) as {}
+              } catch {
+                throw new InvalidArgumentError(`Malformed JSON.`)
+              }
+              const jsonSchemaType = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed
+              if (!types.includes(jsonSchemaType)) {
+                throw new InvalidArgumentError(`Got ${jsonSchemaType} but expected ${types.join(' or ')}`)
+              }
+              return parsed
+            },
+          } as const
+        }
+
+        const propertyType = rootTypes[0]
+        const isValueRequired =
+          'required' in procedureInputs.optionsJsonSchema &&
+          procedureInputs.optionsJsonSchema.required?.includes(propertyKey)
+        const isCliOptionRequired = isValueRequired && propertyType !== 'boolean' && !defaultValue.exists
+
+        const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
+
+        if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'string') {
+          const option = new Option(`${flags} [value]`, description)
+          option.default(defaultValue.exists ? defaultValue.value : false)
+          command.addOption(option)
+          return
+        }
+        if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'number') {
+          const option = new Option(`${flags} [value]`, description)
+          option.argParser(getValueParser(rootTypes).parser!)
+          option.default(defaultValue.exists ? defaultValue.value : false)
+          command.addOption(option)
+          return
+        }
+
+        if (rootTypes.length !== 1) {
+          const option = new Option(`${flags} ${bracketise('json')}`, `${description} (value will be parsed as JSON)`)
+          option.argParser(getValueParser(rootTypes).parser!)
+          command.addOption(option)
+          return
+        }
+
+        if (propertyType === 'boolean' && isValueRequired) {
+          const option = new Option(flags, description)
+          option.default(defaultValue.exists ? defaultValue.value : false)
+          command.addOption(option)
+          return
+        }
+        if (propertyType === 'boolean' && !isValueRequired) {
+          const option = new Option(`${flags} [boolean]`, description)
+          option.argParser(value => booleanParser(value))
+          // don't set a default value of `false`, because `undefined` is accepted by the procedure
+          if (defaultValue.exists) option.default(defaultValue.value)
+          command.addOption(option)
+          return
+        }
+
+        let option: Option
+
+        // eslint-disable-next-line unicorn/prefer-switch
+        if (propertyType === 'string') {
+          option = new Option(`${flags} ${bracketise('string')}`, description)
+        } else if (propertyType === 'boolean') {
+          option = new Option(flags, description)
+        } else if (propertyType === 'number' || propertyType === 'integer') {
+          option = new Option(`${flags} ${bracketise('number')}`, description)
+          option.argParser(value => numberParser(value))
+        } else if (propertyType === 'array') {
+          option = new Option(`${flags} [values...]`, description)
+          option.default(defaultValue.exists ? defaultValue.value : [])
+          const itemTypes =
+            'items' in propertyValue && propertyValue.items
+              ? getSchemaTypes(propertyValue.items as JsonSchema7Type)
+              : []
+
+          const itemParser = getValueParser(itemTypes)
+          if (itemParser.parser) {
+            option.argParser((value, previous) => {
+              const parsed = itemParser.parser(value)
+              if (Array.isArray(previous)) return [...previous, parsed] as unknown[]
+              return [parsed] as unknown[]
+            })
+          }
+        }
+        option ||= new Option(`${flags} [json]`, description)
+
+        if (option.flags.includes('<')) {
+          option.makeOptionMandatory()
+        }
+
+        option.conflicts(
+          incompatiblePairs.flatMap(pair => {
+            const filtered = pair.filter(p => p !== propertyKey)
+            if (filtered.length === pair.length) return []
+            return filtered
           }),
         )
 
-        Object.entries(flags).forEach(([fullName, flag]) => {
-          const alias = params.alias?.(fullName, {command: commandName, flags})
-          if (alias) {
-            Object.assign(flag, {alias: alias})
-          }
-        })
+        command.addOption(option)
+      })
 
-        return {
-          name: commandName,
-          help: procedure._def.meta,
-          parameters: jsonSchema.parameters,
-          flags: flags as {},
+      const invalidFlagAliases = Object.entries(unusedFlagAliases).map(([flag, alias]) => `${flag}: ${alias}`)
+      if (invalidFlagAliases.length) {
+        throw new Error(`Invalid flag aliases: ${invalidFlagAliases.join(', ')}`)
+      }
+
+      // Set the action for this command
+      command.action(async (...args) => {
+        const options = command.opts()
+
+        if (args.at(-2) !== options) {
+          // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break
+          throw new Error(`Unexpected args format, second last arg is not the options object`, {cause: args})
         }
-      },
-    )
+        if (args.at(-1) !== command) {
+          // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break
+          throw new Error(`Unexpected args format, last arg is not the Command instance`, {cause: args})
+        }
 
-    const defaultCommand = params.default && cleyeCommands.find(({name}) => name === params.default?.procedure)
+        // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
+        const positionalValues = args.slice(0, -2)
 
-    const parsedArgv = cleye.cli(
-      {
-        flags: {
-          verboseErrors: {
-            type: Boolean,
-            description: `Throw raw errors (by default errors are summarised)`,
-            default: false,
-          },
-        },
-        ...defaultCommand,
-        commands: cleyeCommands
-          .filter(cmd => cmd.name !== defaultCommand?.name)
-          .map(cmd => cleye.command(cmd)) as cleye.Command[],
-      },
-      undefined,
-      runParams?.argv,
-    )
+        const input = procedureInputs.getPojoInput({positionalValues, options})
+        const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
+          throw transformError(err, command)
+        })
+        if (result != null) logger.info?.(result)
+      })
+    }
 
-    const {verboseErrors: _verboseErrors, ...unknownFlags} = parsedArgv.unknownFlags as Record<string, unknown>
-    verboseErrors = _verboseErrors || parsedArgv.flags.verboseErrors
+    // Process each procedure and add as a command or subcommand
+    procedureEntries.forEach(([procedurePath, commandConfig]) => {
+      const segments = procedurePath.split('.')
+
+      // Create the command path and ensure parent commands exist
+      let currentPath = ''
+      for (let i = 0; i < segments.length - 1; i++) {
+        const segment = segments[i]
+        const parentPath = currentPath
+        currentPath = currentPath ? `${currentPath}.${segment}` : segment
+
+        // Create parent command if it doesn't exist
+        if (!commandTree[currentPath]) {
+          const parentCommand = commandTree[parentPath]
+          const newCommand = new Command(segment)
+          newCommand.showHelpAfterError()
+          parentCommand.addCommand(newCommand)
+          commandTree[currentPath] = newCommand
+        }
+      }
+
+      // Create the actual leaf command
+      const leafName = segments.at(-1)
+      const parentPath = segments.length > 1 ? segments.slice(0, -1).join('.') : ''
+      const parentCommand = commandTree[parentPath]
+
+      const leafCommand = new Command(leafName)
+      configureCommand(leafCommand, procedurePath, commandConfig)
+      parentCommand.addCommand(leafCommand)
+
+      // Check if this command should be the default for its parent
+      const meta = getMeta(commandConfig.procedure)
+      if (meta.default === true) {
+        // this is the default command for the parent, so just configure the parent command to do the same action
+        configureCommand(parentCommand, procedurePath, commandConfig)
+
+        // ancestors need to support positional options to pass through the positional args
+        for (let ancestor = parentCommand.parent, i = 0; ancestor && i < 10; ancestor = ancestor.parent, i++) {
+          ancestor.enablePositionalOptions()
+        }
+        parentCommand.passThroughOptions()
+
+        defaultCommands[parentPath] = {
+          procedurePath: procedurePath,
+          config: commandConfig,
+          command: leafCommand,
+        }
+      }
+    })
+
+    // After all commands are added, generate descriptions for parent commands
+    Object.entries(commandTree).forEach(([path, command]) => {
+      // Skip the root command and leaf commands (which already have descriptions)
+      if (path === '' || command.commands.length === 0) return
+
+      // Get the names of all direct subcommands
+      const subcommandNames = command.commands.map(cmd => cmd.name())
+
+      // Check if there's a default command for this path
+      const defaultCommand = defaultCommands[path]?.command.name()
+
+      // Format the subcommand list, marking the default one
+      const formattedSubcommands = subcommandNames
+        .map(name => (name === defaultCommand ? `${name} (default)` : name))
+        .join(', ')
+
+      // Get the existing description (might have been set by a default command)
+      const existingDescription = command.description() || ''
+
+      // Only add the subcommand list if it's not already part of the description
+      const descriptionParts = [existingDescription, `Available subcommands: ${formattedSubcommands}`]
+
+      command.description(descriptionParts.filter(Boolean).join('\n'))
+    })
 
     type Context = NonNullable<typeof params.context>
 
@@ -152,74 +439,65 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     const caller = createCallerFactory(router)(params.context)
 
-    const die: Fail = (message: string, {cause, help = true}: {cause?: unknown; help?: boolean} = {}) => {
-      if (verboseErrors !== undefined && verboseErrors) {
-        throw (cause as Error) || new Error(message)
-      }
-      logger.error?.(colors.red(message))
-      if (help) {
-        parsedArgv.showHelp()
-      }
-      return _process.exit(1)
-    }
-
-    let command = parsedArgv.command as string | undefined
-
-    if (!command && params.default) {
-      command = params.default.procedure as string
-    }
-
-    const procedureInfo = command && procedureMap[command]
-
-    if (!procedureInfo) {
-      const name = JSON.stringify(command || parsedArgv._[0])
-      const message = name ? `Command not found: ${name}.` : 'No command specified.'
-      return die(message)
-    }
-
-    if (Object.entries(unknownFlags).length > 0) {
-      const s = Object.entries(unknownFlags).length === 1 ? '' : 's'
-      return die(`Unexpected flag${s}: ${Object.keys(unknownFlags).join(', ')}`)
-    }
-
-    let {help, ...flags} = parsedArgv.flags
-
-    flags = Object.fromEntries(Object.entries(flags as {}).filter(([_k, v]) => v !== undefined)) // cleye returns undefined for flags which didn't receive a value
-
-    const incompatibleMessages = procedureInfo.incompatiblePairs
-      .filter(([a, b]) => a in flags && b in flags)
-      .map(([a, b]) => `--${a} and --${b} are incompatible and cannot be used together`)
-
-    if (incompatibleMessages?.length) {
-      return die(incompatibleMessages.join('\n'))
-    }
-
-    const input = procedureInfo.jsonSchema.getInput({_: parsedArgv._, flags}) as never
-
-    try {
-      const result: unknown = await (caller[procedureInfo.name] as Function)(input)
-      if (result) logger.info?.(result)
-      _process.exit(0)
-    } catch (err) {
-      throw transformError(err, die)
-    }
+    return program
   }
 
-  return {run, ignoredProcedures}
+  async function run(runParams?: TrpcCliRunParams) {
+    const _process = runParams?.process || process
+    const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
+    const program = buildProgram(runParams)
+    program.exitOverride(exit => {
+      _process.exit(exit.exitCode)
+      throw new FailedToExitError('Root command exitOverride', {cause: exit})
+    })
+    program.configureOutput({
+      writeErr: str => logger.error?.(str),
+    })
+    const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
+
+    if (runParams?.completion) {
+      const completion =
+        typeof runParams.completion === 'function' ? await runParams.completion() : runParams.completion
+      addCompletions(program, completion)
+    }
+
+    await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {
+      const message = looksLikeInstanceof(err, Error) ? err.message : `Non-error of type ${typeof err} thrown: ${err}`
+      logger.error?.(message)
+      _process.exit(1)
+      throw new FailedToExitError(`Program parse catch block`, {cause: err})
+    })
+    _process.exit(0)
+    throw new FailedToExitError('Program exit', {cause: new Error('Program exit after successful run')})
+  }
+
+  return {run, buildProgram}
+}
+
+function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {
+  const meta: Partial<TrpcCliMeta> | undefined = procedure._def.meta
+  return meta?.cliMeta || meta || {}
+}
+
+class FailedToExitError extends Error {
+  constructor(message: string, {cause}: {cause: unknown}) {
+    super(
+      `${message}. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.`,
+      {cause},
+    )
+  }
 }
 
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-type Fail = (message: string, options?: {cause?: unknown; help?: boolean}) => never
-
-function transformError(err: unknown, fail: Fail): unknown {
+function transformError(err: unknown, command: Command) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error('createCallerFactory version mismatch - pass in createCallerFactory explicitly', {cause: err})
   }
   if (looksLikeInstanceof(err, trpcServer.TRPCError)) {
     const cause = err.cause
-    if (looksLikeInstanceof(cause, ZodError)) {
+    if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues
       try {
         cause.issues = cause.issues.map(issue => {
@@ -230,51 +508,21 @@ function transformError(err: unknown, fail: Fail): unknown {
           }
         })
 
-        const prettyError = zodValidationError.fromError(cause, {
+        const validationError = zodValidationError.fromError(cause, {
           prefixSeparator: '\n  - ',
           issueSeparator: '\n  - ',
         })
 
-        return fail(prettyError.message, {cause, help: true})
+        return new ValidationError(validationError.message + '\n\n' + command.helpInformation()) // don't include cause
       } finally {
         cause.issues = originalIssues
       }
     }
     if (err.code === 'INTERNAL_SERVER_ERROR') {
-      throw cause
-    }
-    if (err.code === 'BAD_REQUEST') {
-      return fail(err.message, {cause: err})
+      return cause
     }
   }
   return err
 }
 
-type CleyeCommandOptions = cleye.Command['options']
-type CleyeFlag = NonNullable<CleyeCommandOptions['flags']>[string]
-
-function getCleyeType(schema: JsonSchema7Type): Extract<CleyeFlag, {type: unknown}>['type'] {
-  const _type = 'type' in schema && typeof schema.type === 'string' ? schema.type : null
-  switch (_type) {
-    case 'string': {
-      return String
-    }
-    case 'integer':
-    case 'number': {
-      return Number
-    }
-    case 'boolean': {
-      return Boolean
-    }
-    case 'array': {
-      return [String]
-    }
-    case 'object': {
-      return (s: string) => JSON.parse(s) as {}
-    }
-    default: {
-      _type satisfies 'null' | null // make sure we were exhaustive (forgot integer at one point)
-      return (value: unknown) => value
-    }
-  }
-}
+class ValidationError extends Error {}
