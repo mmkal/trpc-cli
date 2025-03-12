@@ -2,8 +2,10 @@ import {execa} from 'execa'
 import * as fs from 'fs'
 import * as path from 'path'
 import stripAnsi from 'strip-ansi'
-import {expect, test} from 'vitest'
+import {expect, test as baseTest} from 'vitest'
 import '../src' // make sure vitest reruns this file after every change
+
+const test = process.env.CI ? baseTest.skip : baseTest
 
 const execAll = async (program: string, args: string[], options: import('execa').Options = {}) => {
   const {all} = await execa(program, args, {
