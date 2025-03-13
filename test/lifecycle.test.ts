@@ -1,6 +1,7 @@
 import {initTRPC} from '@trpc/server'
 import {expect, test, vi} from 'vitest'
-import {createCli, FailedToExitError, TrpcCliMeta, z} from '../src'
+import {createCli, TrpcCliMeta, z} from '../src'
+import {FailedToExitError} from '../src/errors'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 

@@ -6,6 +6,7 @@ import {ZodError} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
+import {FailedToExitError, CliValidationError} from './errors'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription, getSchemaTypes} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
@@ -477,7 +478,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const formatError =
       runParams?.formatError ||
       ((err: unknown) => {
-        if (err instanceof ValidationError) {
+        if (err instanceof CliValidationError) {
           return err.message
         }
         return inspect(err)
@@ -527,7 +528,7 @@ function transformError(err: unknown, command: Command) {
           issueSeparator: '\n  - ',
         })
 
-        return new ValidationError(validationError.message + '\n\n' + command.helpInformation())
+        return new CliValidationError(validationError.message + '\n\n' + command.helpInformation())
       } finally {
         cause.issues = originalIssues
       }
@@ -539,15 +540,4 @@ function transformError(err: unknown, command: Command) {
   return err
 }
 
-/** An error thrown when the trpc procedure results in a bad request */
-export class ValidationError extends Error {}
-
-/** An error which is only thrown when a custom \`process\` parameter is used. Under normal circumstances, this should not be used, even internally. */
-export class FailedToExitError extends Error {
-  readonly exitCode: number
-  constructor(message: string, {exitCode, cause}: {exitCode: number; cause: unknown}) {
-    const fullMessage = `${message}. The process was expected to exit with exit code ${exitCode} but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.`
-    super(fullMessage, {cause})
-    this.exitCode = exitCode
-  }
-}
+export {FailedToExitError, CliValidationError} from './errors'

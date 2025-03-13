@@ -1,5 +1,6 @@
 import {z} from 'zod'
 import zodToJsonSchema from 'zod-to-json-schema'
+import {CliValidationError} from './errors'
 import type {Result, ParsedProcedure} from './types'
 import {looksLikeInstanceof} from './util'
 
@@ -213,12 +214,12 @@ function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result
           const correspondingSchema = positionalSchemas[i]
           if (looksLikeArray(correspondingSchema)) {
             if (!Array.isArray(v)) {
-              throw new Error(`Expected array at position ${i}, got ${typeof v}`)
+              throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
             }
             return v.map(s => convertPositional(correspondingSchema.element, s))
           }
           if (typeof v !== 'string') {
-            throw new Error(`Expected string at position ${i}, got ${typeof v}`)
+            throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
           }
           return convertPositional(correspondingSchema, v)
         })
