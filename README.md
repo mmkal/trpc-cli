@@ -303,7 +303,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L62)
+#### [createCli](./src/index.ts#L63)
 
 Run a trpc router as a CLI.
 
@@ -458,7 +458,7 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
-ValidationError: Validation error
+Validation error
   - Expected number, received string at index 1
 
 Usage: calculator add [options] <parameter_1> <parameter_2>
@@ -473,11 +473,6 @@ Arguments:
 Options:
   -h, --help   display help for command
 
-    at transformError (/Users/mmkal/src/trpc-cli/src/index.ts:521:16)
-    at <anonymous> (/Users/mmkal/src/trpc-cli/src/index.ts:364:17)
-    at async Command.<anonymous> (/Users/mmkal/src/trpc-cli/src/index.ts:363:24)
-    at async Command.parseAsync (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:1105:5)
-    at async Object.run (/Users/mmkal/src/trpc-cli/src/index.ts:476:5)
 ```
 <!-- codegen:end -->
 
