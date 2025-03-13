@@ -148,6 +148,6 @@ test('error when using trpc v11 without createCallerFactory', async () => {
       })
   }
   await expect(runAndCaptureProcessExit({argv: ['add', '1', '2']})).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[Error: createCallerFactory version mismatch - pass in createCallerFactory explicitly]`,
+    `[Error: Program exit after failure. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
 })

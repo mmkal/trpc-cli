@@ -303,7 +303,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L53)
+#### [createCli](./src/index.ts#L62)
 
 Run a trpc router as a CLI.
 
@@ -324,7 +324,7 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:88401aa19b6a08abc634d5be37ffab3a -->
+<!-- hash:8116167a54883950f73147af91af394e -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer} from 'trpc-cli'
 import {z} from 'zod'
@@ -370,6 +370,17 @@ const router = trpc.router({
       ]),
     )
     .mutation(({input}) => input[0] / input[1]),
+  squareRoot: trpc.procedure
+    .meta({
+      description:
+        'Square root of a number. Useful to find the length of the side of a square given the area.',
+      jsonInput: true,
+    })
+    .input(z.number())
+    .query(({input}) => {
+      if (input < 0) throw new Error(`Get real`)
+      return Math.sqrt(input)
+    }),
 })
 
 void createCli({router}).run()
@@ -404,6 +415,9 @@ Commands:
                                         number and you want to make it smaller
                                         and `subtract` isn't quite powerful
                                         enough for you.
+  squareRoot [options]                  Square root of a number. Useful to find
+                                        the length of the side of a square given
+                                        the area.
   help [command]                        display help for command
 ```
 <!-- codegen:end -->
@@ -444,7 +458,7 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
-Validation error
+ValidationError: Validation error
   - Expected number, received string at index 1
 
 Usage: calculator add [options] <parameter_1> <parameter_2>
@@ -459,6 +473,11 @@ Arguments:
 Options:
   -h, --help   display help for command
 
+    at transformError (/Users/mmkal/src/trpc-cli/src/index.ts:521:16)
+    at <anonymous> (/Users/mmkal/src/trpc-cli/src/index.ts:364:17)
+    at async Command.<anonymous> (/Users/mmkal/src/trpc-cli/src/index.ts:363:24)
+    at async Command.parseAsync (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:1105:5)
+    at async Object.run (/Users/mmkal/src/trpc-cli/src/index.ts:476:5)
 ```
 <!-- codegen:end -->
 
@@ -566,6 +585,54 @@ const caller = initTRPC.create().createCallerFactory(router)({})
 
 test('add', async () => {
   expect(await caller.add([2, 3])).toBe(5)
+})
+```
+
+If you really want to test it as like a CLI and want to avoid a subprocess, you can also call the `run` method programmatically, and override the `process.exit` call and extract the resolve/reject values from `FailedToExitError`:
+
+```ts
+import {createCli, FailedToExitError} from 'trpc-cli'
+
+const run = async (argv: string[]) => {
+  const cli = createCli({router: calculatorRouter})
+  return cli
+    .run({
+      argv,
+      process: {exit: () => void 0 as never},
+      logger: {info: () => {}, error: () => {}},
+    })
+    .catch(err => {
+      // this will always throw, because our `exit` handler doesn't throw or exit the process
+      while (err instanceof FailedToExitError) {
+        if (err.exitCode === 0) {
+          return err.cause // this is the return value of the procedure that was invoked
+        }
+        err = err.cause // use the underlying error that caused the exit
+      }
+      throw err
+    })
+}
+
+test('make sure parsing works correctly', async () => {
+  await expect(run(['add', '2', '3'])).resolves.toBe(5)
+  await expect(run(['squareRoot', '--value=4'])).resolves.toBe(2)
+  await expect(run(['squareRoot', `--value=-1`])).rejects.toMatchInlineSnapshot(
+    `[Error: Get real]`,
+  )
+  await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
+    [Error: Validation error
+      - Expected number, received string at index 1
+
+    Usage: program add [options] <parameter_1> <parameter_2>
+
+    Arguments:
+      parameter_1   (required)
+      parameter_2   (required)
+
+    Options:
+      -h, --help   display help for command
+    ]
+  `)
 })
 ```
 

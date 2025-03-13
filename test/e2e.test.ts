@@ -38,6 +38,9 @@ test('cli help', async () => {
                                               number and you want to make it smaller
                                               and \`subtract\` isn't quite powerful
                                               enough for you.
+        squareRoot [options]                  Square root of a number. Useful to find
+                                              the length of the side of a square given
+                                              the area.
         help [command]                        display help for command"
     `)
 })
@@ -160,6 +163,9 @@ test('cli non-existent command', async () => {
                                             number and you want to make it smaller
                                             and \`subtract\` isn't quite powerful
                                             enough for you.
+      squareRoot [options]                  Square root of a number. Useful to find
+                                            the length of the side of a square given
+                                            the area.
       help [command]                        display help for command
     "
   `)
@@ -189,6 +195,9 @@ test('cli no command', async () => {
                                             number and you want to make it smaller
                                             and \`subtract\` isn't quite powerful
                                             enough for you.
+      squareRoot [options]                  Square root of a number. Useful to find
+                                            the length of the side of a square given
+                                            the area.
       help [command]                        display help for command
     "
   `)
@@ -336,7 +345,7 @@ test('fs copy help', async () => {
 })
 
 test('fs copy', async () => {
-  expect(await tsx('fs', ['copy', 'one'])).toMatchInlineSnapshot(`"Expected string at position 1, got undefined"`)
+  expect(await tsx('fs', ['copy', 'one'])).toMatch(/Expected string at position 1, got undefined/)
   expect(await tsx('fs', ['copy', 'one', 'uno'])).toMatchInlineSnapshot(
     `
       "{
@@ -349,7 +358,19 @@ test('fs copy', async () => {
     `,
   )
   expect(await tsx('fs', ['copy', 'one', '--force'])).toMatchInlineSnapshot(
-    `"Expected string at position 1, got undefined"`,
+    `
+      "Error: Expected string at position 1, got undefined
+          at <anonymous> (/Users/mmkal/src/trpc-cli/src/zod-procedure.ts:221:19)
+          at Array.map (<anonymous>)
+          at Object.getPojoInput (/Users/mmkal/src/trpc-cli/src/zod-procedure.ts:212:64)
+          at Command.<anonymous> (/Users/mmkal/src/trpc-cli/src/index.ts:363:39)
+          at Command.listener [as _actionHandler] (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:553:17)
+          at /Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:1587:14
+          at Command._chainOrCall (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:1471:12)
+          at Command._parseCommand (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:1586:27)
+          at /Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:1350:27
+          at Command._chainOrCall (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:1471:12)"
+    `,
   )
   expect(await tsx('fs', ['copy', 'one', 'uno', '--force'])).toMatchInlineSnapshot(
     `
@@ -417,5 +438,22 @@ test('fs diff', async () => {
       --trim [boolean]              Trim start/end whitespace (default: false)
       -h, --help                    display help for command
     "
+  `)
+})
+
+test('thrown error in procedure includes call stack', async () => {
+  const output = await tsx('calculator', ['squareRoot', `--input=-1`])
+  expect(output).toMatchInlineSnapshot(`
+    "Error: Get real
+        at <anonymous> (/Users/mmkal/src/trpc-cli/test/fixtures/calculator.ts:51:28)
+        at resolveMiddleware (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/@trpc+server@10.45.2/node_modules/@trpc/server/dist/index.js:423:36)
+        at callRecursive (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/@trpc+server@10.45.2/node_modules/@trpc/server/dist/index.js:453:38)
+        at next (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/@trpc+server@10.45.2/node_modules/@trpc/server/dist/index.js:462:32)
+        at inputMiddleware (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/@trpc+server@10.45.2/node_modules/@trpc/server/dist/index.js:293:16)
+        at async callRecursive (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/@trpc+server@10.45.2/node_modules/@trpc/server/dist/index.js:453:32)
+        at async resolve (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/@trpc+server@10.45.2/node_modules/@trpc/server/dist/index.js:483:24)
+        at async Command.<anonymous> (/Users/mmkal/src/trpc-cli/src/index.ts:364:24)
+        at async Command.parseAsync (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/commander@13.1.0/node_modules/commander/lib/command.js:1105:5)
+        at async Object.run (/Users/mmkal/src/trpc-cli/src/index.ts:485:5)"
   `)
 })

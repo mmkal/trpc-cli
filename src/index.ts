@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer from '@trpc/server'
-import {Argument, Command, InvalidArgumentError, Option} from 'commander'
+import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
+import {inspect} from 'util'
 import {ZodError} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
@@ -19,6 +20,13 @@ export * as zod from 'zod'
 
 export * as trpcServer from '@trpc/server'
 
+export class Command extends BaseCommand {
+  /** @internal track the commands that have been run, so that we can find the `__result` of the last command */
+  __ran: Command[] = []
+  /** @internal stash the return value of the underlying procedure on the command so to pass to `FailedToExitError` for use in a pinch */
+  __result?: unknown
+}
+
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,6 +37,8 @@ type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
+  /** Format an error thrown by the root procedure before logging to `logger.error` */
+  formatError?: (error: unknown) => string
   process?: {
     exit: (code: number) => never
   }
@@ -135,7 +145,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const flagJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
       command.exitOverride(ec => {
         _process.exit(ec.exitCode)
-        throw new FailedToExitError(`Command ${command.name()} exitOverride`, {cause: ec})
+        throw new FailedToExitError(`Command ${command.name()} exitOverride`, {exitCode: ec.exitCode, cause: ec})
       })
       command.configureOutput({
         writeErr: str => {
@@ -334,6 +344,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       // Set the action for this command
       command.action(async (...args) => {
+        program.__ran ||= []
+        program.__ran.push(command)
         const options = command.opts()
 
         if (args.at(-2) !== options) {
@@ -352,6 +364,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
           throw transformError(err, command)
         })
+        command.__result = result
         if (result != null) logger.info?.(result)
       })
     }
@@ -448,7 +461,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const program = buildProgram(runParams)
     program.exitOverride(exit => {
       _process.exit(exit.exitCode)
-      throw new FailedToExitError('Root command exitOverride', {cause: exit})
+      throw new FailedToExitError('Root command exitOverride', {exitCode: exit.exitCode, cause: exit})
     })
     program.configureOutput({
       writeErr: str => logger.error?.(str),
@@ -461,14 +474,24 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       addCompletions(program, completion)
     }
 
+    const formatError =
+      runParams?.formatError ||
+      ((err: unknown) => {
+        if (err instanceof ValidationError) {
+          return err.message
+        }
+        return inspect(err)
+      })
     await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {
-      const message = looksLikeInstanceof(err, Error) ? err.message : `Non-error of type ${typeof err} thrown: ${err}`
-      logger.error?.(message)
+      const logMessage = looksLikeInstanceof(err, Error)
+        ? formatError(err) || err.message
+        : `Non-error of type ${typeof err} thrown: ${err}`
+      logger.error?.(logMessage)
       _process.exit(1)
-      throw new FailedToExitError(`Program parse catch block`, {cause: err})
+      throw new FailedToExitError(`Program exit after failure`, {exitCode: 1, cause: err})
     })
     _process.exit(0)
-    throw new FailedToExitError('Program exit', {cause: new Error('Program exit after successful run')})
+    throw new FailedToExitError('Program exit after success', {exitCode: 0, cause: program.__ran.at(-1)?.__result})
   }
 
   return {run, buildProgram}
@@ -477,15 +500,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {
   const meta: Partial<TrpcCliMeta> | undefined = procedure._def.meta
   return meta?.cliMeta || meta || {}
-}
-
-class FailedToExitError extends Error {
-  constructor(message: string, {cause}: {cause: unknown}) {
-    super(
-      `${message}. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.`,
-      {cause},
-    )
-  }
 }
 
 /** @deprecated renamed to `createCli` */
@@ -513,7 +527,7 @@ function transformError(err: unknown, command: Command) {
           issueSeparator: '\n  - ',
         })
 
-        return new ValidationError(validationError.message + '\n\n' + command.helpInformation()) // don't include cause
+        return new ValidationError(validationError.message + '\n\n' + command.helpInformation())
       } finally {
         cause.issues = originalIssues
       }
@@ -525,4 +539,15 @@ function transformError(err: unknown, command: Command) {
   return err
 }
 
-class ValidationError extends Error {}
+/** An error thrown when the trpc procedure results in a bad request */
+export class ValidationError extends Error {}
+
+/** An error which is only thrown when a custom \`process\` parameter is used. Under normal circumstances, this should not be used, even internally. */
+export class FailedToExitError extends Error {
+  readonly exitCode: number
+  constructor(message: string, {exitCode, cause}: {exitCode: number; cause: unknown}) {
+    const fullMessage = `${message}. The process was expected to exit with exit code ${exitCode} but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.`
+    super(fullMessage, {cause})
+    this.exitCode = exitCode
+  }
+}

@@ -1,6 +1,6 @@
 import {initTRPC} from '@trpc/server'
 import {expect, test, vi} from 'vitest'
-import {createCli, TrpcCliMeta, z} from '../src'
+import {createCli, FailedToExitError, TrpcCliMeta, z} from '../src'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
@@ -8,14 +8,14 @@ const t = initTRPC.meta<TrpcCliMeta>().create()
 
 test('override of process.exit happy path', async () => {
   const router = t.router({
-    foo: t.procedure.input(z.object({bar: z.number()})).query(({input}) => Object.entries(input).join(', ')),
+    foo: t.procedure.input(z.object({bar: z.number()})).query(({input}) => JSON.stringify(input)),
   })
 
   const cli = createCli({router})
 
   const exit = vi.fn() as any
   const log = vi.fn()
-  await cli
+  const result = await cli
     .run({
       argv: ['foo', '--bar', '1'],
       process: {exit}, // prevent process.exit
@@ -24,7 +24,10 @@ test('override of process.exit happy path', async () => {
     .catch(err => err)
 
   expect(exit).toHaveBeenCalledWith(0)
-  expect(log).toHaveBeenCalledWith('bar,1')
+  expect(log).toHaveBeenCalledWith('{"bar":1}')
+  expect(result).toBeInstanceOf(FailedToExitError)
+  expect(result.exitCode).toBe(0)
+  expect(result.cause).toBe('{"bar":1}')
 })
 
 test('override of process.exit and pass in bad option', async () => {
@@ -43,8 +46,9 @@ test('override of process.exit and pass in bad option', async () => {
     .catch(err => err)
 
   expect(result).toMatchInlineSnapshot(
-    `[Error: Program parse catch block. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
+    `[Error: Program exit after failure. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
+  expect(result.exitCode).toBe(1)
   expect(result.cause).toMatchInlineSnapshot(`
     [Error: Validation error
       - Expected number, received string at "--bar"
@@ -75,10 +79,63 @@ test('override of process.exit with parse error', async () => {
     .catch(err => err)
 
   expect(result).toMatchInlineSnapshot(
-    `[Error: Program parse catch block. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
+    `[Error: Program exit after failure. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
   expect(result.cause).toMatchInlineSnapshot(
-    `[Error: Root command exitOverride. An error was thrown but the process did not exit. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
+    `[Error: Root command exitOverride. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
   expect(result.cause.cause).toMatchInlineSnapshot(`[CommanderError: error: unknown command 'footypo']`)
+})
+
+const calculatorRouter = t.router({
+  add: t.procedure.input(z.tuple([z.number(), z.number()])).query(({input}) => {
+    return input[0] + input[1]
+  }),
+  squareRoot: t.procedure
+    .meta({jsonInput: true}) // use jsonInput to allow passing in a negative number without it being interpreted as an option by commander
+    .input(z.number())
+    .query(({input}) => {
+      if (input < 0) throw new Error(`Get real`)
+      return Math.sqrt(input)
+    }),
+})
+
+const run = async (argv: string[]) => {
+  const cli = createCli({router: calculatorRouter})
+  return cli
+    .run({
+      argv,
+      process: {exit: () => void 0 as never},
+      logger: {info: () => {}, error: () => {}},
+    })
+    .catch(err => {
+      // this will always throw, because our `exit` handler doesn't throw or exit the process
+      while (err instanceof FailedToExitError) {
+        if (err.exitCode === 0) {
+          return err.cause // this is the return value of the procedure that was invoked
+        }
+        err = err.cause // use the underlying error that caused the exit
+      }
+      throw err
+    })
+}
+
+test('make sure parsing works correctly', async () => {
+  await expect(run(['add', '2', '3'])).resolves.toBe(5)
+  await expect(run(['squareRoot', '--input=4'])).resolves.toBe(2)
+  await expect(run(['squareRoot', `--input=-1`])).rejects.toMatchInlineSnapshot(`[Error: Get real]`)
+  await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
+    [Error: Validation error
+      - Expected number, received string at index 1
+
+    Usage: program add [options] <parameter_1> <parameter_2>
+
+    Arguments:
+      parameter_1   (required)
+      parameter_2   (required)
+
+    Options:
+      -h, --help   display help for command
+    ]
+  `)
 })
