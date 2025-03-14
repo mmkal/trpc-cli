@@ -92,13 +92,10 @@ const calculatorRouter = t.router({
   add: t.procedure.input(z.tuple([z.number(), z.number()])).query(({input}) => {
     return input[0] + input[1]
   }),
-  squareRoot: t.procedure
-    .meta({jsonInput: true}) // use jsonInput to allow passing in a negative number without it being interpreted as an option by commander
-    .input(z.number())
-    .query(({input}) => {
-      if (input < 0) throw new Error(`Get real`)
-      return Math.sqrt(input)
-    }),
+  squareRoot: t.procedure.input(z.number()).query(({input}) => {
+    if (input < 0) throw new Error(`Get real`)
+    return Math.sqrt(input)
+  }),
 })
 
 const run = async (argv: string[]) => {
@@ -123,8 +120,8 @@ const run = async (argv: string[]) => {
 
 test('make sure parsing works correctly', async () => {
   await expect(run(['add', '2', '3'])).resolves.toBe(5)
-  await expect(run(['squareRoot', '--input=4'])).resolves.toBe(2)
-  await expect(run(['squareRoot', `--input=-1`])).rejects.toMatchInlineSnapshot(`[Error: Get real]`)
+  await expect(run(['squareRoot', '--', '4'])).resolves.toBe(2)
+  await expect(run(['squareRoot', '--', '-1'])).rejects.toMatchInlineSnapshot(`[Error: Get real]`)
   await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
     [Error: Validation error
       - Expected number, received string at index 1

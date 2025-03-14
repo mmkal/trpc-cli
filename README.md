@@ -324,7 +324,7 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:8116167a54883950f73147af91af394e -->
+<!-- hash:e30cac4beb319a42941777d631465ee0 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer} from 'trpc-cli'
 import {z} from 'zod'
@@ -373,8 +373,7 @@ const router = trpc.router({
   squareRoot: trpc.procedure
     .meta({
       description:
-        'Square root of a number. Useful to find the length of the side of a square given the area.',
-      jsonInput: true,
+        'Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.',
     })
     .input(z.number())
     .query(({input}) => {
@@ -415,9 +414,9 @@ Commands:
                                         number and you want to make it smaller
                                         and `subtract` isn't quite powerful
                                         enough for you.
-  squareRoot [options]                  Square root of a number. Useful to find
-                                        the length of the side of a square given
-                                        the area.
+  squareRoot <number>                   Square root of a number. Useful if you
+                                        have a square, know the area, and want
+                                        to find the length of the side.
   help [command]                        display help for command
 ```
 <!-- codegen:end -->

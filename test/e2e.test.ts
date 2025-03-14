@@ -38,9 +38,9 @@ test('cli help', async () => {
                                               number and you want to make it smaller
                                               and \`subtract\` isn't quite powerful
                                               enough for you.
-        squareRoot [options]                  Square root of a number. Useful to find
-                                              the length of the side of a square given
-                                              the area.
+        squareRoot <number>                   Square root of a number. Useful if you
+                                              have a square, know the area, and want
+                                              to find the length of the side.
         help [command]                        display help for command"
     `)
 })
@@ -163,9 +163,9 @@ test('cli non-existent command', async () => {
                                             number and you want to make it smaller
                                             and \`subtract\` isn't quite powerful
                                             enough for you.
-      squareRoot [options]                  Square root of a number. Useful to find
-                                            the length of the side of a square given
-                                            the area.
+      squareRoot <number>                   Square root of a number. Useful if you
+                                            have a square, know the area, and want
+                                            to find the length of the side.
       help [command]                        display help for command
     "
   `)
@@ -195,9 +195,9 @@ test('cli no command', async () => {
                                             number and you want to make it smaller
                                             and \`subtract\` isn't quite powerful
                                             enough for you.
-      squareRoot [options]                  Square root of a number. Useful to find
-                                            the length of the side of a square given
-                                            the area.
+      squareRoot <number>                   Square root of a number. Useful if you
+                                            have a square, know the area, and want
+                                            to find the length of the side.
       help [command]                        display help for command
     "
   `)
@@ -430,7 +430,7 @@ test('fs diff', async () => {
 })
 
 test('thrown error in procedure includes call stack', async () => {
-  const output = await tsx('calculator', ['squareRoot', `--input=-1`])
+  const output = await tsx('calculator', ['squareRoot', '--', '-1'])
   expect(output).toMatch(/Error: Get real/)
   expect(output).toMatch(/at .* \(.*calculator.ts:\d+:\d+\)/)
 })

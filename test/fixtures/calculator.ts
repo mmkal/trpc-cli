@@ -43,8 +43,8 @@ const router = trpc.router({
     .mutation(({input}) => input[0] / input[1]),
   squareRoot: trpc.procedure
     .meta({
-      description: 'Square root of a number. Useful to find the length of the side of a square given the area.',
-      jsonInput: true,
+      description:
+        'Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.',
     })
     .input(z.number())
     .query(({input}) => {
