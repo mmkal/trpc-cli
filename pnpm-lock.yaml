@@ -64,8 +64,8 @@ importers:
         specifier: npm:@trpc/server@10.45.2
         version: '@trpc/server@10.45.2'
       trpcserver11:
-        specifier: npm:@trpc/server@11.0.0-rc.580
-        version: '@trpc/server@11.0.0-rc.580'
+        specifier: npm:@trpc/server@11.0.0-rc.828
+        version: '@trpc/server@11.0.0-rc.828(typescript@5.6.3)'
       tsx:
         specifier: 4.19.1
         version: 4.19.1
@@ -807,8 +807,10 @@ packages:
   '@trpc/server@10.45.2':
     resolution: {integrity: sha512-wOrSThNNE4HUnuhJG6PfDRp4L2009KDVxsd+2VYH8ro6o/7/jwYZ8Uu5j+VaW+mOmc8EHerHzGcdbGNQSAUPgg==}
 
-  '@trpc/server@11.0.0-rc.580':
-    resolution: {integrity: sha512-2XYvKJlfWQqO8m20iWlUWuh/65HTPAo/r/zekCIt/uHGDXuUp7EQPxuyqzjcC8TG70W0Cw5cTZs1OK71E7Hbjg==}
+  '@trpc/server@11.0.0-rc.828':
+    resolution: {integrity: sha512-+dvcIcE5QPy52cz4rqwfUqk+WQDYAH3Xri+u2t0NdzIoo78fnL14if8oSZXAPU1bCmWGyR1k/0m5rSQ7AZaKlQ==}
+    peerDependencies:
+      typescript: '>=5.7.2'
 
   '@types/dedent@0.7.0':
     resolution: {integrity: sha512-EGlKlgMhnLt/cM4DbUSafFdrkeJoC9Mvnj0PUCU7tFmTjMjNRT957kXCx0wYm3JuEq4o4ZsS5vG+NlkM2DMd2A==}
@@ -4578,7 +4580,9 @@ snapshots:
 
   '@trpc/server@10.45.2': {}
 
-  '@trpc/server@11.0.0-rc.580': {}
+  '@trpc/server@11.0.0-rc.828(typescript@5.6.3)':
+    dependencies:
+      typescript: 5.6.3
 
   '@types/dedent@0.7.0': {}
 
