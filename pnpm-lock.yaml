@@ -25,13 +25,13 @@ importers:
         version: 1.1.1
       zod:
         specifier: ^3.23.8
-        version: 3.23.8
+        version: 3.24.2
       zod-to-json-schema:
         specifier: ^3.23.0
-        version: 3.23.3(zod@3.23.8)
+        version: 3.23.3(zod@3.24.2)
       zod-validation-error:
         specifier: ^3.3.0
-        version: 3.4.0(zod@3.23.8)
+        version: 3.4.0(zod@3.24.2)
     devDependencies:
       '@types/node':
         specifier: 20.17.24
@@ -3909,8 +3909,8 @@ packages:
     peerDependencies:
       zod: ^3.18.0
 
-  zod@3.23.8:
-    resolution: {integrity: sha512-XBx9AXhXktjUqnepgTiE5flcKIYWi/rme0Eaj+5Y0lftuGBq+jyRu/md4WnuxqgP1ubdpNCsYEYPxrzVHD8d6g==}
+  zod@3.24.2:
+    resolution: {integrity: sha512-lY7CDW43ECgW9u1TcT3IoXHflywfVqDYze4waEz812jR/bZ8FHDsl7pFQoSZTz5N+2NqRXs8GBwnAwo3ZNxqhQ==}
 
 snapshots:
 
@@ -7386,7 +7386,7 @@ snapshots:
       quick-lru: 7.0.0
       url-join: 5.0.0
       validate-npm-package-name: 5.0.1
-      zod: 3.23.8
+      zod: 3.24.2
       zod-package-json: 1.0.3
 
   query-string@9.0.0:
@@ -8131,14 +8131,14 @@ snapshots:
 
   zod-package-json@1.0.3:
     dependencies:
-      zod: 3.23.8
+      zod: 3.24.2
 
-  zod-to-json-schema@3.23.3(zod@3.23.8):
+  zod-to-json-schema@3.23.3(zod@3.24.2):
     dependencies:
-      zod: 3.23.8
+      zod: 3.24.2
 
-  zod-validation-error@3.4.0(zod@3.23.8):
+  zod-validation-error@3.4.0(zod@3.24.2):
     dependencies:
-      zod: 3.23.8
+      zod: 3.24.2
 
-  zod@3.23.8: {}
+  zod@3.24.2: {}
