@@ -33,7 +33,8 @@ function looksJsonSchemaable(value: unknown): value is JsonSchemaable {
 }
 
 function toJsonSchema(input: JsonSchemaable): JSONSchema7 {
-  return 'toJsonSchema' in input ? input.toJsonSchema() : (zodToJsonSchema(input) as JSONSchema7)
+  const jsonSchema = 'toJsonSchema' in input ? input.toJsonSchema() : (zodToJsonSchema(input as never) as JSONSchema7)
+  return Object.assign(jsonSchema, {originalSchema: input})
 }
 
 export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure> {
