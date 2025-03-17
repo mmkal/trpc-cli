@@ -415,7 +415,7 @@ test('number array input with constraints', async () => {
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: Logs: Validation error
-      - Expected integer, received float at index 0
+      - Expected number, received string at index 0
   `)
 })
 

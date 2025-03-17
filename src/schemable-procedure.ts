@@ -1,6 +1,5 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {z as zod} from 'zod'
-import {StandardSchemaV1} from 'zod/lib/standard-schema'
 import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
@@ -41,8 +40,6 @@ function toJsonSchema(input: JsonSchemaable): JSONSchema7 {
   return Object.assign(jsonSchema, {originalSchema: input})
 }
 
-type ConvertedJsonSchema = JSONSchema7 & {originalSchema: StandardSchemaV1}
-
 export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure> {
   if (inputs.length === 0) {
     return {
@@ -64,8 +61,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
   }
 
   if (inputs.length > 1) {
-    throw new Error('Multi-input types are not supported')
-    return parseMultiInputs(inputs.map(toJsonSchema))
+    return parseMultiInputs(inputs)
   }
 
   const mergedSchema = toJsonSchema(inputs[0])
@@ -102,13 +98,27 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
   // }
 
   if (mergedSchema.type === 'array') {
-    return parseArrayInput(mergedSchema)
+    return parseArrayInput(mergedSchema as JSONSchema7 & {items: {type: unknown}})
+  }
+
+  if (mergedSchema.anyOf) {
+    const allObjects = mergedSchema.anyOf.every(sub => acceptsObject(toRoughJsonSchema7(sub)))
+    if (allObjects) {
+      return {
+        success: true,
+        value: {
+          positionalParameters: [],
+          optionsJsonSchema: mergedSchema,
+          getPojoInput: argv => argv.options,
+        },
+      }
+    }
   }
 
   if (mergedSchema.type !== 'object') {
     return {
       success: false,
-      error: `Invalid input type ${mergedSchema.type as string}, expected object or tuple`,
+      error: `Invalid input type ${mergedSchema.type as string}, expected object or tuple.`,
     }
   }
 
@@ -173,20 +183,20 @@ function acceptedLiteralTypes(schema: JSONSchema7Definition): Array<(typeof lite
   return literalCandidateTypes.filter(c => acceptedJsonSchemaTypes.has(c))
 }
 
-function parseMultiInputs(inputs: JSONSchema7[]): Result<ParsedProcedure> {
-  const allObjects = inputs.every(acceptsObject)
-  if (!allObjects) {
-    return {
-      success: false,
-      error: `Invalid multi-input type ${inputs.map(s => s.type).join(', ')}. All inputs must accept object inputs.`,
-    }
-  }
-
+function parseMultiInputs(inputs: unknown[]): Result<ParsedProcedure> {
   const parsedIndividually = inputs.map(input => parseProcedureInputs([input]))
 
   const failures = parsedIndividually.flatMap(p => (p.success ? [] : [p.error]))
   if (failures.length > 0) {
     return {success: false, error: failures.join('\n')}
+  }
+
+  const allObjects = parsedIndividually.every(p => p.success && p.value.positionalParameters.length === 0)
+  if (!allObjects) {
+    return {
+      success: false,
+      error: `Can't use positional parameters with multi-input type.`,
+    }
   }
 
   return {
@@ -499,4 +509,6 @@ const parameterName = (s: JSONSchema7Definition, position: number): string => {
 // const acceptsNumber = accepts(z.number())
 // const acceptsBoolean = accepts(z.boolean())
 // const acceptsObject = accepts(z.object({}))
-const acceptsObject = (schema: JSONSchema7) => schema.type === 'object'
+const acceptsObject = (schema: JSONSchema7): boolean => {
+  return (schema.type === 'object' || schema.anyOf?.some(sub => acceptsObject(toRoughJsonSchema7(sub)))) ?? false
+}

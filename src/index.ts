@@ -87,7 +87,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           procedure,
           procedureInputs: {
             positionalParameters: [],
-            parameters: [],
             optionsJsonSchema: {
               type: 'object',
               properties: {
@@ -167,10 +166,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.description(meta?.description || '')
 
       procedureInputs.positionalParameters.forEach(param => {
-        const argument = new Argument(
-          param.name,
-          `${param.type} ${param.description} ${param.required ? '(required)' : ''}`.trim(),
-        )
+        const descriptionParts = [
+          // param.type, //
+          param.description,
+          param.required ? '(required)' : '',
+        ]
+        const argument = new Argument(param.name, descriptionParts.join(' '))
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
