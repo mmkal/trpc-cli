@@ -1,7 +1,7 @@
-import type {JSONSchema7} from 'json-schema'
+import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {z as zod} from 'zod'
 import {StandardSchemaV1} from 'zod/lib/standard-schema'
-import zodToJsonSchema from 'zod-to-json-schema'
+import zodToJsonSchema, {JsonSchema7AllOfType} from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import type {Result, ParsedProcedure} from './types'
 import {looksLikeInstanceof} from './util'
@@ -28,9 +28,10 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
 type JsonSchemaable = zod.ZodType | {toJsonSchema: () => JSONSchema7}
 
 function looksJsonSchemaable(value: unknown): value is JsonSchemaable {
+  const val = value as null | undefined | {toJsonSchema?: unknown}
   return (
-    looksLikeInstanceof(value, zod.ZodType as new (...args: unknown[]) => zod.ZodType) ||
-    (typeof value === 'object' && value !== null && 'toJsonSchema' in value && typeof value.toJsonSchema === 'function')
+    looksLikeInstanceof(val, zod.ZodType as new (...args: unknown[]) => zod.ZodType) ||
+    (!!val && 'toJsonSchema' in val && typeof val.toJsonSchema === 'function')
   )
 }
 
@@ -93,13 +94,17 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     return parseLiteralInput(mergedSchema)
   }
 
-  // if (isTuple(mergedSchema)) {
-  //   return parseTupleInput(mergedSchema)
-  // }
+  if (isTuple(mergedSchema)) {
+    return parseTupleInput(mergedSchema)
+  }
 
   // if (looksLikeArray(mergedSchema) && acceptedLiteralTypes(mergedSchema.element).length > 0) {
   //   return parseArrayInput(mergedSchema)
   // }
+
+  if (mergedSchema.type === 'array') {
+    return parseArrayInput(mergedSchema)
+  }
 
   if (mergedSchema.type !== 'object') {
     return {
@@ -113,20 +118,21 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     value: {
       positionalParameters: [],
       parameters: [],
-      optionsJsonSchema: zodToJsonSchema(mergedSchema),
+      optionsJsonSchema: mergedSchema,
       getPojoInput: argv => argv.options,
     },
   }
 }
 
-function isOptional(schema: JSONSchema7) {
-  return !!schema && 'anyOf' in schema && schema.anyOf?.length === 2 && JSON.stringify(schema.anyOf[0]) === '{"not":{}}'
+// zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
+function isOptional(schema: JSONSchema7Definition) {
+  const anyOf = schemaDefPropValue(schema, 'anyOf')
+  return anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}'
 }
 
 function parseLiteralInput(schema: JSONSchema7): Result<ParsedProcedure> {
   const type = acceptedLiteralTypes(schema).at(0)
   const name = (schema.description || type || 'value').replaceAll(/\s+/g, '_')
-  console.dir({schema}, {depth: null})
   return {
     success: true,
     value: {
@@ -135,26 +141,32 @@ function parseLiteralInput(schema: JSONSchema7): Result<ParsedProcedure> {
           name,
           array: false,
           description: schema.description || '',
-          required: isOptional(schema),
+          required: !isOptional(schema),
           type: type!,
         },
       ],
-      parameters: [isOptional(schema) ? `[${name}]` : `<${name}>`],
+      parameters: null as never,
       optionsJsonSchema: {},
       getPojoInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
     },
   }
 }
 
-function acceptedLiteralTypes(schema: JSONSchema7) {
-  const candidates = ['string', 'number', 'boolean'] as const
-  const acceptedJsonSchemaTypes = new Set(
-    schema.oneOf
-      ? schema.oneOf.map(s => (s as JSONSchema7).type)
-      : schema.anyOf
-        ? schema.anyOf.map(s => (s as JSONSchema7).type)
-        : [schema.type],
-  )
+const schemaDefPropValue = <K extends keyof JSONSchema7>(
+  schema: JSONSchema7Definition,
+  prop: K,
+): JSONSchema7[K] | undefined => {
+  if (schema && typeof schema === 'object' && prop in schema) return schema[prop]
+  return undefined
+}
+
+function acceptedLiteralTypes(schema: JSONSchema7Definition) {
+  const candidates = ['string', 'number', 'boolean', 'integer'] as const
+  const typeList =
+    schemaDefPropValue(schema, 'type') ||
+    schemaDefPropValue(schema, 'oneOf')?.flatMap(s => schemaDefPropValue(s, 'type')) ||
+    schemaDefPropValue(schema, 'anyOf')?.flatMap(s => schemaDefPropValue(s, 'type'))
+  const acceptedJsonSchemaTypes = new Set([typeList].flat().filter(Boolean))
   return candidates.filter(c => acceptedJsonSchemaTypes.has(c))
 }
 
@@ -194,8 +206,15 @@ function isNullable(schema: JSONSchema7) {
   return Array.isArray(schema.type) && schema.type.includes('null')
 }
 
+const tupleItemsSchemas = (schema: JSONSchema7Definition): JSONSchema7Definition[] | undefined => {
+  if (!schema || typeof schema !== 'object') return undefined
+  if (Array.isArray(schema.items)) return schema.items
+  if ('prefixItems' in schema && Array.isArray(schema.prefixItems)) return schema.prefixItems as JSONSchema7Definition[]
+  return undefined
+}
+
 function isTuple(schema: JSONSchema7): schema is JSONSchema7 & {items: JSONSchema7[]} {
-  return Array.isArray(schema.items)
+  return Array.isArray(tupleItemsSchemas(schema))
 }
 
 function isArray(schema: JSONSchema7): schema is JSONSchema7 & {items: {type: unknown}} {
@@ -217,91 +236,167 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
           name: parameterName(array, 1),
           array: true,
           description: array.description || '',
-          required: !array.isOptional(),
+          required: !isOptional(array),
           type: 'string',
         },
       ],
-      parameters: [parameterName(array, 1)],
+      parameters: null as never,
       optionsJsonSchema: {},
-      getPojoInput: argv => (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.element, s)),
+      getPojoInput: argv => (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.items, s)),
     },
   }
 }
 
-// function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result<ParsedProcedure> {
-//   const flagsSchemaIndex = tuple.items.findIndex(item => {
-//     if (acceptedLiteralTypes(item).length > 0) {
-//       return false // it's a string, number or boolean
-//     }
-//     if (looksLikeArray(item) && acceptedLiteralTypes(item.element).length > 0) {
-//       return false // it's an array of strings, numbers or booleans
-//     }
-//     return true // it's not a string, number, boolean or array of strings, numbers or booleans. So it's probably a flags object
-//   })
-//   const types = `[${tuple.items.map(s => s.type).join(', ')}]`
+function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> {
+  const items = tupleItemsSchemas(tuple)
+  if (!Array.isArray(items)) throw new Error('.items is not an array, is this really a tuple?')
 
-//   if (flagsSchemaIndex > -1 && flagsSchemaIndex !== tuple.items.length - 1) {
-//     return {
-//       success: false,
-//       error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
-//     }
-//   }
+  const flagsSchemaIndex = items.findIndex(item => {
+    if (acceptedLiteralTypes(item as JSONSchema7).length > 0) {
+      return false // it's a string, number or boolean
+    }
+    if (looksLikeArray(item) && acceptedLiteralTypes(item.items as JSONSchema7).length > 0) {
+      return false // it's an array of strings, numbers or booleans
+    }
+    return true // it's not a string, number, boolean or array of strings, numbers or booleans. So it's probably a flags object
+  })
+  const types = `[${items.map(s => schemaDefPropValue(s, 'type')).join(', ')}]`
 
-//   const flagsSchema = flagsSchemaIndex === -1 ? null : tuple.items[flagsSchemaIndex]
+  if (flagsSchemaIndex > -1 && flagsSchemaIndex !== items.length - 1) {
+    return {
+      success: false,
+      error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
+    }
+  }
 
-//   if (flagsSchema && !acceptsObject(flagsSchema)) {
-//     return {
-//       success: false,
-//       error: `Invalid input type ${types}. The last type must accept object inputs.`,
-//     }
-//   }
+  const flagsSchema = flagsSchemaIndex === -1 ? null : items[flagsSchemaIndex]
 
-//   const positionalSchemas = flagsSchemaIndex === -1 ? tuple.items : tuple.items.slice(0, flagsSchemaIndex)
+  if (flagsSchema && !acceptsObject(flagsSchema as JSONSchema7)) {
+    return {
+      success: false,
+      error: `Invalid input type ${types}. The last type must accept object inputs.`,
+    }
+  }
 
-//   const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
+  const positionalSchemas = flagsSchemaIndex === -1 ? items : items.slice(0, flagsSchemaIndex)
 
-//   return {
-//     success: true,
-//     value: {
-//       positionalParameters: positionalSchemas.map((schema, i) => ({
-//         name: parameterName(schema, i + 1),
-//         array: looksLikeArray(schema),
-//         description: schema.description || '',
-//         required: !schema.isOptional(),
-//         type: 'string',
-//       })),
-//       parameters: parameterNames,
-//       optionsJsonSchema: flagsSchema ? zodToJsonSchema(flagsSchema) : {},
-//       getPojoInput: commandArgs => {
-//         const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
-//           const correspondingSchema = positionalSchemas[i]
-//           if (looksLikeArray(correspondingSchema)) {
-//             if (!Array.isArray(v)) {
-//               throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
-//             }
-//             return v.map(s => convertPositional(correspondingSchema.element, s))
-//           }
-//           if (typeof v !== 'string') {
-//             throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
-//           }
-//           return convertPositional(correspondingSchema, v)
-//         })
+  const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
 
-//         if (flagsSchema) {
-//           inputs.push(commandArgs.options)
-//         }
-//         return inputs
-//       },
-//     },
-//   }
-// }
+  return {
+    success: true,
+    value: {
+      positionalParameters: positionalSchemas.map((schema, i) => ({
+        name: parameterName(schema, i + 1),
+        array: looksLikeArray(schema),
+        description: schemaDefPropValue(schema, 'description') || '',
+        required: !isOptional(schema),
+        type: 'string',
+      })),
+      parameters: parameterNames,
+      optionsJsonSchema: flagsSchema && typeof flagsSchema === 'object' ? flagsSchema : {},
+      getPojoInput: commandArgs => {
+        const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
+          const correspondingSchema = positionalSchemas[i]
+          if (looksLikeArray(correspondingSchema)) {
+            if (!Array.isArray(v)) {
+              throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
+            }
+            return v.map(s => {
+              if (!correspondingSchema.items || Array.isArray(correspondingSchema.items)) return s
+              return convertPositional(correspondingSchema.items, s)
+            })
+          }
+          if (typeof v !== 'string') {
+            throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
+          }
+          return convertPositional(correspondingSchema, v)
+        })
+
+        if (flagsSchema) {
+          inputs.push(commandArgs.options)
+        }
+        return inputs
+      },
+    },
+  }
+
+  // throw new Error('reached old zod code')
+
+  // if (Math.random()) {
+  //   const flagsSchemaIndex = tuple.items.findIndex(item => {
+  //     if (acceptedLiteralTypes(item).length > 0) {
+  //       return false // it's a string, number or boolean
+  //     }
+  //     if (looksLikeArray(item) && acceptedLiteralTypes(item.element).length > 0) {
+  //       return false // it's an array of strings, numbers or booleans
+  //     }
+  //     return true // it's not a string, number, boolean or array of strings, numbers or booleans. So it's probably a flags object
+  //   })
+  //   const types = `[${tuple.items.map(s => s.type).join(', ')}]`
+
+  //   if (flagsSchemaIndex > -1 && flagsSchemaIndex !== tuple.items.length - 1) {
+  //     return {
+  //       success: false,
+  //       error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
+  //     }
+  //   }
+
+  //   const flagsSchema = flagsSchemaIndex === -1 ? null : tuple.items[flagsSchemaIndex]
+
+  //   if (flagsSchema && !acceptsObject(flagsSchema)) {
+  //     return {
+  //       success: false,
+  //       error: `Invalid input type ${types}. The last type must accept object inputs.`,
+  //     }
+  //   }
+
+  //   const positionalSchemas = flagsSchemaIndex === -1 ? tuple.items : tuple.items.slice(0, flagsSchemaIndex)
+
+  //   const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
+
+  //   return {
+  //     success: true,
+  //     value: {
+  //       positionalParameters: positionalSchemas.map((schema, i) => ({
+  //         name: parameterName(schema, i + 1),
+  //         array: looksLikeArray(schema),
+  //         description: schema.description || '',
+  //         required: !schema.isOptional(),
+  //         type: 'string',
+  //       })),
+  //       parameters: parameterNames,
+  //       optionsJsonSchema: flagsSchema ? zodToJsonSchema(flagsSchema) : {},
+  //       getPojoInput: commandArgs => {
+  //         const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
+  //           const correspondingSchema = positionalSchemas[i]
+  //           if (looksLikeArray(correspondingSchema)) {
+  //             if (!Array.isArray(v)) {
+  //               throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
+  //             }
+  //             return v.map(s => convertPositional(correspondingSchema.element, s))
+  //           }
+  //           if (typeof v !== 'string') {
+  //             throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
+  //           }
+  //           return convertPositional(correspondingSchema, v)
+  //         })
+
+  //         if (flagsSchema) {
+  //           inputs.push(commandArgs.options)
+  //         }
+  //         return inputs
+  //       },
+  //     },
+  //   }
+  // }
+}
 
 /**
  * Converts a positional string to parameter into a number if the target schema accepts numbers, and the input can be parsed as a number.
  * If the target schema accepts numbers but it's *not* a valid number, just return a string.
  * trpc will use zod to handle the validation before invoking the procedure.
  */
-const convertPositional = (schema: JSONSchema7, value: string) => {
+const convertPositional = (schema: JSONSchema7Definition, value: string) => {
   let preprocessed: string | number | boolean | undefined = undefined
 
   const acceptedTypes = new Set(acceptedLiteralTypes(schema))
@@ -310,43 +405,64 @@ const convertPositional = (schema: JSONSchema7, value: string) => {
     else if (value === 'false') preprocessed = false
   }
 
-  if (acceptedTypes.has('number') && !schema.safeParse(preprocessed).success) {
+  if (acceptedTypes.has('number')) {
     const number = Number(value)
     if (!Number.isNaN(number)) {
-      preprocessed = Number(value)
+      preprocessed = number
     }
   }
 
-  if (acceptedTypes.has('string') && !schema.safeParse(preprocessed).success) {
-    // it's possible we converted to a number prematurely - need to account for `z.union([z.string(), z.number().int()])`, where 1.2 should be a string, not a number
-    // in that case, we would have set preprocessed to a number, but it would fail validation, so we need to reset it to a string here
-    preprocessed = value
+  if (acceptedTypes.has('integer')) {
+    const integer = Number(value)
+    if (Number.isInteger(integer)) {
+      preprocessed = integer
+    }
   }
+
+  // had to disable the below because with standard-schema we can no longer validate individual tuple items, just the whole type
+  // if (acceptedTypes.has('string') && !standardSchemaSafeParse(schema, preprocessed).success) {
+  //   // it's possible we converted to a number prematurely - need to account for `z.union([z.string(), z.number().int()])`, where 1.2 should be a string, not a number
+  //   // in that case, we would have set preprocessed to a number, but it would fail validation, so we need to reset it to a string here
+  //   preprocessed = value
+  // }
 
   if (preprocessed === undefined) {
     return value // we didn't convert to a number or boolean, so just return the string
   }
 
-  if (schema.safeParse(preprocessed).success) {
-    return preprocessed // we converted successfully, and the type looks good, so use the preprocessed value
-  }
+  // if (standardSchemaSafeParse(schema, preprocessed).success) {
+  //   return preprocessed // we converted successfully, and the type looks good, so use the preprocessed value
+  // }
 
-  if (acceptedTypes.has('string')) {
-    return value // we converted successfully, but the type is wrong. However strings are also accepted, so return the string original value, it might be ok.
-  }
+  // if (acceptedTypes.has('string')) {
+  //   return value // we converted successfully, but the type is wrong. However strings are also accepted, so return the string original value, it might be ok.
+  // }
 
   // we converted successfully, but the type is wrong. However, strings are also not accepted, so don't return the string original value. Return the preprocessed value even though it will fail - it's probably a number failing because of a `.refine(...)` or `.int()` or `.positive()` or `.min(1)` etc. - so better to have a "must be greater than zero" error than "expected number, got string"
   return preprocessed
 }
 
-const parameterName = (s: z.ZodType, position: number): string => {
+const looksLikeArray = (schema: JSONSchema7Definition): schema is JSONSchema7 & {type: 'array'} => {
+  return schemaDefPropValue(schema, 'type') === 'array'
+}
+
+const toRoughJsonSchema7 = (schema: JSONSchema7Definition | undefined): JSONSchema7 => {
+  if (!schema || typeof schema !== 'object') {
+    return {}
+  }
+
+  return schema
+}
+
+const parameterName = (s: JSONSchema7Definition, position: number): string => {
   if (looksLikeArray(s)) {
-    const elementName = parameterName(s.element, position)
+    const items = toRoughJsonSchema7(s).items
+    const elementName = parameterName(!items || Array.isArray(items) ? {} : items, position)
     return `[${elementName.slice(1, -1)}...]`
   }
   // commander requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
-  const name = s.description || `parameter_${position}`.replaceAll(/\W+/g, ' ').trim()
-  return s.isOptional() ? `[${name}]` : `<${name}>`
+  const name = schemaDefPropValue(s, 'description') || `parameter_${position}`.replaceAll(/\W+/g, ' ').trim()
+  return isOptional(s) ? `[${name}]` : `<${name}>`
 }
 
 /**

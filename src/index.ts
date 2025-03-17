@@ -93,7 +93,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
               properties: {
                 input: {
                   type: 'json' as string as 'string',
-                  description: 'Input formatted as JSON',
+                  description: `Input formatted as JSON${procedureInputsResult.success ? '' : ` (procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error})`}`,
                 },
               },
             },
