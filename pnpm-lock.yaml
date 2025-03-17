@@ -11,6 +11,9 @@ importers:
       '@trpc/server':
         specifier: ^10.45.2
         version: 10.45.2
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
       '@types/omelette':
         specifier: ^0.4.4
         version: 0.4.4

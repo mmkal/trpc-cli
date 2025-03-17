@@ -34,7 +34,6 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
-    "omelette": ">=0.4.17",
     "@trpc/server": ">=10",
     "omelette": ">=0.4.17"
   },
@@ -51,6 +50,7 @@
   },
   "dependencies": {
     "@trpc/server": "^10.45.2",
+    "@types/json-schema": "^7.0.15",
     "@types/omelette": "^0.4.4",
     "commander": "^13.1.0",
     "picocolors": "^1.0.1",

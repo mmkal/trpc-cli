@@ -9,10 +9,10 @@ import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription, getSchemaTypes} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
+import {parseProcedureInputs} from './schemable-procedure'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {Logger, OmeletteInstanceLike, TrpcCliMeta, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
-import {parseProcedureInputs} from './zod-procedure'
 
 export * from './types'
 
