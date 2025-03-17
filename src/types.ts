@@ -50,8 +50,6 @@ export interface ParsedProcedure {
     required: boolean
     array: boolean
   }>
-  /** positional parameters */
-  parameters: string[]
   /** JSON Schema type describing the flags for the procedure */
   optionsJsonSchema: JsonSchema7Type
   /**

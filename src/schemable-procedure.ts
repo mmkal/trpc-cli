@@ -49,7 +49,6 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
       success: true,
       value: {
         positionalParameters: [],
-        parameters: [],
         optionsJsonSchema: {},
         getPojoInput: () => ({}),
       },
@@ -75,7 +74,6 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     return {
       success: true,
       value: {
-        parameters: null as never,
         positionalParameters: [
           {
             type: 'string',
@@ -118,7 +116,6 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     success: true,
     value: {
       positionalParameters: [],
-      parameters: [],
       optionsJsonSchema: mergedSchema,
       getPojoInput: argv => argv.options,
     },
@@ -146,7 +143,6 @@ function parseLiteralInput(schema: JSONSchema7): Result<ParsedProcedure> {
           type: type!,
         },
       ],
-      parameters: null as never,
       optionsJsonSchema: {},
       getPojoInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
     },
@@ -197,7 +193,6 @@ function parseMultiInputs(inputs: JSONSchema7[]): Result<ParsedProcedure> {
     success: true,
     value: {
       positionalParameters: [],
-      parameters: [],
       optionsJsonSchema: {
         allOf: parsedIndividually.map(p => {
           const successful = p as Extract<typeof p, {success: true}>
@@ -247,7 +242,6 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
           type: 'string',
         },
       ],
-      parameters: null as never,
       optionsJsonSchema: {},
       getPojoInput: argv =>
         (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.items as JSONSchema7, s)),
@@ -288,8 +282,6 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
 
   const positionalSchemas = flagsSchemaIndex === -1 ? items : items.slice(0, flagsSchemaIndex)
 
-  const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
-
   return {
     success: true,
     value: {
@@ -300,7 +292,6 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
         required: !isOptional(schema),
         type: getSchemaTypes(toRoughJsonSchema7(schema)).join(' | '),
       })),
-      parameters: parameterNames,
       optionsJsonSchema: flagsSchema && typeof flagsSchema === 'object' ? flagsSchema : {},
       getPojoInput: commandArgs => {
         const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
@@ -372,7 +363,6 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
   //         required: !schema.isOptional(),
   //         type: 'string',
   //       })),
-  //       parameters: parameterNames,
   //       optionsJsonSchema: flagsSchema ? zodToJsonSchema(flagsSchema) : {},
   //       getPojoInput: commandArgs => {
   //         const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
