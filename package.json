@@ -72,6 +72,6 @@
     "trpcserver11": "npm:@trpc/server@11.0.0-rc.833",
     "tsx": "4.19.3",
     "typescript": "5.8.2",
-    "vitest": "2.1.9"
+    "vitest": "3.0.8"
   }
 }
