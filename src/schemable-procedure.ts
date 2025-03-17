@@ -1,8 +1,9 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {z as zod} from 'zod'
 import {StandardSchemaV1} from 'zod/lib/standard-schema'
-import zodToJsonSchema, {JsonSchema7AllOfType} from 'zod-to-json-schema'
+import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
+import {getSchemaTypes} from './json-schema'
 import type {Result, ParsedProcedure} from './types'
 import {looksLikeInstanceof} from './util'
 
@@ -160,14 +161,20 @@ const schemaDefPropValue = <K extends keyof JSONSchema7>(
   return undefined
 }
 
-function acceptedLiteralTypes(schema: JSONSchema7Definition) {
-  const candidates = ['string', 'number', 'boolean', 'integer'] as const
+const literalCandidateTypes = ['string', 'number', 'boolean', 'integer'] as const
+function acceptedLiteralTypes(schema: JSONSchema7Definition): Array<(typeof literalCandidateTypes)[number]> {
+  let constVals: string[] | undefined = [toRoughJsonSchema7(schema).const, toRoughJsonSchema7(schema).enum]
+    .flat()
+    .filter(Boolean)
+    .map(s => typeof s)
+  if (constVals.length === 0) constVals = undefined
   const typeList =
+    constVals ||
     schemaDefPropValue(schema, 'type') ||
-    schemaDefPropValue(schema, 'oneOf')?.flatMap(s => schemaDefPropValue(s, 'type')) ||
-    schemaDefPropValue(schema, 'anyOf')?.flatMap(s => schemaDefPropValue(s, 'type'))
+    schemaDefPropValue(schema, 'oneOf')?.flatMap(s => acceptedLiteralTypes(s)) ||
+    schemaDefPropValue(schema, 'anyOf')?.flatMap(s => acceptedLiteralTypes(s))
   const acceptedJsonSchemaTypes = new Set([typeList].flat().filter(Boolean))
-  return candidates.filter(c => acceptedJsonSchemaTypes.has(c))
+  return literalCandidateTypes.filter(c => acceptedJsonSchemaTypes.has(c))
 }
 
 function parseMultiInputs(inputs: JSONSchema7[]): Result<ParsedProcedure> {
@@ -242,7 +249,8 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
       ],
       parameters: null as never,
       optionsJsonSchema: {},
-      getPojoInput: argv => (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.items, s)),
+      getPojoInput: argv =>
+        (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.items as JSONSchema7, s)),
     },
   }
 }
@@ -290,7 +298,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
         array: looksLikeArray(schema),
         description: schemaDefPropValue(schema, 'description') || '',
         required: !isOptional(schema),
-        type: 'string',
+        type: getSchemaTypes(toRoughJsonSchema7(schema)).join(' | '),
       })),
       parameters: parameterNames,
       optionsJsonSchema: flagsSchema && typeof flagsSchema === 'object' ? flagsSchema : {},

@@ -88,6 +88,7 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
         if (k === 'type' && Array.isArray(vv)) return `type: ${vv.join(' or ')}`
         if (k === 'description' && i === 0) return String(vv)
         if (k === 'properties') return `Object (json formatted)`
+        if (typeof vv === 'object') return `${capitaliseFromCamelCase(k)}: ${JSON.stringify(vv)}`
         return `${capitaliseFromCamelCase(k)}: ${vv}`
       })
       .join('; ') || ''
@@ -97,15 +98,22 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
 export const getSchemaTypes = (
   propertyValue: JsonSchema7Type,
 ): Array<'string' | 'boolean' | 'number' | (string & {})> => {
+  const array: string[] = []
   if ('type' in propertyValue) {
-    return [propertyValue.type].flat()
+    array.push(...[propertyValue.type].flat())
+  }
+  if ('enum' in propertyValue && Array.isArray(propertyValue.enum)) {
+    array.push(...propertyValue.enum.flatMap(s => typeof s))
+  }
+  if ('const' in propertyValue) {
+    array.push(typeof propertyValue.const)
   }
   if ('oneOf' in propertyValue) {
-    return (propertyValue.oneOf as JsonSchema7Type[]).flatMap(getSchemaTypes)
+    array.push(...(propertyValue.oneOf as JsonSchema7Type[]).flatMap(getSchemaTypes))
   }
   if ('anyOf' in propertyValue) {
-    return (propertyValue.anyOf as JsonSchema7Type[]).flatMap(getSchemaTypes)
+    array.push(...(propertyValue.anyOf as JsonSchema7Type[]).flatMap(getSchemaTypes))
   }
 
-  return []
+  return [...new Set(array)]
 }

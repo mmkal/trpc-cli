@@ -167,7 +167,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.description(meta?.description || '')
 
       procedureInputs.positionalParameters.forEach(param => {
-        const argument = new Argument(param.name, param.description + (param.required ? ` (required)` : ''))
+        const argument = new Argument(
+          param.name,
+          `${param.type} ${param.description} ${param.required ? '(required)' : ''}`.trim(),
+        )
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
@@ -532,6 +535,9 @@ function transformError(err: unknown, command: Command) {
       } finally {
         cause.issues = originalIssues
       }
+    }
+    if (err.code === 'BAD_REQUEST' && err.cause?.constructor?.name === 'TraversalError') {
+      return new CliValidationError(err.cause.message + '\n\n' + command.helpInformation())
     }
     if (err.code === 'INTERNAL_SERVER_ERROR') {
       return cause

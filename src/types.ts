@@ -46,7 +46,7 @@ export interface ParsedProcedure {
   positionalParameters: Array<{
     name: string
     description: string
-    type: 'string' | 'number' | 'boolean'
+    type: 'string' | 'number' | 'boolean' | (string & {})
     required: boolean
     array: boolean
   }>
