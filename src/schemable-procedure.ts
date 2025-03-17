@@ -35,9 +35,19 @@ function looksJsonSchemaable(value: unknown): value is JsonSchemaable {
   )
 }
 
-function toJsonSchema(input: JsonSchemaable): JSONSchema7 {
-  const jsonSchema = 'toJsonSchema' in input ? input.toJsonSchema() : (zodToJsonSchema(input as never) as JSONSchema7)
-  return Object.assign(jsonSchema, {originalSchema: input})
+function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
+  try {
+    const jsonSchema = 'toJsonSchema' in input ? input.toJsonSchema() : (zodToJsonSchema(input as never) as JSONSchema7)
+    return {
+      success: true,
+      value: Object.assign(jsonSchema, {originalSchema: input}),
+    }
+  } catch (e) {
+    return {
+      success: false,
+      error: `Failed to convert input to JSON Schema: ${e instanceof Error ? e.message : String(e)}`,
+    }
+  }
 }
 
 export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure> {
@@ -64,7 +74,16 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     return parseMultiInputs(inputs)
   }
 
-  const mergedSchema = toJsonSchema(inputs[0])
+  const mergedSchemaResult = toJsonSchema(inputs[0])
+
+  if (!mergedSchemaResult.success) {
+    return {
+      success: false,
+      error: mergedSchemaResult.error,
+    }
+  }
+
+  const mergedSchema = mergedSchemaResult.value
 
   if (mergedSchema.type === 'string') {
     return {
@@ -227,10 +246,6 @@ const tupleItemsSchemas = (schema: JSONSchema7Definition): JSONSchema7Definition
 
 function isTuple(schema: JSONSchema7): schema is JSONSchema7 & {items: JSONSchema7[]} {
   return Array.isArray(tupleItemsSchemas(schema))
-}
-
-function isArray(schema: JSONSchema7): schema is JSONSchema7 & {items: {type: unknown}} {
-  return schema.type === 'array' && Boolean(schema.items)
 }
 
 function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<ParsedProcedure> {
@@ -408,6 +423,11 @@ const convertPositional = (schema: JSONSchema7Definition, value: string) => {
   let preprocessed: string | number | boolean | undefined = undefined
 
   const acceptedTypes = new Set(acceptedLiteralTypes(schema))
+
+  if (acceptedTypes.has('string')) {
+    preprocessed = value
+  }
+
   if (acceptedTypes.has('boolean')) {
     if (value === 'true') preprocessed = true
     else if (value === 'false') preprocessed = false
@@ -421,9 +441,12 @@ const convertPositional = (schema: JSONSchema7Definition, value: string) => {
   }
 
   if (acceptedTypes.has('integer')) {
-    const integer = Number(value)
-    if (Number.isInteger(integer)) {
-      preprocessed = integer
+    const num = Number(value)
+    if (Number.isInteger(num)) {
+      preprocessed = num
+    } else if (!Number.isNaN(num) && acceptedTypes === undefined) {
+      // we're expecting an integer and the value isn't one, but we haven't come up with anything else, so use it anyway to get helpful "expected integer, got float" error rather than "expected number, got string"
+      preprocessed = value
     }
   }
 
