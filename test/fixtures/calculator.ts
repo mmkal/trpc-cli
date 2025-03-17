@@ -41,6 +41,16 @@ const router = trpc.router({
       ]),
     )
     .mutation(({input}) => input[0] / input[1]),
+  squareRoot: trpc.procedure
+    .meta({
+      description:
+        'Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.',
+    })
+    .input(z.number())
+    .query(({input}) => {
+      if (input < 0) throw new Error(`Get real`)
+      return Math.sqrt(input)
+    }),
 })
 
 void createCli({router}).run()

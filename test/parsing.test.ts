@@ -1,5 +1,6 @@
 import {Router, initTRPC} from '@trpc/server'
 import stripAnsi from 'strip-ansi'
+import {inspect} from 'util'
 import {expect, test} from 'vitest'
 import {z} from 'zod'
 import {createCli, TrpcCliMeta, TrpcCliParams} from '../src'
@@ -13,7 +14,7 @@ expect.addSnapshotSerializer({
       err = err.cause
       messages.push('  '.repeat(messages.length) + 'Caused by: ' + err.message)
     }
-    return stripAnsi(messages.join('\n'))
+    return stripAnsi(messages.join('\n')).split('Usage: ')[0].trim()
   },
 })
 
@@ -42,7 +43,7 @@ const runWith = <R extends Router<any>>(params: TrpcCliParams<R>, argv: string[]
                 }),
               )
             }
-            return code as never
+            throw new Error('Throwing to simulate process.exit')
           },
         },
       })
@@ -256,8 +257,7 @@ test('tuple input with flags', async () => {
   )
   await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
-      - Required at "[2].foo"
+      Caused by: Logs: error: required option '--foo <string>' not specified
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -266,9 +266,7 @@ test('tuple input with flags', async () => {
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
-      - Expected number, received string at index 1
-      - Required at "[2].foo"
+      Caused by: Logs: error: required option '--foo <string>' not specified
   `)
 })
 
@@ -279,29 +277,82 @@ test('single character flag', async () => {
       .query(({input}) => JSON.stringify(input || null)),
   })
 
-  // todo: support this somehow, not sure why this restriction exists. it comes from type-flag.
-  await expect(run(router, ['foo', 'hello', '123', '--a', 'b'])).rejects.toMatchInlineSnapshot(
-    `Flag name "a" must be longer than a character`,
-  )
+  await expect(run(router, ['foo', '--a', 'b'])).resolves.toEqual(`{"a":"b"}`)
+  await expect(run(router, ['foo', '--a', 'b'])).resolves.toEqual(`{"a":"b"}`)
 })
 
 test('custom default procedure', async () => {
   const yarn = t.router({
     install: t.procedure
+      .meta({default: true})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {
-    router: yarn,
-    default: {procedure: 'install'},
-  }
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
-  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
+  const yarnOutput = await runWith(params, ['--frozenLockfile'])
   expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 
-  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
+  const yarnInstallOutput = await runWith(params, ['install', '--frozenLockfile'])
   expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+})
+
+test('command alias', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {command: ['i']}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnIOutput = await runWith(params, ['i', '--frozenLockfile'])
+  expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+})
+
+test('flag alias', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {flags: {frozenLockfile: 'x'}}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnIOutput = await runWith(params, ['install', '-x'])
+  expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+})
+
+test('flag alias can be two characters', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnIOutput = await runWith(params, ['install', '--xx'])
+  expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+})
+
+test('flag alias typo', async () => {
+  const yarn = t.router({
+    install: t.procedure
+      .meta({aliases: {flags: {frooozenLockfile: 'x'}}})
+      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .query(({input}) => 'install: ' + JSON.stringify(input)),
+  })
+
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
+    `Invalid flag aliases: frooozenLockfile: x`,
+  )
 })
 
 test('validation', async () => {
@@ -323,19 +374,7 @@ test('validation', async () => {
       .query(() => 'ok'),
   })
   const cli = createCli({router})
-
-  expect(cli.ignoredProcedures).toMatchInlineSnapshot(`
-    [
-      {
-        "procedure": "tupleWithObjectInTheMiddle",
-        "reason": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings, numbers or booleans.",
-      },
-      {
-        "procedure": "tupleWithRecord",
-        "reason": "Invalid input type [ZodString, ZodRecord]. The last type must accept object inputs.",
-      },
-    ]
-  `)
+  expect(cli).toBeDefined()
 })
 
 test('string array input', async () => {
@@ -344,10 +383,6 @@ test('string array input', async () => {
       .input(z.array(z.string())) //
       .query(({input}) => `strings: ${JSON.stringify(input)}`),
   })
-
-  const cli = createCli({router})
-
-  expect(cli.ignoredProcedures).toEqual([])
 
   const result = await run(router, ['stringArray', 'hello', 'world'])
   expect(result).toMatchInlineSnapshot(`"strings: ["hello","world"]"`)
@@ -359,10 +394,6 @@ test('number array input', async () => {
       .input(z.array(z.number())) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
-
-  const cli = createCli({router})
-
-  expect(cli.ignoredProcedures).toEqual([])
 
   const result = await run(router, ['test', '1', '2', '3', '4'])
   expect(result).toMatchInlineSnapshot(`"list: [1,2,3,4]"`)
@@ -376,12 +407,12 @@ test('number array input', async () => {
 
 test('number array input with constraints', async () => {
   const router = t.router({
-    test: t.procedure
+    foo: t.procedure
       .input(z.array(z.number().int())) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['test', '1.2'])).rejects.toMatchInlineSnapshot(`
+  await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: Logs: Validation error
       - Expected integer, received float at index 0
@@ -394,10 +425,6 @@ test('boolean array input', async () => {
       .input(z.array(z.boolean())) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
-
-  const cli = createCli({router})
-
-  expect(cli.ignoredProcedures).toEqual([])
 
   const result = await run(router, ['test', 'true', 'false', 'true'])
   expect(result).toMatchInlineSnapshot(`"list: [true,false,true]"`)
@@ -416,10 +443,6 @@ test('mixed array input', async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  const cli = createCli({router})
-
-  expect(cli.ignoredProcedures).toEqual([])
-
   const result = await run(router, ['test', '12', 'true', '3.14', 'null', 'undefined', 'hello'])
   expect(result).toMatchInlineSnapshot(`"list: [12,true,3.14,"null","undefined","hello"]"`)
 })
@@ -432,20 +455,8 @@ test("nullable array inputs aren't supported", async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  const cli = createCli({router})
-
-  expect(cli.ignoredProcedures).toMatchInlineSnapshot(`
-    [
-      {
-        "procedure": "test1",
-        "reason": "Invalid input type ZodNullable<ZodString>[]. Nullable arrays are not supported.",
-      },
-      {
-        "procedure": "test2",
-        "reason": "Invalid input type ZodNullable<ZodUnion>[]. Nullable arrays are not supported.",
-      },
-    ]
-  `)
+  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])
+  expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
 })
 
 test('string array input with options', async () => {
@@ -459,9 +470,6 @@ test('string array input with options', async () => {
       )
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
-
-  const cli = createCli({router})
-  expect(cli.ignoredProcedures).toEqual([])
 
   const result = await run(router, ['test', 'hello', 'world', '--foo', 'bar'])
   expect(result).toMatchInlineSnapshot(`"input: [["hello","world"],{"foo":"bar"}]"`)
@@ -485,9 +493,6 @@ test('mixed array input with options', async () => {
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
 
-  const cli = createCli({router})
-  expect(cli.ignoredProcedures).toEqual([])
-
   const result0 = await run(router, ['test', 'hello', '1', 'world'])
   expect(result0).toMatchInlineSnapshot(`"input: [["hello",1,"world"],{}]"`)
 
@@ -499,4 +504,59 @@ test('mixed array input with options', async () => {
 
   const result3 = await run(router, ['test', 'hello', 'world', '--foo=bar', '1'])
   expect(result3).toMatchInlineSnapshot(`"input: [["hello","world",1],{"foo":"bar"}]"`)
+})
+
+test('defaults and negations', async () => {
+  const router = t.router({
+    normalBoolean: t.procedure.input(z.object({foo: z.boolean()})).query(({input}) => `${inspect(input)}`),
+    optionalBoolean: t.procedure.input(z.object({foo: z.boolean().optional()})).query(({input}) => `${inspect(input)}`),
+    defaultTrueBoolean: t.procedure
+      .input(z.object({foo: z.boolean().default(true)}))
+      .query(({input}) => `${inspect(input)}`),
+    defaultFalseBoolean: t.procedure
+      .input(z.object({foo: z.boolean().default(false)}))
+      .query(({input}) => `${inspect(input)}`),
+    booleanOrNumber: t.procedure
+      .input(z.object({foo: z.union([z.boolean(), z.number()])}))
+      .query(({input}) => `${inspect(input)}`),
+    booleanOrString: t.procedure
+      .input(z.object({foo: z.union([z.boolean(), z.string()])}))
+      .query(({input}) => `${inspect(input)}`),
+    arrayOfBooleanOrNumber: t.procedure
+      .input(z.object({foo: z.array(z.union([z.boolean(), z.number()]))}))
+      .query(({input}) => `${inspect(input)}`),
+  })
+
+  expect(await run(router, ['normalBoolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['normalBoolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+
+  expect(await run(router, ['optionalBoolean'])).toMatchInlineSnapshot(`"{}"`)
+  expect(await run(router, ['optionalBoolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['optionalBoolean', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['optionalBoolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+
+  expect(await run(router, ['defaultTrueBoolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['defaultTrueBoolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+
+  expect(await run(router, ['defaultFalseBoolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['defaultFalseBoolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+
+  expect(await run(router, ['booleanOrNumber'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['booleanOrNumber', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['booleanOrNumber', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['booleanOrNumber', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['booleanOrNumber', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: 1 }"`)
+
+  expect(await run(router, ['booleanOrString'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['booleanOrString', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['booleanOrString', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: '1' }"`)
+  expect(await run(router, ['booleanOrString', '--foo', 'a'])).toMatchInlineSnapshot(`"{ foo: 'a' }"`)
+
+  expect(await run(router, ['arrayOfBooleanOrNumber'])).toMatchInlineSnapshot(`"{ foo: [] }"`)
+  expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: [ true ] }"`)
+  expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: [ 1 ] }"`)
+  expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: [ 1 ] }"`)
+  expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', 'true', '1'])).toMatchInlineSnapshot(
+    `"{ foo: [ true, 1 ] }"`,
+  )
 })

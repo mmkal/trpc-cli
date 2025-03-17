@@ -7,28 +7,16 @@ export type TrpcCliParams<R extends AnyRouter> = {
   router: R
   /** Context to be supplied when invoking the router. */
   context?: inferRouterContext<R>
-  /**
-   * A function that will be called for every flag, for every command. Used to provide single-character aliases for flags.
-   * Return a single-character string to alias a flag to that character.
-   * @param fullName The full-length name of the flag
-   * @param meta Metadata about the command and flags. Includes the command name and all the other flags for the command (so you can avoid clashes you might get with `return fullName[0]`).
-   * @returns A single-letter string to alias the flag to that character, or `void`/`undefined` to not alias the flag.
-   */
-  alias?: (fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined
-  /**
-   * The name of the "default" command - this procedure will be run if no command is specified. Default value is `default`, if such a procedure exists. Otherwise there is no default procedure.
-   * Set to `false` to disable the default command, even when there's a procedure named `'default'`.
-   */
-  default?: {
-    procedure: keyof R['_def']['procedures']
-  }
+  /** @deprecated this is actually **removed** not deprecated; use `aliases` on each procedure `meta` instead */
+  alias?: never // ((fullName: string, meta: {command: string; flags: Record<string, unknown>}) => string | undefined)
+  /** @deprecated this is actually **removed** not deprecated; set `default: true` on the procedure `meta` instead */
+  _default?: never // {procedure: Extract<keyof R['_def']['procedures'], string>}
 
   /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v11. */
   createCallerFactory?: CreateCallerFactoryLike
 }
 /**
  * Optional interface for describing procedures via meta - if your router conforms to this meta shape, it will contribute to the CLI help text.
- * Based on @see `import('cleye').HelpOptions`
  */
 
 export interface TrpcCliMeta {
@@ -40,18 +28,37 @@ export interface TrpcCliMeta {
   usage?: false | string | string[]
   /** Example code snippets to display in `--help` output. */
   examples?: string | string[]
+  /** If true, this command will be run if no command is specified. */
+  default?: boolean
+  aliases?: {
+    /** Aliases for the command. Note: take care to avoid conflicts with other commands. */
+    command?: string[]
+    /** Aliases for the flags. Note: take care to avoid conflicts with other flags. An error will be thrown if an alias is defined for a non-existent flag. */
+    flags?: Record<string, string>
+  }
+  /** If true, will use a single CLI option expect the entire input to be parsed in as JSON, e.g. `--input '{"foo": "bar"}`. Can be useful to opt out of the default mapping of input schemas to CLI options. */
+  jsonInput?: boolean
+  /** Sub-property for the CLI meta. If present, will take precedence over the top-level meta, to avoid conflicts with other tools. */
+  cliMeta?: TrpcCliMeta
 }
 
 export interface ParsedProcedure {
+  positionalParameters: Array<{
+    name: string
+    description: string
+    type: 'string' | 'number' | 'boolean'
+    required: boolean
+    array: boolean
+  }>
   /** positional parameters */
   parameters: string[]
   /** JSON Schema type describing the flags for the procedure */
-  flagsSchema: JsonSchema7Type
+  optionsJsonSchema: JsonSchema7Type
   /**
-   * Function for taking cleye parsed argv output and transforming it so it can be passed into the procedure.
+   * Function for taking parsed argv output and transforming it so it can be passed into the procedure.
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
-  getInput: (argv: {_: string[]; flags: Record<string, unknown>}) => unknown
+  getPojoInput: (argv: {positionalValues: Array<string | string[]>; options: Record<string, unknown>}) => unknown
 }
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}
@@ -66,4 +73,44 @@ export type Log = (...args: unknown[]) => void
 export interface Logger {
   info?: Log
   error?: Log
+}
+
+/**
+ * Slim reconstruction of an `omelette` instance. Hand-written here to avoid a hard dependency on `omelette` or its types.
+ * Usually you will just pass in an `omelette` instance by doing something like
+ *
+ * ```ts
+ * import omelette from 'omelette'
+ * import {createCli} from 'trpc-cli'
+ *
+ * const cli = createCli({
+ *   router: myRouter,
+ *   completion: omelette('myprogram'),
+ * })
+ * ```
+ *
+ * Or it also accepts an async function that resolves to an `omelette` instance, so you can use dynamic import:
+ *
+ * ```ts
+ * import {createCli} from 'trpc-cli'
+ *
+ * const cli = await createCli({
+ *   router: myRouter,
+ *   completion: () => import('omelette').then(omelette => omelette.default('myprogram')),
+ * })
+ * ```
+ */
+export interface OmeletteInstanceLike {
+  on: (
+    event: 'complete',
+    callback: (
+      fragment: string,
+      params: {line: string; fragment: number; reply: (suggestions: string[]) => void},
+    ) => void,
+  ) => void
+  init: () => void
+  setupShellInitFile: () => void
+  cleanupShellInitFile: () => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tree: (value: any) => this
 }

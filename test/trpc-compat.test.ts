@@ -16,6 +16,11 @@ test('can create cli from trpc v10', async () => {
     foo: t.router({
       bar: t.procedure.query(() => 'baz'),
     }),
+    deeply: t.router({
+      nested1: t.router({
+        command1: t.procedure.query(() => 'ok'),
+      }),
+    }),
   }) satisfies Trpc10RouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
 
   expect(router._def.procedures).toHaveProperty('foo.bar')
@@ -45,7 +50,10 @@ test('can create cli from trpc v10', async () => {
 
   const log = vi.fn()
   const exit = vi.fn()
-  await cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}})
+  await expect(
+    cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}}),
+  ).rejects.toThrowError(/Program exit/)
+
   expect(exit).toHaveBeenCalledWith(0)
   expect(log).toHaveBeenCalledWith(3)
 })
@@ -53,6 +61,7 @@ test('can create cli from trpc v10', async () => {
 test('can create cli from trpc v11', async () => {
   const t = initTRPC_v11.context<{customContext: true}>().meta<TrpcCliMeta>().create()
 
+  const trpc = t
   const router = t.router({
     add: t.procedure
       .meta({description: 'Add two numbers'})
@@ -65,6 +74,12 @@ test('can create cli from trpc v11', async () => {
     },
     abc: t.router({
       def: t.procedure.query(() => 'baz'),
+    }),
+    deeply: trpc.router({
+      nested2: trpc.router({
+        command3: trpc.procedure.input(z.object({foo3: z.string()})).query(({input}) => 'ok:' + JSON.stringify(input)),
+        command4: trpc.procedure.input(z.object({foo4: z.string()})).query(({input}) => 'ok:' + JSON.stringify(input)),
+      }),
     }),
   }) satisfies Trpc11RouterLike // this satisfies makes sure people can write a normal router and they'll be allowed to pass it in
 
@@ -97,7 +112,9 @@ test('can create cli from trpc v11', async () => {
 
   const log = vi.fn()
   const exit = vi.fn()
-  await cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}})
+  await expect(
+    cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}}),
+  ).rejects.toThrowError(/Program exit/)
   expect(exit).toHaveBeenCalledWith(0)
   expect(log).toHaveBeenCalledWith(3)
 })
@@ -116,7 +133,21 @@ test('error when using trpc v11 without createCallerFactory', async () => {
 
   const cli = createCli({router})
 
-  await expect(cli.run({argv: ['add', '--verboseErrors', '1', '2']})).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[Error: createCallerFactory version mismatch - pass in createCallerFactory explicitly]`,
+  const runAndCaptureProcessExit = async ({argv}: {argv: string[]}) => {
+    return cli
+      .run({
+        argv,
+        logger: {error: () => void 0},
+        process: {exit: () => void 0 as never},
+      })
+      .catch(err => {
+        while (String(err).includes('An error was thrown but the process did not exit.')) {
+          err = err.cause
+        }
+        throw err
+      })
+  }
+  await expect(runAndCaptureProcessExit({argv: ['add', '1', '2']})).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: Program exit after failure. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
 })

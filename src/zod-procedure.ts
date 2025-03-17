@@ -1,6 +1,7 @@
 import type {JSONSchema7} from 'json-schema'
 import {z as zod} from 'zod'
 import zodToJsonSchema from 'zod-to-json-schema'
+import {CliValidationError} from './errors'
 import type {Result, ParsedProcedure} from './types'
 import {looksLikeInstanceof} from './util'
 
@@ -37,11 +38,20 @@ function toJsonSchema(input: JsonSchemaable): JSONSchema7 {
   return Object.assign(jsonSchema, {originalSchema: input})
 }
 
+const looksLikeArray = (zodType: z.ZodType): zodType is z.ZodArray<z.ZodType> => {
+  return looksLikeInstanceof<z.ZodArray<never>>(zodType, z.ZodArray)
+}
+
 export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure> {
   if (inputs.length === 0) {
     return {
       success: true,
-      value: {parameters: [], flagsSchema: {}, getInput: () => ({})},
+      value: {
+        positionalParameters: [],
+        parameters: [],
+        optionsJsonSchema: {},
+        getPojoInput: () => ({}),
+      },
     }
   }
 
@@ -67,7 +77,7 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
     return parseTupleInput(mergedSchema)
   }
 
-  if (isArray(mergedSchema) && acceptedLiteralTypes(mergedSchema.items as JSONSchema7).length > 0) {
+  if (looksLikeArray(mergedSchema) && acceptedLiteralTypes(mergedSchema.element).length > 0) {
     return parseArrayInput(mergedSchema)
   }
 
@@ -80,20 +90,33 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 
   return {
     success: true,
-    value: {parameters: [], flagsSchema: mergedSchema, getInput: argv => argv.flags},
+    value: {
+      positionalParameters: [],
+      parameters: [],
+      optionsJsonSchema: zodToJsonSchema(mergedSchema),
+      getPojoInput: argv => argv.options,
+    },
   }
 }
 
 function parseLiteralInput(schema: JSONSchema7): Result<ParsedProcedure> {
   const type = acceptedLiteralTypes(schema).at(0)
-  const name = schema.description || type || 'value'
+  const name = (schema.description || type || 'value').replaceAll(/\s+/g, '_')
   return {
     success: true,
     value: {
-      // todo: pass parent `required` array to determine if optional
-      parameters: [schema.type === 'ooptional' ? `[${name}]` : `<${name}>`],
-      flagsSchema: {},
-      getInput: argv => convertPositional(schema, argv._[0]),
+      positionalParameters: [
+        {
+          name,
+          array: false,
+          description: schema.description || '',
+          required: !schema.isOptional(),
+          type: type!,
+        },
+      ],
+      parameters: [schema.isOptional() ? `[${name}]` : `<${name}>`],
+      optionsJsonSchema: {},
+      getPojoInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
     },
   }
 }
@@ -129,14 +152,15 @@ function parseMultiInputs(inputs: JSONSchema7[]): Result<ParsedProcedure> {
   return {
     success: true,
     value: {
+      positionalParameters: [],
       parameters: [],
-      flagsSchema: {
+      optionsJsonSchema: {
         allOf: parsedIndividually.map(p => {
           const successful = p as Extract<typeof p, {success: true}>
-          return successful.value.flagsSchema
+          return successful.value.optionsJsonSchema
         }),
       },
-      getInput: argv => argv.flags,
+      getPojoInput: argv => argv.options,
     },
   }
 }
@@ -163,68 +187,89 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
   return {
     success: true,
     value: {
-      parameters: [],
-      flagsSchema: {},
-      getInput: argv => argv._.map(s => convertPositional(array.items, s)),
+      positionalParameters: [
+        {
+          name: parameterName(array, 1),
+          array: true,
+          description: array.description || '',
+          required: !array.isOptional(),
+          type: 'string',
+        },
+      ],
+      parameters: [parameterName(array, 1)],
+      optionsJsonSchema: {},
+      getPojoInput: argv => (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.element, s)),
     },
   }
 }
 
-function parseTupleInput(tuple: JSONSchema7 & {items: JSONSchema7[]}): Result<ParsedProcedure> {
-  const nonPositionalIndex = tuple.items.findIndex(item => {
-    return item.type === 'object'
-  })
-  const types = `[${tuple.items.map(s => s.type).join(', ')}]`
+// function parseTupleInput(tuple: z.ZodTuple<[z.ZodType, ...z.ZodType[]]>): Result<ParsedProcedure> {
+//   const flagsSchemaIndex = tuple.items.findIndex(item => {
+//     if (acceptedLiteralTypes(item).length > 0) {
+//       return false // it's a string, number or boolean
+//     }
+//     if (looksLikeArray(item) && acceptedLiteralTypes(item.element).length > 0) {
+//       return false // it's an array of strings, numbers or booleans
+//     }
+//     return true // it's not a string, number, boolean or array of strings, numbers or booleans. So it's probably a flags object
+//   })
+//   const types = `[${tuple.items.map(s => s.type).join(', ')}]`
 
-  if (nonPositionalIndex > -1 && nonPositionalIndex !== tuple.items.length - 1) {
-    return {
-      success: false,
-      error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
-    }
-  }
+//   if (flagsSchemaIndex > -1 && flagsSchemaIndex !== tuple.items.length - 1) {
+//     return {
+//       success: false,
+//       error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
+//     }
+//   }
 
-  const positionalSchemas =
-    nonPositionalIndex === -1 ? tuple.items : (tuple.items.slice(0, nonPositionalIndex) as JSONSchema7[])
+//   const flagsSchema = flagsSchemaIndex === -1 ? null : tuple.items[flagsSchemaIndex]
 
-  const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
-  const postionalParametersToTupleInput = (argv: {_: string[]; flags: {}}) => {
-    if (positionalSchemas.length === 1 && isArray(positionalSchemas[0])) {
-      const arrayItems = positionalSchemas[0].items
-      return [argv._.map(s => convertPositional(arrayItems, s))]
-    }
-    return positionalSchemas.map((schema, i) => convertPositional(schema, argv._[i]))
-  }
+//   if (flagsSchema && !acceptsObject(flagsSchema)) {
+//     return {
+//       success: false,
+//       error: `Invalid input type ${types}. The last type must accept object inputs.`,
+//     }
+//   }
 
-  if (positionalSchemas.length === tuple.items.length) {
-    // all schemas were positional - no object at the end
-    return {
-      success: true,
-      value: {
-        parameters: parameterNames,
-        flagsSchema: {},
-        getInput: postionalParametersToTupleInput,
-      },
-    }
-  }
+//   const positionalSchemas = flagsSchemaIndex === -1 ? tuple.items : tuple.items.slice(0, flagsSchemaIndex)
 
-  const last = tuple.items.at(-1)!
+//   const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
 
-  if (!acceptsObject(last)) {
-    return {
-      success: false,
-      error: `Invalid input type ${types}. The last type must accept object inputs.`,
-    }
-  }
+//   return {
+//     success: true,
+//     value: {
+//       positionalParameters: positionalSchemas.map((schema, i) => ({
+//         name: parameterName(schema, i + 1),
+//         array: looksLikeArray(schema),
+//         description: schema.description || '',
+//         required: !schema.isOptional(),
+//         type: 'string',
+//       })),
+//       parameters: parameterNames,
+//       optionsJsonSchema: flagsSchema ? zodToJsonSchema(flagsSchema) : {},
+//       getPojoInput: commandArgs => {
+//         const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
+//           const correspondingSchema = positionalSchemas[i]
+//           if (looksLikeArray(correspondingSchema)) {
+//             if (!Array.isArray(v)) {
+//               throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
+//             }
+//             return v.map(s => convertPositional(correspondingSchema.element, s))
+//           }
+//           if (typeof v !== 'string') {
+//             throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
+//           }
+//           return convertPositional(correspondingSchema, v)
+//         })
 
-  return {
-    success: true,
-    value: {
-      parameters: parameterNames,
-      flagsSchema: zodToJsonSchema(last),
-      getInput: argv => [...postionalParametersToTupleInput(argv), argv.flags],
-    },
-  }
-}
+//         if (flagsSchema) {
+//           inputs.push(commandArgs.options)
+//         }
+//         return inputs
+//       },
+//     },
+//   }
+// }
 
 /**
  * Converts a positional string to parameter into a number if the target schema accepts numbers, and the input can be parsed as a number.
@@ -270,12 +315,12 @@ const convertPositional = (schema: JSONSchema7, value: string) => {
 }
 
 const parameterName = (s: z.ZodType, position: number): string => {
-  if (looksLikeInstanceof<z.ZodArray<never>>(s, z.ZodArray)) {
+  if (looksLikeArray(s)) {
     const elementName = parameterName(s.element, position)
     return `[${elementName.slice(1, -1)}...]`
   }
-  // cleye requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
-  const name = s.description || `parameter ${position}`.replaceAll(/\W+/g, ' ').trim()
+  // commander requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
+  const name = s.description || `parameter_${position}`.replaceAll(/\W+/g, ' ').trim()
   return s.isOptional() ? `[${name}]` : `<${name}>`
 }
 

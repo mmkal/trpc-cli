@@ -1,6 +1,6 @@
-# trpc-cli [![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg) [![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli) [![X (formerly Twitter) Follow](https://img.shields.io/twitter/follow/mmkal)](https://x.com/mmkalmmkal)
+# trpc-cli [![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg) [![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli) [![X Follow](https://img.shields.io/twitter/follow/mmkalmmkal)](https://x.com/mmkalmmkal)
 
-Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI.
+Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI with autocomplete support.
 
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
 - [Motivation](#motivation)
@@ -20,6 +20,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
 - [More Examples](#more-examples)
    - [Migrator example](#migrator-example)
 - [Programmatic usage](#programmatic-usage)
+- [Completions](#completions)
 - [Out of scope](#out-of-scope)
 - [Contributing](#contributing)
    - [Implementation and dependencies](#implementation-and-dependencies)
@@ -45,7 +46,7 @@ npm install trpc-cli
 The fastest way to get going is to write a normal tRPC router, using `trpcServer` and `zod` exports from this library, and turn it into a fully-functional CLI by passing it to `createCli`:
 
 ```ts
-import {trpcServer, zod as z, createCli, TrpcCliMeta} from 'trpc-cli'
+import {createCli, trpcServer, zod as z, type TrpcCliMeta} from 'trpc-cli'
 
 const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -175,11 +176,18 @@ Strings:
 
 Booleans:
 
-- `z.object({foo: z.boolean()})` will map:
-   - `--foo` or `--foo=true` to `{foo: true}`
-   - `--foo=false` to `{foo: false}`
+- `z.object({foo: z.boolean()})` or `z.object({foo: z.boolean().default(false)})` will map:
+   - no option supplied to `{foo: false}`
+   - `--foo` `{foo: true}`
 
->Note: it's usually better to use `z.boolean().default(false)` or `z.boolean().optional()` than `z.boolean()`, otherwise CLI users will have to pass in `--foo=false` explicitly.
+- `z.object({foo: z.boolean().default(true)})` will map:
+   - no option supplied to `{foo: true}`
+   - `--no-foo` `{foo: false}`
+
+- `z.object({foo: z.boolean().optional()})` will map:
+  - no option supplied to `{}` (foo is undefined)
+  - `--foo` to `{foo: true}`
+  - `--foo false` to `{foo: false}` (note: `--no-foo` doesn't work here, because its existence prevents `{}` from being the default value)
 
 Numbers:
 
@@ -232,6 +240,12 @@ Procedures with incompatible inputs will be returned in the `ignoredProcedures` 
 
 >You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
 
+#### JSON input
+
+Some procedures have complex inputs that can't be mapped directly to positional parameters and flags. When this happens, the procedure must be called with a single `--input` flag, followed by a JSON string. It will simply be passed through to the procedure, which will then perform the usual input validation - including by tools other than zod. It's more inconvenient to type, but just as safe and powerful.
+
+You can also set `{jsonInput: true}` on the procedure's meta to opt in to this behaviour on any procedure.
+
 ### Default command
 
 You can define a default command for your CLI - set this to the procedure that should be invoked directly when calling your CLI. Useful for simple CLIs that only do one thing, or when you want to make the most common command very quick to type (e.g. `yarn` being an alias for `yarn install`):
@@ -241,18 +255,16 @@ You can define a default command for your CLI - set this to the procedure that s
 // filename: yarn
 const router = t.router({
   install: t.procedure //
+    .meta({default: true})
     .mutation(() => console.log('installing...')),
 })
 
-const cli = createCli({
-  router,
-  default: {procedure: 'install'},
-})
+const cli = createCli({router})
 
 cli.run()
 ```
 
-The above can be invoked with either `yarn` or `yarn install`.
+The above can be invoked with either `yarn` or `yarn install`. You can also set `default: true` on subcommands, which makes them the default for their parent.
 
 ### Ignored procedures
 
@@ -291,7 +303,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L42)
+#### [createCli](./src/index.ts#L64)
 
 Run a trpc router as a CLI.
 
@@ -301,8 +313,6 @@ Run a trpc router as a CLI.
 |-------|-----------------------------------------------------------------------------------------|
 |router |A trpc router                                                                            |
 |context|The context to use when calling the procedures - needed if your router requires a context|
-|alias  |A function that can be used to provide aliases for flags.                                |
-|default|A procedure to use as the default command when the user doesn't specify one.             |
 
 ##### Returns
 
@@ -314,7 +324,7 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:88401aa19b6a08abc634d5be37ffab3a -->
+<!-- hash:e30cac4beb319a42941777d631465ee0 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer} from 'trpc-cli'
 import {z} from 'zod'
@@ -360,6 +370,16 @@ const router = trpc.router({
       ]),
     )
     .mutation(({input}) => input[0] / input[1]),
+  squareRoot: trpc.procedure
+    .meta({
+      description:
+        'Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.',
+    })
+    .input(z.number())
+    .query(({input}) => {
+      if (input < 0) throw new Error(`Get real`)
+      return Math.sqrt(input)
+    }),
 })
 
 void createCli({router}).run()
@@ -373,16 +393,31 @@ Run `node path/to/cli --help` for formatted help text for the `sum` and `divide`
 `node path/to/calculator --help` output:
 
 ```
+Usage: calculator [options] [command]
+
+Options:
+  -h, --help                            display help for command
+
 Commands:
-  add             Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
-  subtract        Subtract two numbers. Useful if you have a number and you want to make it smaller.
-  multiply        Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
-  divide          Divide two numbers. Useful if you have a number and you want to make it smaller and `subtract` isn't quite powerful enough for you.
-
-Flags:
-  -h, --help                  Show help
-      --verbose-errors        Throw raw errors (by default errors are summarised)
-
+  add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
+                                        your friend both have apples, and you
+                                        want to know how many apples there are
+                                        in total.
+  subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
+                                        a number and you want to make it
+                                        smaller.
+  multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
+                                        you want to count the number of tiles on
+                                        your bathroom wall and are short on
+                                        time.
+  divide <numerator> <denominator>      Divide two numbers. Useful if you have a
+                                        number and you want to make it smaller
+                                        and `subtract` isn't quite powerful
+                                        enough for you.
+  squareRoot <number>                   Square root of a number. Useful if you
+                                        have a square, know the area, and want
+                                        to find the length of the side.
+  help [command]                        display help for command
 ```
 <!-- codegen:end -->
 
@@ -392,16 +427,17 @@ You can also show help text for the corresponding procedures (which become "comm
 `node path/to/calculator add --help` output:
 
 ```
-add
+Usage: calculator add [options] <parameter_1> <parameter_2>
 
-Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+Add two numbers. Use this if you and your friend both have apples, and you want
+to know how many apples there are in total.
 
-Usage:
-  add [flags...] <parameter 1> <parameter 2>
+Arguments:
+  parameter_1   (required)
+  parameter_2   (required)
 
-Flags:
-  -h, --help        Show help
-
+Options:
+  -h, --help   display help for command
 ```
 <!-- codegen:end -->
 
@@ -421,18 +457,21 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
-add
-
-Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
-
-Usage:
-  add [flags...] <parameter 1> <parameter 2>
-
-Flags:
-  -h, --help        Show help
-
 Validation error
   - Expected number, received string at index 1
+
+Usage: calculator add [options] <parameter_1> <parameter_2>
+
+Add two numbers. Use this if you and your friend both have apples, and you want
+to know how many apples there are in total.
+
+Arguments:
+  parameter_1   (required)
+  parameter_2   (required)
+
+Options:
+  -h, --help   display help for command
+
 ```
 <!-- codegen:end -->
 
@@ -543,6 +582,54 @@ test('add', async () => {
 })
 ```
 
+If you really want to test it as like a CLI and want to avoid a subprocess, you can also call the `run` method programmatically, and override the `process.exit` call and extract the resolve/reject values from `FailedToExitError`:
+
+```ts
+import {createCli, FailedToExitError} from 'trpc-cli'
+
+const run = async (argv: string[]) => {
+  const cli = createCli({router: calculatorRouter})
+  return cli
+    .run({
+      argv,
+      process: {exit: () => void 0 as never},
+      logger: {info: () => {}, error: () => {}},
+    })
+    .catch(err => {
+      // this will always throw, because our `exit` handler doesn't throw or exit the process
+      while (err instanceof FailedToExitError) {
+        if (err.exitCode === 0) {
+          return err.cause // this is the return value of the procedure that was invoked
+        }
+        err = err.cause // use the underlying error that caused the exit
+      }
+      throw err
+    })
+}
+
+test('make sure parsing works correctly', async () => {
+  await expect(run(['add', '2', '3'])).resolves.toBe(5)
+  await expect(run(['squareRoot', '--value=4'])).resolves.toBe(2)
+  await expect(run(['squareRoot', `--value=-1`])).rejects.toMatchInlineSnapshot(
+    `[Error: Get real]`,
+  )
+  await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
+    [Error: Validation error
+      - Expected number, received string at index 1
+
+    Usage: program add [options] <parameter_1> <parameter_2>
+
+    Arguments:
+      parameter_1   (required)
+      parameter_2   (required)
+
+    Options:
+      -h, --help   display help for command
+    ]
+  `)
+})
+```
+
 This will give you strong types for inputs and outputs, and is essentially what `trpc-cli` does under the hood after parsing and validating command-line input.
 
 In general, you should rely on `trpc-cli` to correctly handle the lifecycle and output etc. when it's invoked as a CLI by end-users. If there are any problems there, they should be fixed on this repo - please raise an issue.
@@ -573,7 +660,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:dfcdb95c59b99a4e1a8bd95597ee80de -->
+<!-- hash:97ca7a803daf45d77855458dab42c340 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -583,6 +670,11 @@ const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 const migrations = getMigrations()
 
 const searchProcedure = trpc.procedure
+  .meta({
+    aliases: {
+      flags: {status: 's'},
+    },
+  })
   .input(
     z.object({
       status: z
@@ -654,7 +746,12 @@ const router = trpc.router({
         return ctx.filter(migrations.filter(m => m.name === input.name))
       }),
     byContent: searchProcedure
-      .meta({description: 'Look for migrations by their script content'})
+      .meta({
+        description: 'Look for migrations by their script content',
+        aliases: {
+          flags: {searchTerm: 'q'},
+        },
+      })
       .input(
         z.object({
           searchTerm: z
@@ -672,18 +769,7 @@ const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc10RouterLike
 
-const cli = createCli({
-  router,
-  alias: (fullName, {command}) => {
-    if (fullName === 'status') {
-      return 's'
-    }
-    if (fullName === 'searchTerm' && command.startsWith('search.')) {
-      return 'q'
-    }
-    return undefined
-  },
-})
+const cli = createCli({router})
 
 void cli.run()
 
@@ -721,17 +807,18 @@ Here's how the CLI will work:
 `node path/to/migrations --help` output:
 
 ```
+Usage: migrations [options] [command]
+
+Options:
+  -h, --help        display help for command
+
 Commands:
-  up                      Apply migrations. By default all pending migrations will be applied.
-  create                  Create a new migration
-  list                    List all migrations
-  search.byName           Look for migrations by name
-  search.byContent        Look for migrations by their script content
-
-Flags:
-  -h, --help                  Show help
-      --verbose-errors        Throw raw errors (by default errors are summarised)
-
+  up [options]      Apply migrations. By default all pending migrations will be
+                    applied.
+  create [options]  Create a new migration
+  list [options]    List all migrations
+  search            Available subcommands: byName, byContent
+  help [command]    display help for command
 ```
 <!-- codegen:end -->
 
@@ -739,17 +826,18 @@ Flags:
 `node path/to/migrations apply --help` output:
 
 ```
+Usage: migrations [options] [command]
+
+Options:
+  -h, --help        display help for command
+
 Commands:
-  up                      Apply migrations. By default all pending migrations will be applied.
-  create                  Create a new migration
-  list                    List all migrations
-  search.byName           Look for migrations by name
-  search.byContent        Look for migrations by their script content
-
-Flags:
-  -h, --help                  Show help
-      --verbose-errors        Throw raw errors (by default errors are summarised)
-
+  up [options]      Apply migrations. By default all pending migrations will be
+                    applied.
+  create [options]  Create a new migration
+  list [options]    List all migrations
+  search            Available subcommands: byName, byContent
+  help [command]    display help for command
 ```
 <!-- codegen:end -->
 
@@ -757,18 +845,18 @@ Flags:
 `node path/to/migrations search.byContent --help` output:
 
 ```
-search.byContent
+Usage: migrations [options] [command]
 
-Look for migrations by their script content
+Options:
+  -h, --help        display help for command
 
-Usage:
-  search.byContent [flags...]
-
-Flags:
-  -h, --help                        Show help
-  -q, --search-term <string>        Only show migrations whose `content` value contains this string
-  -s, --status <string>             Filter to only show migrations with this status; Enum: executed,pending
-
+Commands:
+  up [options]      Apply migrations. By default all pending migrations will be
+                    applied.
+  create [options]  Create a new migration
+  list [options]    List all migrations
+  search            Available subcommands: byName, byContent
+  help [command]    display help for command
 ```
 <!-- codegen:end -->
 
@@ -802,7 +890,55 @@ const runCli = async (argv: string[]) => {
 }
 ```
 
->Note that even if you do this, help text is handled by [cleye](https://npmjs.com/package/cleye) which prints directly to stdout and exits the process. In a future version this will be solved by either exposing some `cleye` configuration to the `run` method, or controlling the help text rendering directly.
+## Completions
+
+Completions are supported via [omelette](https://npmjs.com/package/omelette), which is an optional peer dependency. How to get them working:
+
+```bash
+npm install omelette @types/omelette
+```
+
+Then, pass in an `omelette` instance to the `completion` option:
+
+```ts
+import omelette from 'omelette'
+import {createCli} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+cli.run({
+  completion: async () => {
+    const completion = omelette('myprogram')
+    if (process.argv.includes('--setupCompletions')) {
+      completion.setupShellInitFile()
+    }
+    if (process.argv.includes('--removeCompletions')) {
+      completion.cleanupShellInitFile()
+    }
+    return completion
+  },
+})
+```
+
+Write the completions to your shell init file by running:
+
+```bash
+node path/to/myprogram --setupCompletions
+```
+
+Then add an alias for the program corresponding to your `omelette` instance (in the example above, `omelette('myprogram')`):
+
+```bash
+echo 'myprogram() { node path/to/myprogram.js "$@" }' >> ~/.zshrc
+```
+
+Then reload your shell:
+
+```bash
+source ~/.zshrc
+```
+
+You can then use tab-completion to autocomplete commands and flags.
 
 ## Out of scope
 
@@ -813,7 +949,7 @@ const runCli = async (argv: string[]) => {
 
 ### Implementation and dependencies
 
-- [cleye](https://npmjs.com/package/cleye) for parsing arguments before passing to trpc
+- [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
 - [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod schemas to make them easier to recurse and format help text from
 - [zod-validation-error](https://npmjs.com/package/zod-validation-error) to make bad inputs have readable error messages
 
