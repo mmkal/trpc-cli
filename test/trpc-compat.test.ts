@@ -1,8 +1,16 @@
 import {initTRPC as initTRPC_v10} from 'trpcserver10'
 import {initTRPC as initTRPC_v11} from 'trpcserver11'
 import {expect, expectTypeOf, test, vi} from 'vitest'
-import {createCli, TrpcCliMeta, z} from '../src'
+import {createCli, TrpcCliMeta, TrpcServerModuleLike, z} from '../src'
 import {Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat'
+
+expect.addSnapshotSerializer({
+  test: val => val?.cause && val.message,
+  serialize(val, config, indentation, depth, refs, printer) {
+    indentation += '  '
+    return `[${val.constructor.name}: ${val.message}]\n${indentation}Caused by: ${printer(val.cause, config, indentation, depth + 1, refs)}`
+  },
+})
 
 test('can create cli from trpc v10', async () => {
   const t = initTRPC_v10.context<{customContext: true}>().meta<TrpcCliMeta>().create()
@@ -106,7 +114,10 @@ test('can create cli from trpc v11', async () => {
     router._def.procedures.add._def.$types.input satisfies [number, number]
     router._def.procedures.add._def.$types.output satisfies number
   }
-  const cli = createCli({router, createCallerFactory: initTRPC_v11.create().createCallerFactory})
+
+  expectTypeOf<typeof import('trpcserver11')>().toMatchTypeOf<TrpcServerModuleLike>()
+
+  const cli = createCli({router, trpcServer: import('trpcserver11')})
 
   expect(cli).toBeDefined()
 
@@ -134,20 +145,16 @@ test('error when using trpc v11 without createCallerFactory', async () => {
   const cli = createCli({router})
 
   const runAndCaptureProcessExit = async ({argv}: {argv: string[]}) => {
-    return cli
-      .run({
-        argv,
-        logger: {error: () => void 0},
-        process: {exit: () => void 0 as never},
-      })
-      .catch(err => {
-        while (String(err).includes('An error was thrown but the process did not exit.')) {
-          err = err.cause
-        }
-        throw err
-      })
+    return cli.run({
+      argv,
+      logger: {error: () => void 0},
+      process: {exit: () => void 0 as never},
+    })
   }
   await expect(runAndCaptureProcessExit({argv: ['add', '1', '2']})).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[Error: Program exit after failure. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
+    `
+      [FailedToExitError: Program exit after failure. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]
+        Caused by: [Error: createCallerFactory version mismatch - pass in the \`@trpc/server\` module to \`createCli\` explicitly]
+    `,
   )
 })

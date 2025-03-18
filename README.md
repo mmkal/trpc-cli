@@ -501,14 +501,20 @@ const appRouter = trpc.router({
 
 ## tRPC v10 vs v11
 
-Both versions 10 and 11 of `@trpc/server` are both supported, but if using tRPC v11 you must pass in the `createCallerFactory` function to `createCli`:
+Both versions 10 and 11 of `@trpc/server` are both supported, but if using tRPC v11 you must pass in your `@trpc/server` module to `createCli`:
 
 ```ts
-import {initTRPC} from '@trpc/server'
-
-const {createCallerFactory} = initTRPC.create()
-const cli = createCli({router, createCallerFactory})
+const cli = createCli({router, trpcServer: import('@trpc/server')})
 ```
+
+Or you can use top level await or `require` if you prefer:
+
+```ts
+const cli = createCli({router, trpcServer: await import('@trpc/server')})
+const cli = createCli({router, trpcServer: require('@trpc/server')})
+```
+
+Note: in future, when trpc v11 is out of preview, there may be a new version of `trpc-cli` that will automatically support it (and may possibly require passing in the v10 module instead).
 
 ## Output and lifecycle
 
