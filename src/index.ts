@@ -484,6 +484,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         return inspect(err)
       })
     await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {
+      if (err instanceof FailedToExitError) throw err
       const logMessage = looksLikeInstanceof(err, Error)
         ? formatError(err) || err.message
         : `Non-error of type ${typeof err} thrown: ${err}`
