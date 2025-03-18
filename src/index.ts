@@ -177,7 +177,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
         const description = getDescription(propertyValue)
 
-        let flags = `--${propertyKey}`
+        const longOption = `--${kebabCase(propertyKey)}`
+        let flags = longOption
         const alias = meta.aliases?.flags?.[propertyKey]
         if (alias) {
           let prefix = '-'
@@ -195,7 +196,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         if (defaultValue.value === true) {
           const negation = new Option(
-            `--no-${propertyKey}`,
+            longOption.replace('--', '--no-'),
             `Negate \`${propertyKey}\` property ${description || ''}`.trim(),
           )
           command.addOption(negation)
@@ -507,6 +508,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {
   const meta: Partial<TrpcCliMeta> | undefined = procedure._def.meta
   return meta?.cliMeta || meta || {}
+}
+
+function kebabCase(propName: string) {
+  return propName.replaceAll(/([A-Z])/g, '-$1').toLowerCase()
 }
 
 /** @deprecated renamed to `createCli` */
