@@ -409,24 +409,7 @@ test('fs diff', async () => {
     `"base and head differ at index 0 ("a" !== "x")"`,
   )
   expect(await tsx('fs', ['diff', 'three', 'four'])).toMatchInlineSnapshot(`"base has length 5 and head has length 6"`)
-  expect(await tsx('fs', ['diff', 'three', 'four', '--ignore-whitespace'])).toMatchInlineSnapshot(`
-    "error: unknown option '--ignore-whitespace'
-    (Did you mean --ignoreWhitespace?)
-
-
-
-    Usage: fs diff [options] <Base path> <Head path>
-
-    Arguments:
-      Base path                     Base path (required)
-      Head path                     Head path (required)
-
-    Options:
-      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
-      --trim [boolean]              Trim start/end whitespace (default: false)
-      -h, --help                    display help for command
-    "
-  `)
+  expect(await tsx('fs', ['diff', 'three', 'four', '--ignoreWhitespace'])).toMatchInlineSnapshot(`""`)
 })
 
 test('thrown error in procedure includes call stack', async () => {
