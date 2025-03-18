@@ -50,9 +50,7 @@
   },
   "dependencies": {
     "@trpc/server": "^10.45.2",
-    "@types/json-schema": "^7.0.15",
     "@types/omelette": "^0.4.4",
-    "arktype": "^2.1.9",
     "commander": "^13.1.0",
     "picocolors": "^1.0.1",
     "zod": "^3.24.2",
@@ -60,7 +58,9 @@
     "zod-validation-error": "^3.3.0"
   },
   "devDependencies": {
+    "@types/json-schema": "7.0.15",
     "@types/node": "20.16.11",
+    "arktype": "2.1.9",
     "eslint": "8",
     "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb",
     "execa": "9.3.1",
