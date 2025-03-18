@@ -35,7 +35,6 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
       process: {exit: _ => 0 as never},
     })
     .catch(e => {
-      const original = e
       if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
       if (e.exitCode === 0) return e.cause
       throw e
