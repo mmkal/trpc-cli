@@ -35,8 +35,22 @@ function looksJsonSchemaable(value: unknown): value is JsonSchemaable {
   )
 }
 
+const getInnerType = (input: JsonSchemaable): JsonSchemaable => {
+  /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-constant-condition, @typescript-eslint/no-explicit-any */
+  let value = input as any
+  while (true) {
+    if (value?.in && value.in !== value) {
+      value = value.in
+      continue
+    }
+    break
+  }
+  return value as JsonSchemaable
+}
+
 function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
   try {
+    input = getInnerType(input)
     const jsonSchema = 'toJsonSchema' in input ? input.toJsonSchema() : (zodToJsonSchema(input as never) as JSONSchema7)
     return {
       success: true,
