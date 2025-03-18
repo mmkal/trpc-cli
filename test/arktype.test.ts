@@ -1,21 +1,20 @@
 import {type} from 'arktype'
-import stripAnsi from 'strip-ansi'
 import {initTRPC} from 'trpcserver11'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
+import {looksLikeInstanceof} from '../src/util'
 
 expect.addSnapshotSerializer({
-  test: (val): val is Error => val instanceof Error,
-  print: val => {
-    let err = val as Error
-    const messages = [err.message]
-    while (err.cause instanceof Error) {
-      err = err.cause
-      messages.push('  '.repeat(messages.length) + 'Caused by: ' + err.message)
-    }
-    return stripAnsi(messages.join('\n'))
-      .split(/(---|Usage)/)[0]
+  test: val => looksLikeInstanceof(val, Error),
+  serialize(val, config, indentation, depth, refs, printer) {
+    let topLine = `${val.constructor.name}: ${val.message}`
+    if (val.constructor.name === 'FailedToExitError') topLine = `CLI exited with code ${val.exitCode}`
+
+    if (!val.cause) return topLine
+    indentation += '  '
+    return `${topLine}\n${indentation}Caused by: ${printer(val.cause, config, indentation, depth + 1, refs)}`
+      .split(/(---|Usage:)/)[0] // strip out the usage line and the --- line which is added for debugging when tests fail
       .trim()
   },
 })
@@ -37,13 +36,9 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
       process: {exit: _ => 0 as never},
     })
     .catch(e => {
-      const original = e
       if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
       if (e.exitCode === 0) return e.cause
-      while (e?.exitCode && e.cause) e = e.cause
-      if (e === original) throw e
-      e.message = `Logs: ${e.message}\n\n---\n\n${logs.join('\n')}` // include logs in the error message for easier debugging - this bit is stripped out by the snapshot serializer
-      throw Object.assign(new Error(`CLI exited with code ${original.exitCode}`, {cause: e}))
+      throw e
     })
 }
 
@@ -81,7 +76,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: must be "aa" or "bb" (was "cc")
+      Caused by: CliValidationError: must be "aa" or "bb" (was "cc")
   `)
 })
 
@@ -95,7 +90,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"{"input":1}"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: must be a number (was a string)
+      Caused by: CliValidationError: must be a number (was a string)
   `)
 })
 
@@ -110,7 +105,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: must be boolean (was "a")
+      Caused by: CliValidationError: must be boolean (was "a")
   `)
 })
 
@@ -158,7 +153,7 @@ test('transform in a union', async () => {
     "Usage: program foo [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn11 is not convertible to
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn12 is not convertible to
                       JSON Schema)
       -h, --help      display help for command
     "
@@ -178,7 +173,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: must be 2 (was 3)
+      Caused by: CliValidationError: must be 2 (was 3)
   `)
 })
 
@@ -225,7 +220,7 @@ test('regex input', async () => {
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: must be greeting (was "goodbye xyz")
+      Caused by: CliValidationError: must be greeting (was "goodbye xyz")
   `)
 })
 
@@ -254,7 +249,7 @@ test('tuple input', async () => {
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: Logs: value at [1] must be a number (was a string)
+        Caused by: CliValidationError: value at [1] must be a number (was a string)
     `,
   )
 })
@@ -278,19 +273,19 @@ test('tuple input with flags', async () => {
   await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: Logs: error: required option '--foo <string>' not specified
+        Caused by: CommanderError: error: required option '--foo <string>' not specified
     `,
   )
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: Logs: value at [1] must be a number (was a string)
+        Caused by: CliValidationError: value at [1] must be a number (was a string)
     `,
   )
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: Logs: error: required option '--foo <string>' not specified
+        Caused by: CommanderError: error: required option '--foo <string>' not specified
     `,
   )
 })
@@ -376,7 +371,7 @@ test('flag alias typo', async () => {
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
   await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
-    `Invalid flag aliases: frooozenLockfile: x`,
+    `Error: Invalid flag aliases: frooozenLockfile: x`,
   )
 })
 
@@ -425,7 +420,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: value at [1] must be a number (was a string)
+      Caused by: CliValidationError: value at [1] must be a number (was a string)
   `)
 })
 
@@ -441,7 +436,7 @@ test('number array input with constraints', async () => {
     "Usage: program foo [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn13 is not convertible to
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn14 is not convertible to
                       JSON Schema)
       -h, --help      display help for command
     "
@@ -465,7 +460,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: [1] must be boolean (was "bad")
+      Caused by: CliValidationError: [1] must be boolean (was "bad")
   `)
 })
 
@@ -625,13 +620,13 @@ test('arktype issues', () => {
         type('number').narrow(n => Number.isInteger(n)), //
       ),
     ),
-  ).toMatchInlineSnapshot(`Predicate $ark.fn11 is not convertible to JSON Schema`)
+  ).toMatchInlineSnapshot(`Error: Predicate $ark.fn19 is not convertible to JSON Schema`)
 
   expect(
     toJsonSchema(
       type('number').narrow(n => Number.isInteger(n)), //
     ),
-  ).toMatchInlineSnapshot(`Predicate $ark.fn12 is not convertible to JSON Schema`)
+  ).toMatchInlineSnapshot(`Error: Predicate $ark.fn20 is not convertible to JSON Schema`)
 
   expect(
     toJsonSchema(
@@ -652,7 +647,7 @@ test('arktype issues', () => {
       ),
     ),
   ).toMatchInlineSnapshot(
-    `(In: number) => Out<unknown> is not convertible to JSON Schema because it represents a transformation, while JSON Schema only allows validation. Consider creating a Schema from one of its endpoints using \`.in\` or \`.out\`.`,
+    `Error: (In: number) => Out<unknown> is not convertible to JSON Schema because it represents a transformation, while JSON Schema only allows validation. Consider creating a Schema from one of its endpoints using \`.in\` or \`.out\`.`,
   )
   expect(
     toJsonSchema(

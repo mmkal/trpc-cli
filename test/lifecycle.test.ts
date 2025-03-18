@@ -82,10 +82,7 @@ test('override of process.exit with parse error', async () => {
   expect(result).toMatchInlineSnapshot(
     `[Error: Root command exitOverride. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]`,
   )
-  expect(result.cause).toMatchInlineSnapshot(
-    `[CommanderError: error: unknown command 'footypo']`,
-  )
-  expect(result.cause.cause).toMatchInlineSnapshot(`undefined`)
+  expect(result.cause).toMatchInlineSnapshot(`[CommanderError: error: unknown command 'footypo']`)
 })
 
 const calculatorRouter = t.router({

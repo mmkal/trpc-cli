@@ -1,21 +1,20 @@
-import {Router, initTRPC} from '@trpc/server'
-import stripAnsi from 'strip-ansi'
+import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
 import {z} from 'zod'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
+import {looksLikeInstanceof} from '../src/util'
 
 expect.addSnapshotSerializer({
-  test: (val): val is Error => val instanceof Error,
-  print: val => {
-    let err = val as Error
-    const messages = [err.message]
-    while (err.cause instanceof Error) {
-      err = err.cause
-      messages.push('  '.repeat(messages.length) + 'Caused by: ' + err.message)
-    }
-    return stripAnsi(messages.join('\n'))
-      .split(/(Usage:|---)/)[0]
+  test: val => looksLikeInstanceof(val, Error),
+  serialize(val, config, indentation, depth, refs, printer) {
+    let topLine = `${val.constructor.name}: ${val.message}`
+    if (val.constructor.name === 'FailedToExitError') topLine = `CLI exited with code ${val.exitCode}`
+
+    if (!val.cause) return topLine
+    indentation += '  '
+    return `${topLine}\n${indentation}Caused by: ${printer(val.cause, config, indentation, depth + 1, refs)}`
+      .split(/(---|Usage:)/)[0] // strip out the usage line and the --- line which is added for debugging when tests fail
       .trim()
   },
 })
@@ -27,7 +26,7 @@ const run = <R extends AnyRouter>(router: R, argv: string[]) => {
 }
 const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
   const cli = createCli(params)
-  const logs: unknown[][] = []
+  const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   return cli
     .run({
@@ -36,13 +35,9 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
       process: {exit: _ => 0 as never},
     })
     .catch(e => {
-      const original = e
       if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
       if (e.exitCode === 0) return e.cause
-      while (e?.exitCode && e.cause) e = e.cause
-      if (e === original) throw e
-      e.message = `Logs: ${e.message}\n\n---\n\n${logs.join('\n')}` // include logs in the error message for easier debugging - this bit is stripped out by the snapshot serializer
-      throw new Error(`CLI exited with code ${original.exitCode}`, {cause: e})
+      throw e
     })
 }
 
@@ -80,7 +75,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Invalid enum value. Expected 'aa' | 'bb', received 'cc'
   `)
 })
@@ -95,7 +90,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Expected number, received string
   `)
 })
@@ -111,7 +106,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Expected boolean, received string
   `)
 })
@@ -158,7 +153,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Invalid literal value, expected 2
   `)
 })
@@ -196,7 +191,7 @@ test('regex input', async () => {
   // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Invalid
   `)
 })
@@ -229,7 +224,7 @@ test('tuple input', async () => {
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Expected number, received string at index 1
   `)
 })
@@ -252,16 +247,16 @@ test('tuple input with flags', async () => {
   )
   await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: error: required option '--foo <string>' not specified
+      Caused by: CommanderError: error: required option '--foo <string>' not specified
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Expected number, received string at index 1
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: error: required option '--foo <string>' not specified
+      Caused by: CommanderError: error: required option '--foo <string>' not specified
   `)
 })
 
@@ -346,7 +341,7 @@ test('flag alias typo', async () => {
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
   await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
-    `Invalid flag aliases: frooozenLockfile: x`,
+    `Error: Invalid flag aliases: frooozenLockfile: x`,
   )
 })
 
@@ -395,7 +390,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Expected number, received string at index 1
   `)
 })
@@ -409,7 +404,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Expected number, received string at index 0
   `)
 })
@@ -426,7 +421,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Logs: Validation error
+      Caused by: CliValidationError: Validation error
       - Expected boolean, received string at index 1
   `)
 })
