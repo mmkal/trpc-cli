@@ -630,7 +630,7 @@ test('arktype issues', () => {
 
   expect(
     toJsonSchema(
-      // @ts-expect-error
+      // @ts-expect-error .basis isn't in the public typedef
       type('number').narrow(n => Number.isInteger(n)).basis, //
     ),
   ).toMatchInlineSnapshot(`

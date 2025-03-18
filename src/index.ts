@@ -47,6 +47,7 @@ type TrpcCliRunParams = {
 
 type CommanderProgramLike = {
   parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
+  helpInformation: () => string
 }
 
 export interface TrpcCli {
