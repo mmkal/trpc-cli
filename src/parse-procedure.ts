@@ -1,4 +1,5 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
+import {inspect} from 'util'
 import {z as zod} from 'zod'
 import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
@@ -95,7 +96,10 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
   }
 
   const mergedSchema = mergedSchemaResult.value
+  return handleMergedSchema(mergedSchema)
+}
 
+function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> {
   if (mergedSchema.type === 'string') {
     return {
       success: true,
@@ -143,12 +147,15 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
         },
       }
     }
+    if (mergedSchema.anyOf.length === 2 && JSON.stringify(mergedSchema.anyOf[0]) === '{"not":{}}') {
+      return handleMergedSchema(mergedSchema.anyOf[1] as JSONSchema7)
+    }
   }
 
   if (mergedSchema.type !== 'object') {
     return {
       success: false,
-      error: `Invalid input type ${mergedSchema.type as string}, expected object or tuple.`,
+      error: `Invalid input type ${inspect(mergedSchema, {depth: 2, breakLength: Infinity})}, expected object or tuple.`,
     }
   }
 
@@ -263,7 +270,6 @@ function isTuple(schema: JSONSchema7): schema is JSONSchema7 & {items: JSONSchem
 }
 
 function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<ParsedProcedure> {
-  console.log('parseArrayInput', array.items, looksLikeJsonSchema(array.items), isNullable(array.items))
   if (looksLikeJsonSchema(array.items) && isNullable(array.items)) {
     return {
       success: false,
