@@ -11,8 +11,25 @@ beforeEach(() => {
 })
 
 expect.addSnapshotSerializer({
-  test: val => val.mock.calls,
+  test: val => val?.mock?.calls,
   print: (val: any) => val.mock.calls.map((call: unknown[]) => call.join(' ')).join('\n'),
+})
+
+expect.addSnapshotSerializer({
+  test: val => val?.cause && val.message,
+  serialize(val, config, indentation, depth, refs, printer) {
+    indentation += '  '
+    return `[${val.constructor.name}: ${val.message}]\n${indentation}Caused by: ${printer(val.cause, config, indentation, depth + 1, refs)}`
+  },
+})
+
+test('an error', () => {
+  const e = new Error('outer', {cause: new Error('middle', {cause: new Error('inner')})})
+  expect(e).toMatchInlineSnapshot(`
+    [Error: outer]
+      Caused by: [Error: middle]
+        Caused by: [Error: inner]
+  `)
 })
 
 test('logging', async () => {
