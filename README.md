@@ -984,11 +984,15 @@ You can then use tab-completion to autocomplete commands and flags.
 
 ### Implementation and dependencies
 
+All dependencies have zero dependencies of their own, so the dependency tree is very shallow.
+
+- [@trpc/server](https://npmjs.com/package/@trpc/server) for the trpc router
 - [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
+- [zod](https://npmjs.com/package/zod) for input validation, included for convenience
 - [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod schemas to make them easier to recurse and format help text from
 - [zod-validation-error](https://npmjs.com/package/zod-validation-error) to make bad inputs have readable error messages
 
-`zod` and `@tprc/server` are peer dependencies - right now only zod 3+ and @trpc/server 10+ have been tested, but it may work with most versions of zod.
+`zod` and `@tprc/server` are included as dependencies for convenience, but you can use your own separate installations if you prefer. Zod 3+ and @trpc/server 10 and 11, have been tested. It should work with most versions of zod.
 
 ### Testing
 
