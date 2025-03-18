@@ -311,10 +311,10 @@ test('custom default procedure', async () => {
 
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
-  const yarnOutput = await runWith(params, ['--frozenLockfile'])
+  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
   expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 
-  const yarnInstallOutput = await runWith(params, ['install', '--frozenLockfile'])
+  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
   expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
@@ -328,7 +328,7 @@ test('command alias', async () => {
 
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
-  const yarnIOutput = await runWith(params, ['i', '--frozenLockfile'])
+  const yarnIOutput = await runWith(params, ['i', '--frozen-lockfile'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 

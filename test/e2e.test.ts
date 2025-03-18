@@ -384,13 +384,13 @@ test('fs copy', async () => {
     Usage: fs diff [options] <Base path> <Head path>
 
     Arguments:
-      Base path                     Base path (required)
-      Head path                     Head path (required)
+      Base path                      Base path (required)
+      Head path                      Head path (required)
 
     Options:
-      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
-      --trim [boolean]              Trim start/end whitespace (default: false)
-      -h, --help                    display help for command
+      --ignore-whitespace [boolean]  Ignore whitespace changes (default: false)
+      --trim [boolean]               Trim start/end whitespace (default: false)
+      -h, --help                     display help for command
     "
   `)
 })
@@ -400,13 +400,13 @@ test('fs diff', async () => {
     "Usage: fs diff [options] <Base path> <Head path>
 
     Arguments:
-      Base path                     Base path (required)
-      Head path                     Head path (required)
+      Base path                      Base path (required)
+      Head path                      Head path (required)
 
     Options:
-      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
-      --trim [boolean]              Trim start/end whitespace (default: false)
-      -h, --help                    display help for command
+      --ignore-whitespace [boolean]  Ignore whitespace changes (default: false)
+      --trim [boolean]               Trim start/end whitespace (default: false)
+      -h, --help                     display help for command
     "
   `)
   expect(await tsx('fs', ['diff', 'one', 'two'])).toMatchInlineSnapshot(`""`)
@@ -414,24 +414,7 @@ test('fs diff', async () => {
     `"base and head differ at index 0 ("a" !== "x")"`,
   )
   expect(await tsx('fs', ['diff', 'three', 'four'])).toMatchInlineSnapshot(`"base has length 5 and head has length 6"`)
-  expect(await tsx('fs', ['diff', 'three', 'four', '--ignore-whitespace'])).toMatchInlineSnapshot(`
-    "error: unknown option '--ignore-whitespace'
-    (Did you mean --ignoreWhitespace?)
-
-
-
-    Usage: fs diff [options] <Base path> <Head path>
-
-    Arguments:
-      Base path                     Base path (required)
-      Head path                     Head path (required)
-
-    Options:
-      --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
-      --trim [boolean]              Trim start/end whitespace (default: false)
-      -h, --help                    display help for command
-    "
-  `)
+  expect(await tsx('fs', ['diff', 'three', 'four', '--ignore-whitespace'])).toMatchInlineSnapshot(`""`)
 })
 
 test('thrown error in procedure includes call stack', async () => {
