@@ -12,9 +12,11 @@ expect.addSnapshotSerializer({
     const messages = [err.message]
     while (err.cause instanceof Error) {
       err = err.cause
-      messages.push('  '.repeat(messages.length) + 'Caused by: ' + err.message.split('---')[0].trim())
+      messages.push('  '.repeat(messages.length) + 'Caused by: ' + err.message)
     }
-    return stripAnsi(messages.join('\n')).split('Usage: ')[0].trim()
+    return stripAnsi(messages.join('\n'))
+      .split(/(---|Usage)/)[0]
+      .trim()
   },
 })
 
@@ -32,16 +34,14 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
     .run({
       argv,
       logger: {info: addLogs, error: addLogs},
-      process: {
-        exit: _ => 0 as never,
-      },
+      process: {exit: _ => 0 as never},
     })
     .catch(e => {
       const original = e
       if (e.exitCode === 0) return e.cause
       while (e?.exitCode && e.cause) e = e.cause
       if (e === original) throw e
-      e.message = `Logs: ${e.message}\n\n---\n\n${logs.join('\n')}`
+      e.message = `Logs: ${e.message}\n\n---\n\n${logs.join('\n')}` // include logs in the error message for easier debugging - this bit is stripped out by the snapshot serializer
       throw new Error(`CLI exited with code ${original.exitCode}`, {cause: e})
     })
 }

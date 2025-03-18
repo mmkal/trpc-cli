@@ -13,6 +13,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Ignored procedures](#ignored-procedures)
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
+- [arktype](#arktype)
 - [tRPC v10 vs v11](#trpc-v10-vs-v11)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Testing your CLI](#testing-your-cli)
@@ -498,6 +499,30 @@ const appRouter = trpc.router({
     .mutation(({input}) => input.left / input.right),
 })
 ```
+
+## arktype
+
+You can also use arktype to validate your inputs.
+
+```ts
+import {type} from 'arktype'
+import {type TrpcCliMeta} from 'trpc-cli'
+
+const t = initTRPC.meta<TrpcCliMeta>().create()
+
+const router = t.router({
+  add: t.procedure
+    .input(type({left: 'number', right: 'number'}))
+    .query(({input}) => input.left + input.right),
+})
+
+const cli = createCli({router})
+
+cli.run() // e.g. `mycli add --left 1 --right 2`
+```
+
+Note: you will need to install `arktype` as a dependency separately
+Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` flag to pass in a JSON string. Check your CLI help text to see if this is the case.
 
 ## tRPC v10 vs v11
 

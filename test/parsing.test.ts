@@ -3,7 +3,7 @@ import stripAnsi from 'strip-ansi'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
 import {z} from 'zod'
-import {createCli, TrpcCliMeta, TrpcCliParams} from '../src'
+import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 
 expect.addSnapshotSerializer({
   test: (val): val is Error => val instanceof Error,
@@ -14,41 +14,35 @@ expect.addSnapshotSerializer({
       err = err.cause
       messages.push('  '.repeat(messages.length) + 'Caused by: ' + err.message)
     }
-    return stripAnsi(messages.join('\n')).split('Usage: ')[0].trim()
+    return stripAnsi(messages.join('\n'))
+      .split(/(Usage:|---)/)[0]
+      .trim()
   },
 })
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
-const run = <R extends Router<any>>(router: R, argv: string[]) => {
+const run = <R extends AnyRouter>(router: R, argv: string[]) => {
   return runWith({router}, argv)
 }
-const runWith = <R extends Router<any>>(params: TrpcCliParams<R>, argv: string[]) => {
+const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
   const cli = createCli(params)
-  return new Promise<string>((resolve, reject) => {
-    const logs: unknown[][] = []
-    const addLogs = (...args: unknown[]) => logs.push(args)
-    void cli
-      .run({
-        argv,
-        logger: {info: addLogs, error: addLogs},
-        process: {
-          exit: code => {
-            if (code === 0) {
-              resolve(logs.join('\n'))
-            } else {
-              reject(
-                new Error(`CLI exited with code ${code}`, {
-                  cause: new Error('Logs: ' + logs.join('\n')),
-                }),
-              )
-            }
-            throw new Error('Throwing to simulate process.exit')
-          },
-        },
-      })
-      .catch(reject)
-  })
+  const logs: unknown[][] = []
+  const addLogs = (...args: unknown[]) => logs.push(args)
+  return cli
+    .run({
+      argv,
+      logger: {info: addLogs, error: addLogs},
+      process: {exit: _ => 0 as never},
+    })
+    .catch(e => {
+      const original = e
+      if (e.exitCode === 0) return e.cause
+      while (e?.exitCode && e.cause) e = e.cause
+      if (e === original) throw e
+      e.message = `Logs: ${e.message}\n\n---\n\n${logs.join('\n')}` // include logs in the error message for easier debugging - this bit is stripped out by the snapshot serializer
+      throw new Error(`CLI exited with code ${original.exitCode}`, {cause: e})
+    })
 }
 
 test('merging input types', async () => {

@@ -357,75 +357,6 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
       },
     },
   }
-
-  // throw new Error('reached old zod code')
-
-  // if (Math.random()) {
-  //   const flagsSchemaIndex = tuple.items.findIndex(item => {
-  //     if (acceptedLiteralTypes(item).length > 0) {
-  //       return false // it's a string, number or boolean
-  //     }
-  //     if (looksLikeArray(item) && acceptedLiteralTypes(item.element).length > 0) {
-  //       return false // it's an array of strings, numbers or booleans
-  //     }
-  //     return true // it's not a string, number, boolean or array of strings, numbers or booleans. So it's probably a flags object
-  //   })
-  //   const types = `[${tuple.items.map(s => s.type).join(', ')}]`
-
-  //   if (flagsSchemaIndex > -1 && flagsSchemaIndex !== tuple.items.length - 1) {
-  //     return {
-  //       success: false,
-  //       error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
-  //     }
-  //   }
-
-  //   const flagsSchema = flagsSchemaIndex === -1 ? null : tuple.items[flagsSchemaIndex]
-
-  //   if (flagsSchema && !acceptsObject(flagsSchema)) {
-  //     return {
-  //       success: false,
-  //       error: `Invalid input type ${types}. The last type must accept object inputs.`,
-  //     }
-  //   }
-
-  //   const positionalSchemas = flagsSchemaIndex === -1 ? tuple.items : tuple.items.slice(0, flagsSchemaIndex)
-
-  //   const parameterNames = positionalSchemas.map((item, i) => parameterName(item, i + 1))
-
-  //   return {
-  //     success: true,
-  //     value: {
-  //       positionalParameters: positionalSchemas.map((schema, i) => ({
-  //         name: parameterName(schema, i + 1),
-  //         array: looksLikeArray(schema),
-  //         description: schema.description || '',
-  //         required: !schema.isOptional(),
-  //         type: 'string',
-  //       })),
-  //       optionsJsonSchema: flagsSchema ? zodToJsonSchema(flagsSchema) : {},
-  //       getPojoInput: commandArgs => {
-  //         const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
-  //           const correspondingSchema = positionalSchemas[i]
-  //           if (looksLikeArray(correspondingSchema)) {
-  //             if (!Array.isArray(v)) {
-  //               throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
-  //             }
-  //             return v.map(s => convertPositional(correspondingSchema.element, s))
-  //           }
-  //           if (typeof v !== 'string') {
-  //             throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
-  //           }
-  //           return convertPositional(correspondingSchema, v)
-  //         })
-
-  //         if (flagsSchema) {
-  //           inputs.push(commandArgs.options)
-  //         }
-  //         return inputs
-  //       },
-  //     },
-  //   }
-  // }
 }
 
 /**
@@ -464,26 +395,10 @@ const convertPositional = (schema: JSONSchema7Definition, value: string) => {
     }
   }
 
-  // had to disable the below because with standard-schema we can no longer validate individual tuple items, just the whole type
-  // if (acceptedTypes.has('string') && !standardSchemaSafeParse(schema, preprocessed).success) {
-  //   // it's possible we converted to a number prematurely - need to account for `z.union([z.string(), z.number().int()])`, where 1.2 should be a string, not a number
-  //   // in that case, we would have set preprocessed to a number, but it would fail validation, so we need to reset it to a string here
-  //   preprocessed = value
-  // }
-
   if (preprocessed === undefined) {
     return value // we didn't convert to a number or boolean, so just return the string
   }
 
-  // if (standardSchemaSafeParse(schema, preprocessed).success) {
-  //   return preprocessed // we converted successfully, and the type looks good, so use the preprocessed value
-  // }
-
-  // if (acceptedTypes.has('string')) {
-  //   return value // we converted successfully, but the type is wrong. However strings are also accepted, so return the string original value, it might be ok.
-  // }
-
-  // we converted successfully, but the type is wrong. However, strings are also not accepted, so don't return the string original value. Return the preprocessed value even though it will fail - it's probably a number failing because of a `.refine(...)` or `.int()` or `.positive()` or `.min(1)` etc. - so better to have a "must be greater than zero" error than "expected number, got string"
   return preprocessed
 }
 
