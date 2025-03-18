@@ -167,7 +167,7 @@ Which could be invoked with any of:
 
 #### Flags
 
-`z.object(...)` inputs become flags (passed with `--foo bar` or `--foo=bar`) syntax. Values are accepted in either `--camelCase` or `--kebab-case`, and are parsed like in most CLI programs:
+`z.object(...)` inputs become flags (passed with `--foo bar` or `--foo=bar`) syntax. Values are accepted in `--kebab-case`, and are parsed like in most CLI programs:
 
 Strings:
 
@@ -197,6 +197,11 @@ Numbers:
 Other types:
 - `z.object({ foo: z.object({ bar: z.number() }) })` will parse inputs as JSON:
    - `--foo '{"bar": 1}'` maps to `{foo: {bar: 1}}`
+
+Multi-word flags:
+
+- `z.object({ multiWord: z.string() })` will map:
+  - `--multi-word foo` to `{multiWord: 'foo'}`
 
 Unions and intersections should also work as expected, but make sure to test them thoroughly, especially if they are deeply-nested.
 
@@ -642,20 +647,18 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 
 ## Features and Limitations
 
-- Nested subrouters ([example](./test/fixtures//migrations.ts)) - command will be dot separated e.g. `search.byId`
+- Nested subrouters ([example](./test/fixtures/migrations.ts)) - procedures in nested routers will become subcommands will be dot separated e.g. `mycli search byId --id 123`
 - Middleware, `ctx`, multi-inputs work as normal
 - Return values are logged using `console.info` (can be configured to pass in a custom logger)
 - `process.exit(...)` called with either 0 or 1 depending on successful resolve
 - Help text shown on invalid inputs
-- Support kebab-case flag aliases
-- Support flag aliases via `alias` callback (see migrations example below)
+- Support flag aliases via `aliases` meta property (see migrations example below)
 - Union types work, but they should ideally be non-overlapping for best results
 - Limitation: Only zod types are supported right now
 - Limitation: Only object types are allowed as input. No positional arguments supported
    - If there's interest, this could be added in future for inputs of type `z.string()` or `z.tuple([z.string(), ...])`
 - Limitation: Nested-object input props must be passed as json
    - e.g. `z.object({ foo: z.object({ bar: z.number() }) }))` can be supplied via using `--foo '{"bar": 123}'`
-   - If there's interest, support for `--foo.bar=1` could be added using [type-flag's dot-nested flags](https://github.com/privatenumber/type-flag?tab=readme-ov-file#dot-nested-flags) but edge cases/preprocessing needs proper consideration first.
 - Limitation: No `subscription` support.
    - In theory, this might be supportable via `@inquirer/prompts`. Proposals welcome!
 
