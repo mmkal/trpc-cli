@@ -105,7 +105,9 @@ export const getSchemaTypes = (
   if ('enum' in propertyValue && Array.isArray(propertyValue.enum)) {
     array.push(...propertyValue.enum.flatMap(s => typeof s))
   }
-  if ('const' in propertyValue) {
+  if ('const' in propertyValue && propertyValue.const === null) {
+    array.push('null')
+  } else if ('const' in propertyValue) {
     array.push(typeof propertyValue.const)
   }
   if ('oneOf' in propertyValue) {

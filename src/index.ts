@@ -148,6 +148,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         throw new FailedToExitError(`Command ${command.name()} exitOverride`, {exitCode: ec.exitCode, cause: ec})
       })
       command.configureOutput({
+        writeOut: str => {
+          logger.info?.(str)
+        },
         writeErr: str => {
           logger.error?.(str)
         },
@@ -492,6 +495,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         ? formatError(err) || err.message
         : `Non-error of type ${typeof err} thrown: ${err}`
       logger.error?.(logMessage)
+      if (err instanceof FailedToExitError) throw err
       _process.exit(1)
       throw new FailedToExitError(`Program exit after failure`, {exitCode: 1, cause: err})
     })

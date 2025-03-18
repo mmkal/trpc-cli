@@ -10,8 +10,9 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
   return (
     typeof value === 'object' &&
     value !== null &&
-    'type' in value &&
-    (typeof value.type === 'string' || Array.isArray(value.type))
+    (('type' in value && (typeof value.type === 'string' || Array.isArray(value.type))) ||
+      'const' in value ||
+      'anyOf' in value)
   )
 }
 
@@ -34,9 +35,10 @@ function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
   try {
     input = getInnerType(input)
     const jsonSchema = 'toJsonSchema' in input ? input.toJsonSchema() : (zodToJsonSchema(input as never) as JSONSchema7)
+    Object.defineProperty(jsonSchema, 'originalSchema', {value: input, enumerable: false})
     return {
       success: true,
-      value: Object.assign(jsonSchema, {originalSchema: input}),
+      value: jsonSchema,
     }
   } catch (e) {
     return {
@@ -243,7 +245,10 @@ function parseMultiInputs(inputs: unknown[]): Result<ParsedProcedure> {
 }
 
 function isNullable(schema: JSONSchema7) {
-  return Array.isArray(schema.type) && schema.type.includes('null')
+  if (Array.isArray(schema.type) && schema.type.includes('null')) return true
+  if (schema.anyOf?.some(sub => isNullable(toRoughJsonSchema7(sub)))) return true
+  if (schema.const === null) return true
+  return false
 }
 
 const tupleItemsSchemas = (schema: JSONSchema7Definition): JSONSchema7Definition[] | undefined => {
@@ -258,10 +263,11 @@ function isTuple(schema: JSONSchema7): schema is JSONSchema7 & {items: JSONSchem
 }
 
 function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<ParsedProcedure> {
+  console.log('parseArrayInput', array.items, looksLikeJsonSchema(array.items), isNullable(array.items))
   if (looksLikeJsonSchema(array.items) && isNullable(array.items)) {
     return {
       success: false,
-      error: `Invalid input type Array<${array.items.type}>. Nullable arrays are not supported.`,
+      error: `Invalid input type Array<${getSchemaTypes(array.items).join(' | ')}>. Nullable arrays are not supported.`,
     }
   }
   return {

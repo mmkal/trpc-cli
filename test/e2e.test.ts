@@ -58,7 +58,8 @@ test('cli help add', async () => {
       parameter_2   (required)
 
     Options:
-      -h, --help   display help for command"
+      -h, --help   display help for command
+    "
   `)
 })
 
@@ -77,8 +78,10 @@ test('cli help divide', async () => {
     Options:
       -h, --help   display help for command
 
+
     Examples:
-    divide --left 8 --right 4"
+    divide --left 8 --right 4
+    "
   `)
 })
 
@@ -340,7 +343,8 @@ test('fs copy help', async () => {
 
     Options:
       --force [boolean]  Overwrite destination if it exists (default: false)
-      -h, --help         display help for command"
+      -h, --help         display help for command
+    "
   `)
 })
 
@@ -402,7 +406,8 @@ test('fs diff', async () => {
     Options:
       --ignoreWhitespace [boolean]  Ignore whitespace changes (default: false)
       --trim [boolean]              Trim start/end whitespace (default: false)
-      -h, --help                    display help for command"
+      -h, --help                    display help for command
+    "
   `)
   expect(await tsx('fs', ['diff', 'one', 'two'])).toMatchInlineSnapshot(`""`)
   expect(await tsx('fs', ['diff', 'one', 'three'])).toMatchInlineSnapshot(

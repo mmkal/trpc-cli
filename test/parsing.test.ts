@@ -37,6 +37,7 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
     })
     .catch(e => {
       const original = e
+      if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
       if (e.exitCode === 0) return e.cause
       while (e?.exitCode && e.cause) e = e.cause
       if (e === original) throw e
@@ -449,8 +450,27 @@ test("nullable array inputs aren't supported", async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
+  await expect(run(router, ['test1', '--help'])).resolves.toMatchInlineSnapshot(`
+    "Usage: program test1 [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Invalid input type Array<string | null>. Nullable arrays are not supported.)
+      -h, --help      display help for command
+    "
+  `)
   const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
+
+  await expect(run(router, ['test2', '--help'])).resolves.toMatchInlineSnapshot(`
+    "Usage: program test2 [options] <parameter_1...>
+
+    Arguments:
+      parameter_1   (required)
+
+    Options:
+      -h, --help   display help for command
+    "
+  `)
 })
 
 test('string array input with options', async () => {

@@ -28,7 +28,7 @@ const run = <R extends AnyRouter>(router: R, argv: string[]) => {
 const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
   const {createCallerFactory} = initTRPC.create()
   const cli = createCli({createCallerFactory, ...params})
-  const logs: unknown[][] = []
+  const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   return cli
     .run({
@@ -38,11 +38,12 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
     })
     .catch(e => {
       const original = e
+      if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
       if (e.exitCode === 0) return e.cause
       while (e?.exitCode && e.cause) e = e.cause
       if (e === original) throw e
       e.message = `Logs: ${e.message}\n\n---\n\n${logs.join('\n')}` // include logs in the error message for easier debugging - this bit is stripped out by the snapshot serializer
-      throw new Error(`CLI exited with code ${original.exitCode}`, {cause: e})
+      throw Object.assign(new Error(`CLI exited with code ${original.exitCode}`, {cause: e}))
     })
 }
 
@@ -113,19 +114,33 @@ test('boolean input', async () => {
   `)
 })
 
-test.skip('refine in a union pedantry', async () => {
+test('refine in a union pedantry', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('number | string')) //
+      .input(
+        type('string').or(
+          type('number').narrow(n => Number.isInteger(n)), //
+        ),
+      ) //
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
-  expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  // todo: arktype doesn't make it easy to extract the "in" type from a complex-ish type (in this case a union, where one of the constituents has a predicate)
+  await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn11 is not convertible to
+                      JSON Schema)
+      -h, --help      display help for command
+    "
+  `)
+  // expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
+  // expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
+  // expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
-test.skip('transform in a union', async () => {
+test('transform in a union', async () => {
   const router = t.router({
     foo: t.procedure
       .input(
@@ -138,9 +153,19 @@ test.skip('transform in a union', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
-  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
+  // todo: arktype can hopefully address the below problem
+  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn11 is not convertible to
+                      JSON Schema)
+      -h, --help      display help for command
+    "
+  `)
+  // expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
+  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  // expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
 })
 
 test('literal input', async () => {
@@ -157,15 +182,26 @@ test('literal input', async () => {
   `)
 })
 
-test.skip('optional input', async () => {
+test('optional input', async () => {
   const router = t.router({
     foo: t.procedure
       .input(type('string | undefined')) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
-  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
+  // not sure if arktype can/should handle this, since it's kind of right that undefined is not convertible to JSON Schema.
+  // but it's handy that zod-to-json-schema isn't so strict - maybe arktype could let you configure it?
+  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: undefined is not convertible to JSON
+                      Schema)
+      -h, --help      display help for command
+    "
+  `)
+  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  // expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
 })
 
 test('union input', async () => {
@@ -187,7 +223,6 @@ test('regex input', async () => {
   })
 
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
-  // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: Logs: must be greeting (was "goodbye xyz")
@@ -394,18 +429,28 @@ test('number array input', async () => {
   `)
 })
 
-test.skip('number array input with constraints', async () => {
+test('number array input with constraints', async () => {
   const router = t.router({
     foo: t.procedure
       .input(type('number[]').narrow(n => Number.isInteger(n))) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: Logs: Validation error
-      - Expected number, received string at index 0
+  // todo: hopefully get the below problem addressed in arktype
+  await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn13 is not convertible to
+                      JSON Schema)
+      -h, --help      display help for command
+    "
   `)
+  // await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
+  //   CLI exited with code 1
+  //     Caused by: Logs: Validation error
+  //     - Expected number, received string at index 0
+  // `)
 })
 
 test('boolean array input', async () => {
@@ -435,16 +480,34 @@ test('mixed array input', async () => {
   expect(result).toMatchInlineSnapshot(`"list: [12,true,3.14,"null","undefined","hello"]"`)
 })
 
-test.skip("nullable array inputs aren't supported", async () => {
+test("nullable array inputs aren't supported", async () => {
   const router = t.router({
-    test1: t.procedure.input(type('string[] | null')).query(({input}) => `list: ${JSON.stringify(input)}`),
+    test1: t.procedure.input(type('(string | null)[]')).query(({input}) => `list: ${JSON.stringify(input)}`),
     test2: t.procedure
-      .input(type('(boolean | number | string)[] | null')) //
+      .input(type('(boolean | number | string | null)[]')) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
+  await expect(run(router, ['test1', '--help'])).resolves.toMatchInlineSnapshot(`
+    "Usage: program test1 [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Invalid input type Array<string | null>. Nullable arrays are not supported.)
+      -h, --help      display help for command
+    "
+  `)
   const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
+
+  await expect(run(router, ['test2', '--help'])).resolves.toMatchInlineSnapshot(`
+    "Usage: program test2 [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Invalid input type Array<number | string | boolean | null>. Nullable arrays are not
+                      supported.)
+      -h, --help      display help for command
+    "
+  `)
 })
 
 test('string array input with options', async () => {
@@ -495,7 +558,7 @@ test('mixed array input with options', async () => {
 })
 
 // arktype doesn't propagate defaults to json schema
-test.skip('defaults and negations', async () => {
+test('defaults and negations', async () => {
   const router = t.router({
     normalBoolean: t.procedure.input(type({foo: 'boolean'})).query(({input}) => `${inspect(input)}`),
     optionalBoolean: t.procedure.input(type({'foo?': 'boolean'})).query(({input}) => `${inspect(input)}`),
@@ -521,7 +584,8 @@ test.skip('defaults and negations', async () => {
   expect(await run(router, ['optionalBoolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['defaultTrueBoolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['defaultTrueBoolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  // todo: make this work - arktype doesn't report defaults to the produced json schema so we don't know to add the negation flag
+  // expect(await run(router, ['defaultTrueBoolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['defaultFalseBoolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['defaultFalseBoolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
@@ -544,4 +608,107 @@ test.skip('defaults and negations', async () => {
   expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', 'true', '1'])).toMatchInlineSnapshot(
     `"{ foo: [ true, 1 ] }"`,
   )
+})
+
+test('arktype issues', () => {
+  const toJsonSchema = (schema: type.Any) => {
+    try {
+      return schema.toJsonSchema()
+    } catch (e) {
+      return e
+    }
+  }
+
+  expect(
+    toJsonSchema(
+      type('string').or(
+        type('number').narrow(n => Number.isInteger(n)), //
+      ),
+    ),
+  ).toMatchInlineSnapshot(`Predicate $ark.fn11 is not convertible to JSON Schema`)
+
+  expect(
+    toJsonSchema(
+      type('number').narrow(n => Number.isInteger(n)), //
+    ),
+  ).toMatchInlineSnapshot(`Predicate $ark.fn12 is not convertible to JSON Schema`)
+
+  expect(
+    toJsonSchema(
+      // @ts-expect-error
+      type('number').narrow(n => Number.isInteger(n)).basis, //
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "type": "number",
+    }
+  `)
+
+  expect(
+    toJsonSchema(
+      type('string').or(
+        type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
+          .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
+      ),
+    ),
+  ).toMatchInlineSnapshot(
+    `(In: number) => Out<unknown> is not convertible to JSON Schema because it represents a transformation, while JSON Schema only allows validation. Consider creating a Schema from one of its endpoints using \`.in\` or \`.out\`.`,
+  )
+  expect(
+    toJsonSchema(
+      type('string').or(
+        type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
+          .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
+      ).in,
+    ),
+  ).toMatchInlineSnapshot(
+    `
+      {
+        "anyOf": [
+          {
+            "type": "number",
+          },
+          {
+            "type": "string",
+          },
+        ],
+      }
+    `,
+  )
+
+  expect(toJsonSchema(type({foo: 'string = "hi"'}))).toMatchInlineSnapshot(`
+    {
+      "properties": {
+        "foo": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    }
+  `)
+
+  expect(toJsonSchema(type({foo: type('string').default('hi')}))).toMatchInlineSnapshot(`
+    {
+      "properties": {
+        "foo": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    }
+  `)
+
+  expect(toJsonSchema(type(/foo.*bar/))).toMatchInlineSnapshot(`
+    {
+      "pattern": "foo.*bar",
+      "type": "string",
+    }
+  `)
+
+  expect(toJsonSchema(type('string').describe('a piece of text'))).toMatchInlineSnapshot(`
+    {
+      "description": "a piece of text",
+      "type": "string",
+    }
+  `)
 })
