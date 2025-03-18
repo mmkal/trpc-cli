@@ -13,8 +13,15 @@ export type TrpcCliParams<R extends AnyRouter> = {
   _default?: never // {procedure: Extract<keyof R['_def']['procedures'], string>}
 
   /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v11. */
-  createCallerFactory?: CreateCallerFactoryLike
+  // createCallerFactory?: CreateCallerFactoryLike
+  trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
 }
+
+/** Rough shape of the `@trpc/server` (v11) module. Needed to pass in to `createCli` when using trpc v11. */
+export type TrpcServerModuleLike = {
+  initTRPC: {create: () => {createCallerFactory: CreateCallerFactoryLike}}
+}
+
 /**
  * Optional interface for describing procedures via meta - if your router conforms to this meta shape, it will contribute to the CLI help text.
  */

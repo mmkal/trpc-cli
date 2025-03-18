@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import * as trpcServer from '@trpc/server'
+import * as trpcServer10 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
 import {ZodError} from 'zod'
@@ -362,6 +362,19 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const positionalValues = args.slice(0, -2)
 
         const input = procedureInputs.getPojoInput({positionalValues, options})
+        const resolvedTrpcServer = await (params.trpcServer || trpcServer10)
+
+        const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
+        if (deprecatedCreateCaller) {
+          const message = `Using deprecated \`createCallerFactory\` option. Use \`trpcServer\` instead. e.g. \`createCli({router: myRouter, trpcServer: import('@trpc/server')})\``
+          logger.error?.(message)
+        }
+
+        const createCallerFactory =
+          deprecatedCreateCaller ||
+          (resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike)
+        const caller = createCallerFactory(router)(params.context)
+
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
           throw transformError(err, command)
         })
@@ -445,14 +458,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.description(descriptionParts.filter(Boolean).join('\n'))
     })
 
-    type Context = NonNullable<typeof params.context>
-
-    const createCallerFactory =
-      params.createCallerFactory ||
-      (trpcServer.initTRPC.context<Context>().create({}).createCallerFactory as CreateCallerFactoryLike)
-
-    const caller = createCallerFactory(router)(params.context)
-
     return program
   }
 
@@ -509,9 +514,10 @@ export const trpcCli = createCli
 
 function transformError(err: unknown, command: Command) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
-    return new Error('createCallerFactory version mismatch - pass in createCallerFactory explicitly', {cause: err})
+    const message = 'createCallerFactory version mismatch - pass in the `@trpc/server` module to `createCli` explicitly'
+    return new Error(message)
   }
-  if (looksLikeInstanceof(err, trpcServer.TRPCError)) {
+  if (looksLikeInstanceof(err, trpcServer10.TRPCError)) {
     const cause = err.cause
     if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues
