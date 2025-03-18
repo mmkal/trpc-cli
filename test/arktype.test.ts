@@ -5,6 +5,8 @@ import {expect, test} from 'vitest'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
+process.stdout.columns = 100
+
 expect.addSnapshotSerializer({
   test: val => looksLikeInstanceof(val, Error),
   serialize(val, config, indentation, depth, refs, printer) {
@@ -25,8 +27,7 @@ const run = <R extends AnyRouter>(router: R, argv: string[]) => {
   return runWith({router}, argv)
 }
 const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
-  const {createCallerFactory} = initTRPC.create()
-  const cli = createCli({createCallerFactory, ...params})
+  const cli = createCli({trpcServer: import('trpcserver11'), ...params})
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   return cli
@@ -125,8 +126,9 @@ test('refine in a union pedantry', async () => {
     "Usage: program foo [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn11 is not convertible to
-                      JSON Schema)
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI
+                      arguments: Failed to convert input to JSON Schema: Predicate $ark.fn11 is not
+                      convertible to JSON Schema)
       -h, --help      display help for command
     "
   `)
@@ -153,8 +155,9 @@ test('transform in a union', async () => {
     "Usage: program foo [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn12 is not convertible to
-                      JSON Schema)
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI
+                      arguments: Failed to convert input to JSON Schema: Predicate $ark.fn12 is not
+                      convertible to JSON Schema)
       -h, --help      display help for command
     "
   `)
@@ -190,8 +193,9 @@ test('optional input', async () => {
     "Usage: program foo [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: undefined is not convertible to JSON
-                      Schema)
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI
+                      arguments: Failed to convert input to JSON Schema: undefined is not convertible to
+                      JSON Schema)
       -h, --help      display help for command
     "
   `)
@@ -436,8 +440,9 @@ test('number array input with constraints', async () => {
     "Usage: program foo [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: Predicate $ark.fn14 is not convertible to
-                      JSON Schema)
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI
+                      arguments: Failed to convert input to JSON Schema: Predicate $ark.fn14 is not
+                      convertible to JSON Schema)
       -h, --help      display help for command
     "
   `)
@@ -487,7 +492,9 @@ test("nullable array inputs aren't supported", async () => {
     "Usage: program test1 [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Invalid input type Array<string | null>. Nullable arrays are not supported.)
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI
+                      arguments: Invalid input type Array<string | null>. Nullable arrays are not
+                      supported.)
       -h, --help      display help for command
     "
   `)
@@ -498,8 +505,9 @@ test("nullable array inputs aren't supported", async () => {
     "Usage: program test2 [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Invalid input type Array<number | string | boolean | null>. Nullable arrays are not
-                      supported.)
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI
+                      arguments: Invalid input type Array<number | string | boolean | null>. Nullable
+                      arrays are not supported.)
       -h, --help      display help for command
     "
   `)

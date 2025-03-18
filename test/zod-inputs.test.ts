@@ -5,6 +5,8 @@ import {z} from 'zod'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
+process.stdout.columns = 100
+
 expect.addSnapshotSerializer({
   test: val => looksLikeInstanceof(val, Error),
   serialize(val, config, indentation, depth, refs, printer) {
@@ -449,7 +451,9 @@ test("nullable array inputs aren't supported", async () => {
     "Usage: program test1 [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Invalid input type Array<string | null>. Nullable arrays are not supported.)
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI
+                      arguments: Invalid input type Array<string | null>. Nullable arrays are not
+                      supported.)
       -h, --help      display help for command
     "
   `)
