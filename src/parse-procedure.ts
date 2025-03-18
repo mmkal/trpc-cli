@@ -6,16 +6,6 @@ import {getSchemaTypes} from './json-schema'
 import type {Result, ParsedProcedure} from './types'
 import {looksLikeInstanceof} from './util'
 
-// function getInnerType(zodType: JSONSchema7): JSONSchema7 {
-//   if (looksLikeInstanceof(zodType, z.ZodOptional) || looksLikeInstanceof(zodType, z.ZodNullable)) {
-//     return getInnerType(zodType._def.innerType as z.ZodType)
-//   }
-//   if (looksLikeInstanceof(zodType, z.ZodEffects)) {
-//     return getInnerType(zodType.innerType() as z.ZodType)
-//   }
-//   return zodType
-// }
-
 function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: string} {
   return (
     typeof value === 'object' &&
@@ -35,19 +25,11 @@ function looksJsonSchemaable(value: unknown): value is JsonSchemaable {
   )
 }
 
-const getInnerType = (input: JsonSchemaable): JsonSchemaable => {
-  /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-constant-condition, @typescript-eslint/no-explicit-any */
-  let value = input as any
-  while (true) {
-    if (value?.in && value.in !== value) {
-      value = value.in
-      continue
-    }
-    break
-  }
-  return value as JsonSchemaable
-}
-
+/**
+ * Attempts to convert a trpc procedure input to JSON schema.
+ * For zod types, this uses `zod-to-json-schema`.
+ * For other types, it assumes the type has a `toJsonSchema` method (e.g. arktype).
+ */
 function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
   try {
     input = getInnerType(input)
@@ -62,6 +44,19 @@ function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
       error: `Failed to convert input to JSON Schema: ${e instanceof Error ? e.message : String(e)}`,
     }
   }
+}
+
+function getInnerType(input: JsonSchemaable): JsonSchemaable {
+  /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-constant-condition, @typescript-eslint/no-explicit-any */
+  let value = input as any
+  while (true) {
+    if (value?.in && value.in !== value) {
+      value = value.in
+      continue
+    }
+    break
+  }
+  return value as JsonSchemaable
 }
 
 export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure> {
