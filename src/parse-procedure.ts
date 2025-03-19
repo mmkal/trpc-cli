@@ -411,6 +411,7 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-require-imports */
 
 /** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
 const jsonSchemaConverters = {
@@ -450,7 +451,6 @@ function prepareArktypeType(type: any) {
 
 function getValibotToJsonSchema() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@valibot/to-json-schema').toJsonSchema as (input: unknown) => JSONSchema7
   } catch {
     return null
