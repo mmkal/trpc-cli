@@ -50,7 +50,9 @@ export type Trpc10ProcedureLike = {
   }
 }
 
-export type CreateCallerFactoryLike = (router: any) => (context: any) => Record<string, (input: unknown) => unknown>
+export type CreateCallerFactoryLike<Procedures = Record<string, (input: unknown) => unknown>> = (
+  router: any,
+) => (context: any) => Procedures
 
 export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike
 

@@ -986,6 +986,8 @@ You can then use tab-completion to autocomplete commands and flags.
 
 All dependencies have zero dependencies of their own, so the dependency tree is very shallow.
 
+![Dependency tree](./docs/deps.png)
+
 - [@trpc/server](https://npmjs.com/package/@trpc/server) for the trpc router
 - [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
 - [zod](https://npmjs.com/package/zod) for input validation, included for convenience

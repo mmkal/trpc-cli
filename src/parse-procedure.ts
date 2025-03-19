@@ -5,7 +5,20 @@ import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Result, ParsedProcedure} from './types'
-import {looksLikeInstanceof} from './util'
+
+const getValibotToJsonSchema = () => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('@valibot/to-json-schema').toJsonSchema as (input: unknown) => JSONSchema7
+  } catch {
+    return null
+  }
+}
+
+const getVendor = (schema: unknown) => {
+  // note: don't check for typeof schema === 'object' because arktype schemas are functions (you call them directly instead of `.parse(...)`)
+  return (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor ?? null
+}
 
 function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: string} {
   return (
@@ -20,11 +33,8 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
 type JsonSchemaable = zod.ZodType | {toJsonSchema: () => JSONSchema7}
 
 function looksJsonSchemaable(value: unknown): value is JsonSchemaable {
-  const val = value as null | undefined | {toJsonSchema?: unknown}
-  return (
-    looksLikeInstanceof(val, zod.ZodType as new (...args: unknown[]) => zod.ZodType) ||
-    (!!val && 'toJsonSchema' in val && typeof val.toJsonSchema === 'function')
-  )
+  const vendor = getVendor(value)
+  return vendor === 'zod' || vendor === 'valibot' || vendor === 'arktype'
 }
 
 /**
@@ -34,12 +44,45 @@ function looksJsonSchemaable(value: unknown): value is JsonSchemaable {
  */
 function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
   try {
-    input = getInnerType(input)
-    const jsonSchema = 'toJsonSchema' in input ? input.toJsonSchema() : (zodToJsonSchema(input as never) as JSONSchema7)
-    Object.defineProperty(jsonSchema, 'originalSchema', {value: input, enumerable: false})
+    const vendor = getVendor(input)
+    if (vendor === 'zod') {
+      return {
+        success: true,
+        value: zodToJsonSchema(input as never) as JSONSchema7,
+      }
+    }
+    if (vendor === 'valibot') {
+      const valibotToJsonSchema = getValibotToJsonSchema()
+      if (!valibotToJsonSchema) {
+        return {
+          success: false,
+          error:
+            '@valibot/to-json-schema could not be found - try installing it with `npm install @valibot/to-json-schema` and re-running',
+        }
+      }
+      return {
+        success: true,
+        value: valibotToJsonSchema(input as never),
+      }
+    }
+    if (vendor === 'arktype') {
+      let innerType = input as {in?: unknown; toJsonSchema?: () => JSONSchema7}
+      while (innerType) {
+        if (innerType?.in && innerType.in !== innerType) {
+          innerType = innerType.in
+        } else {
+          break
+        }
+      }
+      return {
+        success: true,
+        value: innerType.toJsonSchema!(),
+      }
+    }
+
     return {
-      success: true,
-      value: jsonSchema,
+      success: false,
+      error: `Schema not convertible to JSON schema`,
     }
   } catch (e) {
     return {
@@ -47,19 +90,6 @@ function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
       error: `Failed to convert input to JSON Schema: ${e instanceof Error ? e.message : String(e)}`,
     }
   }
-}
-
-function getInnerType(input: JsonSchemaable): JsonSchemaable {
-  /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-constant-condition, @typescript-eslint/no-explicit-any */
-  let value = input as any
-  while (true) {
-    if (value?.in && value.in !== value) {
-      value = value.in
-      continue
-    }
-    break
-  }
-  return value as JsonSchemaable
 }
 
 export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure> {
