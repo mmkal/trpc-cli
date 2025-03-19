@@ -13,7 +13,9 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Ignored procedures](#ignored-procedures)
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
-- [arktype](#arktype)
+- [Validators](#validators)
+   - [zod](#zod)
+   - [arktype](#arktype)
 - [tRPC v10 vs v11](#trpc-v10-vs-v11)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Testing your CLI](#testing-your-cli)
@@ -506,9 +508,19 @@ const appRouter = trpc.router({
 })
 ```
 
-## arktype
+## Validators
 
-You can also use arktype to validate your inputs.
+You can use any validator that [trpc supports](https://trpc.io/docs/server/validators), but for inputs to be converted into CLI arguments/options, they must be JSON schema compatible. The following validators are supported so far. Contributions are welcome for other validators - the requirement is that they must have a helper function that converts them into a JSON schema representation.
+
+Note that JSON schema representations are not in general perfect 1-1 mappings with every validator library's API, so some procedures may default to use the JSON `--input` flag instead.
+
+### zod
+
+Zod support is built-in, including the `zod-to-json-schema` conversion helper. You can also "bring your own" zod module (e.g. if you want to use a newer/older version of zod than the one included in `trpc-cli`).
+
+### arktype
+
+`arktype` includes a `toJsonSchema` method on its types, so no extra dependencies are reuqired if you're using arktype to validate your inputs.
 
 ```ts
 import {type} from 'arktype'
@@ -528,7 +540,7 @@ cli.run() // e.g. `mycli add --left 1 --right 2`
 ```
 
 Note: you will need to install `arktype` as a dependency separately
-Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` flag to pass in a JSON string. Check your CLI help text to see if this is the case.
+Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` flag to pass in a JSON string. Check your CLI help text to see if this is the case. See https://github.com/arktypeio/arktype/issues/1379 for more info.
 
 ## tRPC v10 vs v11
 
@@ -985,6 +997,8 @@ You can then use tab-completion to autocomplete commands and flags.
 ### Implementation and dependencies
 
 All dependencies have zero dependencies of their own, so the dependency tree is very shallow.
+
+![Dependency tree](./docs/deps.png)
 
 - [@trpc/server](https://npmjs.com/package/@trpc/server) for the trpc router
 - [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
