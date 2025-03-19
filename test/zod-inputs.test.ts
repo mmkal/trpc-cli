@@ -459,13 +459,13 @@ test("nullable array inputs aren't supported", async () => {
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
 
   await expect(run(router, ['test2', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program test2 [options] <parameter_1...>
-
-    Arguments:
-      parameter_1   (required)
+    "Usage: program test2 [options]
 
     Options:
-      -h, --help   display help for command
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Invalid input type Array<boolean |
+                      number | string | null>. Nullable arrays are not supported.)
+      -h, --help      display help for command
     "
   `)
 })

@@ -253,6 +253,7 @@ function parseMultiInputs(inputs: unknown[]): Result<ParsedProcedure> {
 
 function isNullable(schema: JSONSchema7) {
   if (Array.isArray(schema.type) && schema.type.includes('null')) return true
+  if (schema.type === 'null') return true
   if (schema.anyOf?.some(sub => isNullable(toRoughJsonSchema7(sub)))) return true
   if (schema.const === null) return true
   return false
