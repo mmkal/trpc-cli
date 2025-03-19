@@ -462,12 +462,10 @@ function getValibotToJsonSchema() {
  * It effectively throws out all (meaningful) `pipe` logic - i.e. only the "first" validator and metadata are considered.
  */
 function prepareValibotSchema(obj: any): any {
-  // If input is not an object or is null, return it as is
   if (typeof obj !== 'object' || obj === null) {
     return obj
   }
 
-  // If object has a pipe property that's an array, return its first element
   if ('pipe' in obj && Array.isArray(obj.pipe) && obj.pipe.length > 0) {
     // in general we just want to keep the first validator, but we also want to keep metadata like description/title
     const whitelisted = (obj.pipe as any[]).filter((p, i) => {
@@ -478,12 +476,10 @@ function prepareValibotSchema(obj: any): any {
     return {...obj, pipe: whitelisted}
   }
 
-  // Handle arrays
   if (Array.isArray(obj)) {
     return obj.map(item => prepareValibotSchema(item))
   }
 
-  // Handle regular objects
   const result: any = {}
   for (const key in obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
