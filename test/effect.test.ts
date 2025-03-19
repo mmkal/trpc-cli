@@ -4,8 +4,10 @@ import {expect, test} from 'vitest'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
-const toStandardSchemaV1 = <A, I>(schema: Schema.Schema<A, I, never>) =>
-  Object.assign(Schema.standardSchemaV1(schema), {'~original': schema})
+const toStandardSchemaV1 = <A, I>(schema: Schema.Schema<A, I, never>) => {
+  const standard = Schema.standardSchemaV1(schema)
+  return {...standard, '~standard': {...standard['~standard'], original: schema}}
+}
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 

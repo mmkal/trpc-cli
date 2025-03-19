@@ -578,7 +578,11 @@ import {type TrpcCliMeta} from 'trpc-cli'
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
 const toStandardSchemaV1 = <A, I>(schema: Schema.Schema<A, I, never>) => {
-  return Object.assign(Schema.standardSchemaV1(schema), {'~original': schema})
+  const standard = Schema.standardSchemaV1(schema)
+  return {
+    ...standard,
+    '~standard': {...standard['~standard'], original: schema},
+  }
 }
 
 const router = t.router({

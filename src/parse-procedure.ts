@@ -426,7 +426,7 @@ const jsonSchemaConverters = {
   },
   effect: (input: unknown) => {
     const effect = require('effect')
-    const original = (input as {'~original': unknown})['~original']
+    const original = (input as {'~standard': any})['~standard']?.original
     if (!original) {
       const message = `Original effect schema not found. See docs (https://github.com/mmkal/trpc-cli#effect) to learn how to use effect schemas with trpc-cli.`
       throw new Error(message)
