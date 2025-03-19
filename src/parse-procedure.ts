@@ -411,6 +411,7 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-require-imports */
 
 /** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
 const jsonSchemaConverters = {
@@ -422,6 +423,15 @@ const jsonSchemaConverters = {
       throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`)
     }
     return valibotToJsonSchema(prepareValibotSchema(input))
+  },
+  effect: (input: unknown) => {
+    const effect = require('effect')
+    const original = (input as {'~original': unknown})['~original']
+    if (!original) {
+      const message = `Original effect schema not found. See docs (https://github.com/mmkal/trpc-cli#effect) to learn how to use effect schemas with trpc-cli.`
+      throw new Error(message)
+    }
+    return effect.JSONSchema.make(original) as JSONSchema7
   },
 } satisfies Record<string, (input: unknown) => JSONSchema7>
 
@@ -450,7 +460,6 @@ function prepareArktypeType(type: any) {
 
 function getValibotToJsonSchema() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@valibot/to-json-schema').toJsonSchema as (input: unknown) => JSONSchema7
   } catch {
     return null
