@@ -326,7 +326,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         } else if (propertyType === 'array') {
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
-          if (isValueRequired) option.default([])
+          else if (isValueRequired) option.default([])
           const itemTypes =
             'items' in propertyValue && propertyValue.items
               ? getSchemaTypes(propertyValue.items as JsonSchema7Type)
