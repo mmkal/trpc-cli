@@ -1,7 +1,7 @@
-import {initTRPC} from '@trpc/server'
+import {type} from 'arktype'
+import {initTRPC} from 'trpcserver11'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import {z} from 'zod'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
@@ -25,7 +25,7 @@ const run = <R extends AnyRouter>(router: R, argv: string[]) => {
   return runWith({router}, argv)
 }
 const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
-  const cli = createCli(params)
+  const cli = createCli({trpcServer: import('trpcserver11'), ...params})
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   return cli
@@ -44,9 +44,9 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
 test('merging input types', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.object({bar: z.string()}))
-      .input(z.object({baz: z.number()}))
-      .input(z.object({qux: z.boolean()}))
+      .input(type({bar: 'string'}))
+      .input(type({baz: 'number'}))
+      .input(type({qux: 'boolean'}))
       .query(({input}) => Object.entries(input).join(', ')),
   })
 
@@ -58,7 +58,7 @@ test('merging input types', async () => {
 test('string input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.string()) //
+      .input(type('string')) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -68,37 +68,35 @@ test('string input', async () => {
 test('enum input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.enum(['aa', 'bb'])) //
+      .input(type('"aa" | "bb"')) //
       .query(({input}) => JSON.stringify(input)),
   })
 
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid enum value. Expected 'aa' | 'bb', received 'cc'
+      Caused by: CliValidationError: must be "aa" or "bb" (was "cc")
   `)
 })
 
 test('number input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.number()) //
-      .query(({input}) => JSON.stringify(input)),
+      .input(type('number')) //
+      .query(({input}) => JSON.stringify({input})),
   })
 
-  expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
+  expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"{"input":1}"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string
+      Caused by: CliValidationError: must be a number (was a string)
   `)
 })
 
 test('boolean input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.boolean()) //
+      .input(type('boolean')) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -106,73 +104,107 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected boolean, received string
+      Caused by: CliValidationError: must be boolean (was "a")
   `)
 })
 
 test('refine in a union pedantry', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.union([z.number().int(), z.string()])) //
+      .input(
+        type('string').or(
+          type('number').narrow(n => Number.isInteger(n)), //
+        ),
+      ) //
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
-  expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  // todo: arktype doesn't make it easy to extract the "in" type from a complex-ish type (in this case a union, where one of the constituents has a predicate)
+  await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Failed to convert input to JSON
+                      Schema: Predicate $ark.fn11 is not convertible to JSON Schema)
+      -h, --help      display help for command
+    "
+  `)
+  // expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
+  // expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
+  // expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
 test('transform in a union', async () => {
   const router = t.router({
     foo: t.procedure
       .input(
-        z.union([
-          z
-            .number()
-            .int()
-            .transform(n => `Roman numeral: ${'I'.repeat(n)}`),
-          z.string(),
-        ]),
-      ) //
+        type('string').or(
+          type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
+            .narrow(n => Number.isInteger(n))
+            .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
+        ),
+      )
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
-  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
+  // todo: arktype can hopefully address the below problem
+  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Failed to convert input to JSON
+                      Schema: Predicate $ark.fn12 is not convertible to JSON Schema)
+      -h, --help      display help for command
+    "
+  `)
+  // expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
+  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  // expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
 })
 
 test('literal input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.literal(2)) //
+      .input(type('2')) //
       .query(({input}) => JSON.stringify(input)),
   })
 
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid literal value, expected 2
+      Caused by: CliValidationError: must be 2 (was 3)
   `)
 })
 
 test('optional input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.string().optional()) //
+      .input(type('string | undefined')) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
-  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
+  // not sure if arktype can/should handle this, since it's kind of right that undefined is not convertible to JSON Schema.
+  // but it's handy that zod-to-json-schema isn't so strict - maybe arktype could let you configure it?
+  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Failed to convert input to JSON
+                      Schema: undefined is not convertible to JSON Schema)
+      -h, --help      display help for command
+    "
+  `)
+  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  // expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
 })
 
 test('union input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.union([z.number(), z.string()])) //
+      .input(type('number | string')) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -183,16 +215,14 @@ test('union input', async () => {
 test('regex input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.string().regex(/hello/).describe('greeting')) //
+      .input(type('/hello/').describe('greeting')) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
-  // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid
+      Caused by: CliValidationError: must be greeting (was "goodbye xyz")
   `)
 })
 
@@ -200,11 +230,7 @@ test('boolean, number, string input', async () => {
   const router = t.router({
     foo: t.procedure
       .input(
-        z.union([
-          z.string(),
-          z.number(),
-          z.boolean(), //
-        ]),
+        type('string | number | boolean'), //
       )
       .query(({input}) => JSON.stringify(input || null)),
   })
@@ -217,26 +243,27 @@ test('boolean, number, string input', async () => {
 test('tuple input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.tuple([z.string(), z.number()])) //
+      .input(type(['string', 'number'])) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
-  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
-  `)
+  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CliValidationError: value at [1] must be a number (was a string)
+    `,
+  )
 })
 
 test('tuple input with flags', async () => {
   const router = t.router({
     foo: t.procedure
       .input(
-        z.tuple([
-          z.string(),
-          z.number(),
-          z.object({foo: z.string()}), //
+        type([
+          'string',
+          'number',
+          {foo: 'string'}, //
         ]),
       )
       .query(({input}) => JSON.stringify(input || null)),
@@ -245,25 +272,30 @@ test('tuple input with flags', async () => {
   expect(await run(router, ['foo', 'hello', '123', '--foo', 'bar'])).toMatchInlineSnapshot(
     `"["hello",123,{"foo":"bar"}]"`,
   )
-  await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CommanderError: error: required option '--foo <string>' not specified
-  `)
-  await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
-  `)
-  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CommanderError: error: required option '--foo <string>' not specified
-  `)
+  await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CommanderError: error: required option '--foo <string>' not specified
+    `,
+  )
+  await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CliValidationError: value at [1] must be a number (was a string)
+    `,
+  )
+  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CommanderError: error: required option '--foo <string>' not specified
+    `,
+  )
 })
 
 test('single character flag', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.object({a: z.string()})) //
+      .input(type({a: 'string'})) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -275,7 +307,7 @@ test('custom default procedure', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({default: true})
-      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .input(type({frozenLockfile: 'boolean'}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -292,7 +324,7 @@ test('command alias', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
-      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .input(type({frozenLockfile: 'boolean'}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -306,7 +338,7 @@ test('flag alias', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({aliases: {flags: {frozenLockfile: 'x'}}})
-      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .input(type({frozenLockfile: 'boolean'}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -320,7 +352,7 @@ test('flag alias can be two characters', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
-      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .input(type({frozenLockfile: 'boolean'}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -334,7 +366,7 @@ test('flag alias typo', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({aliases: {flags: {frooozenLockfile: 'x'}}})
-      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .input(type({frozenLockfile: 'boolean'}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -348,19 +380,19 @@ test('flag alias typo', async () => {
 test('validation', async () => {
   const router = t.router({
     tupleOfStrings: t.procedure
-      .input(z.tuple([z.string().describe('The first string'), z.string().describe('The second string')]))
+      .input(type([type('string', '@', 'the first string'), type('string', '@', 'the second string')]))
       .query(() => 'ok'),
     tupleWithBoolean: t.procedure
-      .input(z.tuple([z.string(), z.boolean()])) //
+      .input(type([type('string'), type('boolean')])) //
       .query(() => 'ok'),
     tupleWithBooleanThenObject: t.procedure
-      .input(z.tuple([z.string(), z.boolean(), z.object({foo: z.string()})]))
+      .input(type([type('string'), type('boolean'), type({foo: 'string'})]))
       .query(() => 'ok'),
     tupleWithObjectInTheMiddle: t.procedure
-      .input(z.tuple([z.string(), z.object({foo: z.string()}), z.string()]))
+      .input(type([type('string'), type({foo: 'string'}), type('string')]))
       .query(() => 'ok'),
     tupleWithRecord: t.procedure
-      .input(z.tuple([z.string(), z.record(z.string())])) //
+      .input(type([type('string'), type('Record<string, string>')])) //
       .query(() => 'ok'),
   })
   const cli = createCli({router})
@@ -370,7 +402,7 @@ test('validation', async () => {
 test('string array input', async () => {
   const router = t.router({
     stringArray: t.procedure
-      .input(z.array(z.string())) //
+      .input(type('string[]')) //
       .query(({input}) => `strings: ${JSON.stringify(input)}`),
   })
 
@@ -381,7 +413,7 @@ test('string array input', async () => {
 test('number array input', async () => {
   const router = t.router({
     test: t.procedure
-      .input(z.array(z.number())) //
+      .input(type('number[]')) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
@@ -390,29 +422,39 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
+      Caused by: CliValidationError: value at [1] must be a number (was a string)
   `)
 })
 
 test('number array input with constraints', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(z.array(z.number().int())) //
+      .input(type('number[]').narrow(n => Number.isInteger(n))) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 0
+  // todo: hopefully get the below problem addressed in arktype
+  await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Failed to convert input to JSON
+                      Schema: Predicate $ark.fn14 is not convertible to JSON Schema)
+      -h, --help      display help for command
+    "
   `)
+  // await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
+  //   CLI exited with code 1
+  //     Caused by: Logs: Validation error
+  //     - Expected number, received string at index 0
+  // `)
 })
 
 test('boolean array input', async () => {
   const router = t.router({
     test: t.procedure
-      .input(z.array(z.boolean())) //
+      .input(type('boolean[]')) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
@@ -421,15 +463,14 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected boolean, received string at index 1
+      Caused by: CliValidationError: [1] must be boolean (was "bad")
   `)
 })
 
 test('mixed array input', async () => {
   const router = t.router({
     test: t.procedure
-      .input(z.array(z.union([z.boolean(), z.number(), z.string()]))) //
+      .input(type('(boolean | number | string)[]')) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
@@ -439,9 +480,9 @@ test('mixed array input', async () => {
 
 test("nullable array inputs aren't supported", async () => {
   const router = t.router({
-    test1: t.procedure.input(z.array(z.string().nullable())).query(({input}) => `list: ${JSON.stringify(input)}`),
+    test1: t.procedure.input(type('(string | null)[]')).query(({input}) => `list: ${JSON.stringify(input)}`),
     test2: t.procedure
-      .input(z.array(z.union([z.boolean(), z.number(), z.string()]).nullable())) //
+      .input(type('(boolean | number | string | null)[]')) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
@@ -463,8 +504,8 @@ test("nullable array inputs aren't supported", async () => {
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type Array<boolean |
-                      number | string | null>. Nullable arrays are not supported.)
+                      converted to CLI arguments: Invalid input type Array<number |
+                      string | boolean | null>. Nullable arrays are not supported.)
       -h, --help      display help for command
     "
   `)
@@ -474,9 +515,9 @@ test('string array input with options', async () => {
   const router = t.router({
     test: t.procedure
       .input(
-        z.tuple([
-          z.array(z.string()), //
-          z.object({foo: z.string()}).optional(),
+        type([
+          type('string[]'), //
+          type({'foo?': 'string'}),
         ]),
       )
       .query(({input}) => `input: ${JSON.stringify(input)}`),
@@ -496,9 +537,9 @@ test('mixed array input with options', async () => {
   const router = t.router({
     test: t.procedure
       .input(
-        z.tuple([
-          z.array(z.union([z.string(), z.number()])), //
-          z.object({foo: z.string().optional()}),
+        type([
+          type('(string | number)[]'), //
+          type({'foo?': 'string'}),
         ]),
       ) //
       .query(({input}) => `input: ${JSON.stringify(input)}`),
@@ -517,24 +558,21 @@ test('mixed array input with options', async () => {
   expect(result3).toMatchInlineSnapshot(`"input: [["hello","world",1],{"foo":"bar"}]"`)
 })
 
+// arktype doesn't propagate defaults to json schema
 test('defaults and negations', async () => {
   const router = t.router({
-    normalBoolean: t.procedure.input(z.object({foo: z.boolean()})).query(({input}) => `${inspect(input)}`),
-    optionalBoolean: t.procedure.input(z.object({foo: z.boolean().optional()})).query(({input}) => `${inspect(input)}`),
+    normalBoolean: t.procedure.input(type({foo: 'boolean'})).query(({input}) => `${inspect(input)}`),
+    optionalBoolean: t.procedure.input(type({'foo?': 'boolean'})).query(({input}) => `${inspect(input)}`),
     defaultTrueBoolean: t.procedure
-      .input(z.object({foo: z.boolean().default(true)}))
+      .input(type({foo: type('boolean').default(true)}))
       .query(({input}) => `${inspect(input)}`),
     defaultFalseBoolean: t.procedure
-      .input(z.object({foo: z.boolean().default(false)}))
+      .input(type({foo: type('boolean').default(false)}))
       .query(({input}) => `${inspect(input)}`),
-    booleanOrNumber: t.procedure
-      .input(z.object({foo: z.union([z.boolean(), z.number()])}))
-      .query(({input}) => `${inspect(input)}`),
-    booleanOrString: t.procedure
-      .input(z.object({foo: z.union([z.boolean(), z.string()])}))
-      .query(({input}) => `${inspect(input)}`),
+    booleanOrNumber: t.procedure.input(type({foo: type('boolean | number')})).query(({input}) => `${inspect(input)}`),
+    booleanOrString: t.procedure.input(type({foo: type('boolean | string')})).query(({input}) => `${inspect(input)}`),
     arrayOfBooleanOrNumber: t.procedure
-      .input(z.object({foo: z.array(z.union([z.boolean(), z.number()]))}))
+      .input(type({foo: type('(boolean | number)[]')}))
       .query(({input}) => `${inspect(input)}`),
   })
 
@@ -547,7 +585,8 @@ test('defaults and negations', async () => {
   expect(await run(router, ['optionalBoolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['defaultTrueBoolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['defaultTrueBoolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  // todo: make this work - arktype doesn't report defaults to the produced json schema so we don't know to add the negation flag
+  // expect(await run(router, ['defaultTrueBoolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['defaultFalseBoolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['defaultFalseBoolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
@@ -570,4 +609,107 @@ test('defaults and negations', async () => {
   expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', 'true', '1'])).toMatchInlineSnapshot(
     `"{ foo: [ true, 1 ] }"`,
   )
+})
+
+test('arktype issues', () => {
+  const toJsonSchema = (schema: type.Any) => {
+    try {
+      return schema.toJsonSchema()
+    } catch (e) {
+      return e
+    }
+  }
+
+  expect(
+    toJsonSchema(
+      type('string').or(
+        type('number').narrow(n => Number.isInteger(n)), //
+      ),
+    ),
+  ).toMatchInlineSnapshot(`Error: Predicate $ark.fn19 is not convertible to JSON Schema`)
+
+  expect(
+    toJsonSchema(
+      type('number').narrow(n => Number.isInteger(n)), //
+    ),
+  ).toMatchInlineSnapshot(`Error: Predicate $ark.fn20 is not convertible to JSON Schema`)
+
+  expect(
+    toJsonSchema(
+      // @ts-expect-error .basis isn't in the public typedef
+      type('number').narrow(n => Number.isInteger(n)).basis, //
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "type": "number",
+    }
+  `)
+
+  expect(
+    toJsonSchema(
+      type('string').or(
+        type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
+          .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
+      ),
+    ),
+  ).toMatchInlineSnapshot(
+    `Error: (In: number) => Out<unknown> is not convertible to JSON Schema because it represents a transformation, while JSON Schema only allows validation. Consider creating a Schema from one of its endpoints using \`.in\` or \`.out\`.`,
+  )
+  expect(
+    toJsonSchema(
+      type('string').or(
+        type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
+          .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
+      ).in,
+    ),
+  ).toMatchInlineSnapshot(
+    `
+      {
+        "anyOf": [
+          {
+            "type": "number",
+          },
+          {
+            "type": "string",
+          },
+        ],
+      }
+    `,
+  )
+
+  expect(toJsonSchema(type({foo: 'string = "hi"'}))).toMatchInlineSnapshot(`
+    {
+      "properties": {
+        "foo": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    }
+  `)
+
+  expect(toJsonSchema(type({foo: type('string').default('hi')}))).toMatchInlineSnapshot(`
+    {
+      "properties": {
+        "foo": {
+          "type": "string",
+        },
+      },
+      "type": "object",
+    }
+  `)
+
+  expect(toJsonSchema(type(/foo.*bar/))).toMatchInlineSnapshot(`
+    {
+      "pattern": "foo.*bar",
+      "type": "string",
+    }
+  `)
+
+  expect(toJsonSchema(type('string').describe('a piece of text'))).toMatchInlineSnapshot(`
+    {
+      "description": "a piece of text",
+      "type": "string",
+    }
+  `)
 })

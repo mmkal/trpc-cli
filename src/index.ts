@@ -9,10 +9,10 @@ import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
 import {flattenedProperties, incompatiblePropertyPairs, getDescription, getSchemaTypes} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
+import {parseProcedureInputs} from './parse-procedure'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {Logger, OmeletteInstanceLike, TrpcCliMeta, TrpcCliParams} from './types'
 import {looksLikeInstanceof} from './util'
-import {parseProcedureInputs} from './zod-procedure'
 
 export * from './types'
 
@@ -47,6 +47,7 @@ type TrpcCliRunParams = {
 
 type CommanderProgramLike = {
   parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
+  helpInformation: () => string
 }
 
 export interface TrpcCli {
@@ -87,13 +88,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           procedure,
           procedureInputs: {
             positionalParameters: [],
-            parameters: [],
             optionsJsonSchema: {
               type: 'object',
               properties: {
                 input: {
                   type: 'json' as string as 'string',
-                  description: 'Input formatted as JSON',
+                  description: `Input formatted as JSON${procedureInputsResult.success ? '' : ` (procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error})`}`,
                 },
               },
             },
@@ -149,6 +149,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         throw new FailedToExitError(`Command ${command.name()} exitOverride`, {exitCode: ec.exitCode, cause: ec})
       })
       command.configureOutput({
+        writeOut: str => {
+          logger.info?.(str)
+        },
         writeErr: str => {
           logger.error?.(str)
         },
@@ -167,7 +170,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.description(meta?.description || '')
 
       procedureInputs.positionalParameters.forEach(param => {
-        const argument = new Argument(param.name, param.description + (param.required ? ` (required)` : ''))
+        const descriptionParts = [
+          // param.type, //
+          param.description,
+          param.required ? '(required)' : '',
+        ]
+        const argument = new Argument(param.name, descriptionParts.join(' '))
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
@@ -272,6 +280,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           command.addOption(option)
           return
         }
+        if (rootTypes.length === 2 && rootTypes[0] === 'number' && rootTypes[1] === 'string') {
+          const option = new Option(`${flags} ${bracketise('value')}`, description)
+          option.argParser(value => {
+            const number = numberParser(value, {fallback: null})
+            return number ?? value
+          })
+          if (defaultValue.exists) option.default(defaultValue.value)
+          command.addOption(option)
+          return
+        }
 
         if (rootTypes.length !== 1) {
           const option = new Option(`${flags} ${bracketise('json')}`, `${description} (value will be parsed as JSON)`)
@@ -307,7 +325,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option.argParser(value => numberParser(value))
         } else if (propertyType === 'array') {
           option = new Option(`${flags} [values...]`, description)
-          option.default(defaultValue.exists ? defaultValue.value : [])
+          if (defaultValue.exists) option.default(defaultValue.value)
+          else if (isValueRequired) option.default([])
           const itemTypes =
             'items' in propertyValue && propertyValue.items
               ? getSchemaTypes(propertyValue.items as JsonSchema7Type)
@@ -544,6 +563,9 @@ function transformError(err: unknown, command: Command) {
       } finally {
         cause.issues = originalIssues
       }
+    }
+    if (err.code === 'BAD_REQUEST' && err.cause?.constructor?.name === 'TraversalError') {
+      return new CliValidationError(err.cause.message + '\n\n' + command.helpInformation())
     }
     if (err.code === 'INTERNAL_SERVER_ERROR') {
       return cause

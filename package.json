@@ -34,9 +34,8 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
-    "omelette": ">=0.4.17",
     "@trpc/server": ">=10",
-    "zod": ">=3"
+    "omelette": ">=0.4.17"
   },
   "peerDependenciesMeta": {
     "omelette": {
@@ -54,12 +53,14 @@
     "@types/omelette": "^0.4.4",
     "commander": "^13.1.0",
     "picocolors": "^1.0.1",
-    "zod": "^3.23.8",
+    "zod": "^3.24.2",
     "zod-to-json-schema": "^3.23.0",
     "zod-validation-error": "^3.3.0"
   },
   "devDependencies": {
-    "@types/node": "22.13.10",
+    "@types/json-schema": "7.0.15",
+    "@types/node": "20.16.11",
+    "arktype": "2.1.9",
     "eslint": "8",
     "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb",
     "execa": "9.3.1",

@@ -13,6 +13,7 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Ignored procedures](#ignored-procedures)
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
+- [arktype](#arktype)
 - [tRPC v10 vs v11](#trpc-v10-vs-v11)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Testing your CLI](#testing-your-cli)
@@ -308,7 +309,7 @@ Note: by design, `createCli` simply collects these procedures rather than throwi
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L64)
+#### [createCli](./src/index.ts#L65)
 
 Run a trpc router as a CLI.
 
@@ -443,6 +444,7 @@ Arguments:
 
 Options:
   -h, --help   display help for command
+
 ```
 <!-- codegen:end -->
 
@@ -503,6 +505,30 @@ const appRouter = trpc.router({
     .mutation(({input}) => input.left / input.right),
 })
 ```
+
+## arktype
+
+You can also use arktype to validate your inputs.
+
+```ts
+import {type} from 'arktype'
+import {type TrpcCliMeta} from 'trpc-cli'
+
+const t = initTRPC.meta<TrpcCliMeta>().create()
+
+const router = t.router({
+  add: t.procedure
+    .input(type({left: 'number', right: 'number'}))
+    .query(({input}) => input.left + input.right),
+})
+
+const cli = createCli({router})
+
+cli.run() // e.g. `mycli add --left 1 --right 2`
+```
+
+Note: you will need to install `arktype` as a dependency separately
+Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` flag to pass in a JSON string. Check your CLI help text to see if this is the case.
 
 ## tRPC v10 vs v11
 
@@ -958,11 +984,15 @@ You can then use tab-completion to autocomplete commands and flags.
 
 ### Implementation and dependencies
 
+All dependencies have zero dependencies of their own, so the dependency tree is very shallow.
+
+- [@trpc/server](https://npmjs.com/package/@trpc/server) for the trpc router
 - [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
+- [zod](https://npmjs.com/package/zod) for input validation, included for convenience
 - [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod schemas to make them easier to recurse and format help text from
 - [zod-validation-error](https://npmjs.com/package/zod-validation-error) to make bad inputs have readable error messages
 
-`zod` and `@tprc/server` are peer dependencies - right now only zod 3+ and @trpc/server 10+ have been tested, but it may work with most versions of zod.
+`zod` and `@tprc/server` are included as dependencies for convenience, but you can use your own separate installations if you prefer. Zod 3+ and @trpc/server 10 and 11, have been tested. It should work with most versions of zod.
 
 ### Testing
 

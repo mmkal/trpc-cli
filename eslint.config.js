@@ -1,1 +1,4 @@
-module.exports = require('eslint-plugin-mmkal').recommendedFlatConfigs
+module.exports = [
+  ...require('eslint-plugin-mmkal').recommendedFlatConfigs,
+  {ignores: ['**/*ignoreme*']}, //
+]
