@@ -13,7 +13,10 @@ Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, docume
    - [Ignored procedures](#ignored-procedures)
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
-- [arktype](#arktype)
+- [Validators](#validators)
+   - [zod](#zod)
+   - [arktype](#arktype)
+   - [valibot](#valibot)
 - [tRPC v10 vs v11](#trpc-v10-vs-v11)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Testing your CLI](#testing-your-cli)
@@ -506,9 +509,19 @@ const appRouter = trpc.router({
 })
 ```
 
-## arktype
+## Validators
 
-You can also use arktype to validate your inputs.
+You can use any validator that [trpc supports](https://trpc.io/docs/server/validators), but for inputs to be converted into CLI arguments/options, they must be JSON schema compatible. The following validators are supported so far. Contributions are welcome for other validators - the requirement is that they must have a helper function that converts them into a JSON schema representation.
+
+Note that JSON schema representations are not in general perfect 1-1 mappings with every validator library's API, so some procedures may default to use the JSON `--input` flag instead.
+
+### zod
+
+Zod support is built-in, including the `zod-to-json-schema` conversion helper. You can also "bring your own" zod module (e.g. if you want to use a newer/older version of zod than the one included in `trpc-cli`).
+
+### arktype
+
+`arktype` includes a `toJsonSchema` method on its types, so no extra dependencies are reuqired if you're using arktype to validate your inputs.
 
 ```ts
 import {type} from 'arktype'
@@ -528,7 +541,30 @@ cli.run() // e.g. `mycli add --left 1 --right 2`
 ```
 
 Note: you will need to install `arktype` as a dependency separately
-Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` flag to pass in a JSON string. Check your CLI help text to see if this is the case.
+Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` flag to pass in a JSON string. Check your CLI help text to see if this is the case. See https://github.com/arktypeio/arktype/issues/1379 for more info.
+
+### valibot
+
+Valibot support is enabled via the `@valibot/to-json-schema` package. Simply install it as a dependency and it should work. If you don't have it installed, your procedures will be mapped to commands that accept a plain JSON string as input (the help text will include a message explaining how to get richer input options).
+
+```ts
+import {type TrpcCliMeta} from 'trpc-cli'
+import * as v from 'valibot'
+
+const t = initTRPC.meta<TrpcCliMeta>().create()
+
+const router = t.router({
+  add: t.procedure
+    .input(v.tuple([v.number(), v.number()]))
+    .query(({input}) => input[0] + input[1]),
+})
+
+const cli = createCli({router})
+
+cli.run() // e.g. `mycli add 1 2`
+```
+
+Note: some valibot features like `v.pipe(...)` can not be converted to JSON schema by `@valibot/to-json-schema`. For these cases, trpc-cli will transform the input schema before converting to JSON schema. If you spot any problems with this, please raise an issue.
 
 ## tRPC v10 vs v11
 

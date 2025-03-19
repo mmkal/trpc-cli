@@ -62,7 +62,7 @@ function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
       }
       return {
         success: true,
-        value: valibotToJsonSchema(input as never),
+        value: valibotToJsonSchema(prepareValibotSchema(input)),
       }
     }
     if (vendor === 'arktype') {
@@ -138,8 +138,8 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
           {
             type: 'string',
             array: false,
-            description: mergedSchema.description || 'a string of some kind',
-            name: 'string',
+            description: mergedSchema.description || '',
+            name: mergedSchema.title || 'string',
             required: true,
           },
         ],
@@ -207,7 +207,7 @@ function isOptional(schema: JSONSchema7Definition) {
 
 function parseLiteralInput(schema: JSONSchema7): Result<ParsedProcedure> {
   const type = acceptedLiteralTypes(schema).at(0)
-  const name = (schema.description || type || 'value').replaceAll(/\s+/g, '_')
+  const name = (schema.title || type || 'value').replaceAll(/\s+/g, '_')
   return {
     success: true,
     value: {
@@ -459,7 +459,8 @@ const parameterName = (s: JSONSchema7Definition, position: number): string => {
     return `[${elementName.slice(1, -1)}...]`
   }
   // commander requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
-  const name = schemaDefPropValue(s, 'description') || `parameter_${position}`.replaceAll(/\W+/g, ' ').trim()
+  let name = schemaDefPropValue(s, 'title') || schemaDefPropValue(s, 'description') || `parameter_${position}`
+  name = name.replaceAll(/\W+/g, ' ').trim()
   return isOptional(s) ? `[${name}]` : `<${name}>`
 }
 
@@ -502,3 +503,45 @@ const parameterName = (s: JSONSchema7Definition, position: number): string => {
 const acceptsObject = (schema: JSONSchema7): boolean => {
   return (schema.type === 'object' || schema.anyOf?.some(sub => acceptsObject(toRoughJsonSchema7(sub)))) ?? false
 }
+
+// #region vendor preprocessors
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
+/**
+ * Takes a valibot schema and returns a pseudo-schema that can be converted to JSON schema.
+ * It effectively throws out all (meaningful) `pipe` logic - i.e. only the "first" validator and metadata are considered.
+ */
+function prepareValibotSchema(obj: any): any {
+  // If input is not an object or is null, return it as is
+  if (typeof obj !== 'object' || obj === null) {
+    return obj
+  }
+
+  // If object has a pipe property that's an array, return its first element
+  if ('pipe' in obj && Array.isArray(obj.pipe) && obj.pipe.length > 0) {
+    // in general we just want to keep the first validator, but we also want to keep metadata like description/title
+    const whitelisted = (obj.pipe as any[]).filter((p, i) => {
+      if (i === 0) return true
+      if (p?.kind === 'metadata') return true
+      return false
+    })
+    return {...obj, pipe: whitelisted}
+  }
+
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map(item => prepareValibotSchema(item))
+  }
+
+  // Handle regular objects
+  const result: any = {}
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      result[key] = prepareValibotSchema(obj[key])
+    }
+  }
+  return result
+}
+// #endregion

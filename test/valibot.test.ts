@@ -125,14 +125,13 @@ test('refine in a union pedantry', async () => {
 
   // Valibot should handle this better than arktype did
   await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options]
+    "Usage: program foo [options] <string>
+
+    Arguments:
+      string       (required)
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Failed to convert input to JSON
-                      Schema: A "pipe" with multiple schemas cannot be converted to
-                      JSON Schema.)
-      -h, --help      display help for command
+      -h, --help  display help for command
     "
   `)
   // expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
@@ -188,6 +187,25 @@ test('literal input', async () => {
   `)
 })
 
+test('description', async () => {
+  const router = t.router({
+    delete: t.procedure
+      .input(v.pipe(v.string(), v.title('filepath'), v.description('path to file for deletion'))) //
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['delete', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program delete [options] <filepath>
+
+    Arguments:
+      filepath    path to file for deletion (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
+})
+
 test('optional input', async () => {
   const router = t.router({
     foo: t.procedure
@@ -199,7 +217,7 @@ test('optional input', async () => {
     "Usage: program foo [options] <string>
 
     Arguments:
-      string      a string of some kind (required)
+      string       (required)
 
     Options:
       -h, --help  display help for command
@@ -454,14 +472,13 @@ test('number array input with constraints', async () => {
   })
 
   await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options]
+    "Usage: program foo [options] <parameter_1...>
+
+    Arguments:
+      parameter_1   (required)
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Failed to convert input to JSON
-                      Schema: A "pipe" with multiple schemas cannot be converted to
-                      JSON Schema.)
-      -h, --help      display help for command
+      -h, --help   display help for command
     "
   `)
 })
