@@ -432,7 +432,7 @@ function getVendor(schema: unknown) {
 
 function looksJsonSchemaable(value: unknown) {
   const vendor = getVendor(value)
-  return vendor === 'zod' || vendor === 'arktype' || vendor === 'valibot'
+  return !!vendor && vendor in jsonSchemaConverters
 }
 
 function prepareArktypeType(type: any) {
