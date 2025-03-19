@@ -564,7 +564,7 @@ const cli = createCli({router})
 cli.run() // e.g. `mycli add 1 2`
 ```
 
-Note: some valibot features like `v.pipe(...)` can not be converted to JSON schema by `@valibot/to-json-schema`. For these cases, trpc-cli will transform the input schema before converting to JSON schema. If you spot any problems with this, please raise an issue.
+Note: some valibot features like `v.pipe(...)` can not be converted to JSON schema by `@valibot/to-json-schema`. For these cases, trpc-cli will transform the input schema before converting to JSON schema. If you spot any problems with this, please raise an issue or add your use case in the [related valibot issue](https://github.com/fabian-hiller/valibot/issues/1090).
 
 ## tRPC v10 vs v11
 
