@@ -416,6 +416,13 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 const jsonSchemaConverters = {
   zod: (input: unknown) => zodToJsonSchema(input as never) as JSONSchema7,
   arktype: (input: unknown) => prepareArktypeType(input).toJsonSchema(),
+  valibot: (input: unknown) => {
+    const valibotToJsonSchema = getValibotToJsonSchema()
+    if (!valibotToJsonSchema) {
+      throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`)
+    }
+    return valibotToJsonSchema(prepareValibotSchema(input))
+  },
 } satisfies Record<string, (input: unknown) => JSONSchema7>
 
 function getVendor(schema: unknown) {
