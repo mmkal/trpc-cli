@@ -564,7 +564,11 @@ function transformError(err: unknown, command: Command) {
         cause.issues = originalIssues
       }
     }
-    if (err.code === 'BAD_REQUEST' && err.cause?.constructor?.name === 'TraversalError') {
+    if (
+      err.code === 'BAD_REQUEST' &&
+      (err.cause?.constructor?.name === 'TraversalError' || // arktype error
+        err.cause?.constructor?.name === 'StandardSchemaV1Error') // valibot error
+    ) {
       return new CliValidationError(err.cause.message + '\n\n' + command.helpInformation())
     }
     if (err.code === 'INTERNAL_SERVER_ERROR') {
