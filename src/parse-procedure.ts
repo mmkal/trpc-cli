@@ -416,6 +416,13 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 const jsonSchemaConverters = {
   zod: (input: unknown) => zodToJsonSchema(input as never) as JSONSchema7,
   arktype: (input: unknown) => prepareArktypeType(input).toJsonSchema(),
+  valibot: (input: unknown) => {
+    const valibotToJsonSchema = getValibotToJsonSchema()
+    if (!valibotToJsonSchema) {
+      throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`)
+    }
+    return valibotToJsonSchema(prepareValibotSchema(input))
+  },
 } satisfies Record<string, (input: unknown) => JSONSchema7>
 
 function getVendor(schema: unknown) {
@@ -441,4 +448,45 @@ function prepareArktypeType(type: any) {
   return innerType as {toJsonSchema: () => JSONSchema7}
 }
 
-// #endregion vendor
+function getValibotToJsonSchema() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('@valibot/to-json-schema').toJsonSchema as (input: unknown) => JSONSchema7
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Takes a valibot schema and returns a pseudo-schema that can be converted to JSON schema.
+ * It effectively throws out all (meaningful) `pipe` logic - i.e. only the "first" validator and metadata are considered.
+ */
+function prepareValibotSchema(obj: any): any {
+  if (typeof obj !== 'object' || obj === null) {
+    return obj
+  }
+
+  if ('pipe' in obj && Array.isArray(obj.pipe) && obj.pipe.length > 0) {
+    // in general we just want to keep the first validator, but we also want to keep metadata like description/title
+    const whitelisted = (obj.pipe as any[]).filter((p, i) => {
+      if (i === 0) return true
+      if (p?.kind === 'metadata') return true
+      return false
+    })
+    return {...obj, pipe: whitelisted}
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => prepareValibotSchema(item))
+  }
+
+  const result: any = {}
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      result[key] = prepareValibotSchema(obj[key])
+    }
+  }
+  return result
+}
+
+// #endregion vendor specific stuff
