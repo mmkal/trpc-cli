@@ -5,6 +5,25 @@ import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Result, ParsedProcedure} from './types'
 
+/**
+ * Attempts to convert a trpc procedure input to JSON schema.
+ * Uses @see jsonSchemaConverters to convert the input to JSON schema.
+ */
+function toJsonSchema(input: unknown): Result<JSONSchema7> {
+  try {
+    const vendor = getVendor(input)
+    if (vendor && vendor in jsonSchemaConverters) {
+      const converter = jsonSchemaConverters[vendor as keyof typeof jsonSchemaConverters]
+      return {success: true, value: converter(input)}
+    }
+
+    return {success: false, error: `Schema not convertible to JSON schema`}
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return {success: false, error: `Failed to convert input to JSON Schema: ${message}`}
+  }
+}
+
 function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: string} {
   return (
     typeof value === 'object' &&
@@ -393,27 +412,11 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 
-/**
- * Attempts to convert a trpc procedure input to JSON schema.
- * For zod types, this uses `zod-to-json-schema`.
- * For other types, it assumes the type has a `toJsonSchema` method (e.g. arktype).
- */
-function toJsonSchema(input: unknown): Result<JSONSchema7> {
-  try {
-    const vendor = getVendor(input)
-    if (vendor === 'zod') {
-      return {success: true, value: zodToJsonSchema(input as never) as JSONSchema7}
-    }
-    if (vendor === 'arktype') {
-      return {success: true, value: prepareArktypeType(input).toJsonSchema()}
-    }
-
-    return {success: false, error: `Schema not convertible to JSON schema`}
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    return {success: false, error: `Failed to convert input to JSON Schema: ${message}`}
-  }
-}
+/** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
+const jsonSchemaConverters = {
+  zod: (input: unknown) => zodToJsonSchema(input as never) as JSONSchema7,
+  arktype: (input: unknown) => prepareArktypeType(input).toJsonSchema(),
+} satisfies Record<string, (input: unknown) => JSONSchema7>
 
 function getVendor(schema: unknown) {
   // note: don't check for typeof schema === 'object' because arktype schemas are functions (you call them directly instead of `.parse(...)`)
@@ -425,9 +428,9 @@ function looksJsonSchemaable(value: unknown) {
   return vendor === 'zod' || vendor === 'arktype'
 }
 
-function prepareArktypeType(input: any) {
+function prepareArktypeType(type: any) {
   /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-constant-condition, @typescript-eslint/no-explicit-any */
-  let innerType = input
+  let innerType = type
   while (innerType) {
     if (innerType?.in && innerType.in !== innerType) {
       innerType = innerType.in
