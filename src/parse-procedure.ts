@@ -1,11 +1,9 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
-import {z as zod} from 'zod'
 import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Result, ParsedProcedure} from './types'
-import {looksLikeInstanceof} from './util'
 
 function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: string} {
   return (
@@ -15,51 +13,6 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
       'const' in value ||
       'anyOf' in value)
   )
-}
-
-type JsonSchemaable = zod.ZodType | {toJsonSchema: () => JSONSchema7}
-
-function looksJsonSchemaable(value: unknown): value is JsonSchemaable {
-  const val = value as null | undefined | {toJsonSchema?: unknown}
-  return (
-    looksLikeInstanceof(val, zod.ZodType as new (...args: unknown[]) => zod.ZodType) ||
-    (!!val && 'toJsonSchema' in val && typeof val.toJsonSchema === 'function')
-  )
-}
-
-/**
- * Attempts to convert a trpc procedure input to JSON schema.
- * For zod types, this uses `zod-to-json-schema`.
- * For other types, it assumes the type has a `toJsonSchema` method (e.g. arktype).
- */
-function toJsonSchema(input: JsonSchemaable): Result<JSONSchema7> {
-  try {
-    input = getInnerType(input)
-    const jsonSchema = 'toJsonSchema' in input ? input.toJsonSchema() : (zodToJsonSchema(input as never) as JSONSchema7)
-    Object.defineProperty(jsonSchema, 'originalSchema', {value: input, enumerable: false})
-    return {
-      success: true,
-      value: jsonSchema,
-    }
-  } catch (e) {
-    return {
-      success: false,
-      error: `Failed to convert input to JSON Schema: ${e instanceof Error ? e.message : String(e)}`,
-    }
-  }
-}
-
-function getInnerType(input: JsonSchemaable): JsonSchemaable {
-  /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-constant-condition, @typescript-eslint/no-explicit-any */
-  let value = input as any
-  while (true) {
-    if (value?.in && value.in !== value) {
-      value = value.in
-      continue
-    }
-    break
-  }
-  return value as JsonSchemaable
 }
 
 export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure> {
@@ -108,8 +61,8 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
           {
             type: 'string',
             array: false,
-            description: mergedSchema.description || 'a string of some kind',
-            name: 'string',
+            description: mergedSchema.description || '',
+            name: mergedSchema.title || 'string',
             required: true,
           },
         ],
@@ -126,10 +79,6 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
   if (isTuple(mergedSchema)) {
     return parseTupleInput(mergedSchema)
   }
-
-  // if (looksLikeArray(mergedSchema) && acceptedLiteralTypes(mergedSchema.element).length > 0) {
-  //   return parseArrayInput(mergedSchema)
-  // }
 
   if (mergedSchema.type === 'array') {
     return parseArrayInput(mergedSchema as JSONSchema7 & {items: {type: unknown}})
@@ -177,7 +126,7 @@ function isOptional(schema: JSONSchema7Definition) {
 
 function parseLiteralInput(schema: JSONSchema7): Result<ParsedProcedure> {
   const type = acceptedLiteralTypes(schema).at(0)
-  const name = (schema.description || type || 'value').replaceAll(/\s+/g, '_')
+  const name = (schema.title || schema.description || type || 'value').replaceAll(/\s+/g, '_')
   return {
     success: true,
     value: {
@@ -429,46 +378,64 @@ const parameterName = (s: JSONSchema7Definition, position: number): string => {
     return `[${elementName.slice(1, -1)}...]`
   }
   // commander requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
-  const name = schemaDefPropValue(s, 'description') || `parameter_${position}`.replaceAll(/\W+/g, ' ').trim()
+  let name = schemaDefPropValue(s, 'title') || schemaDefPropValue(s, 'description') || `parameter_${position}`
+  name = name.replaceAll(/\W+/g, ' ').trim()
   return isOptional(s) ? `[${name}]` : `<${name}>`
 }
 
-/**
- * Curried function which tells you whether a given zod type accepts any inputs of a given target type.
- * Useful for static validation, and for deciding whether to preprocess a string input before passing it to a zod schema.
- * @example
- * const acceptsString = accepts(z.string())
- *
- * acceptsString(z.string()) // true
- * acceptsString(z.string().nullable()) // true
- * acceptsString(z.string().optional()) // true
- * acceptsString(z.string().nullish()) // true
- * acceptsString(z.number()) // false
- * acceptsString(z.union([z.string(), z.number()])) // true
- * acceptsString(z.union([z.number(), z.boolean()])) // false
- * acceptsString(z.intersection(z.string(), z.number())) // false
- * acceptsString(z.intersection(z.string(), z.string().max(10))) // true
- */
-// export function accepts<ZodTarget extends z.ZodType>(target: ZodTarget) {
-//   const test = (zodType: z.ZodType): boolean => {
-//     const innerType = getInnerType(zodType)
-//     if (looksLikeInstanceof(innerType, target.constructor as new (...args: unknown[]) => ZodTarget)) return true
-//     if (looksLikeInstanceof(innerType, z.ZodLiteral)) return target.safeParse(innerType.value).success
-//     if (looksLikeInstanceof(innerType, z.ZodEnum)) return innerType.options.some(o => target.safeParse(o).success)
-//     if (looksLikeInstanceof(innerType, z.ZodUnion)) return innerType.options.some(test)
-//     if (looksLikeInstanceof<z.ZodEffects<z.ZodType>>(innerType, z.ZodEffects)) return test(innerType.innerType())
-//     if (looksLikeInstanceof<z.ZodIntersection<z.ZodType, z.ZodType>>(innerType, z.ZodIntersection))
-//       return test(innerType._def.left) && test(innerType._def.right)
-
-//     return false
-//   }
-//   return test
-// }
-
-// const acceptsString = accepts(z.string())
-// const acceptsNumber = accepts(z.number())
-// const acceptsBoolean = accepts(z.boolean())
-// const acceptsObject = accepts(z.object({}))
 const acceptsObject = (schema: JSONSchema7): boolean => {
   return (schema.type === 'object' || schema.anyOf?.some(sub => acceptsObject(toRoughJsonSchema7(sub)))) ?? false
 }
+
+// #region vendor specific stuff
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
+/**
+ * Attempts to convert a trpc procedure input to JSON schema.
+ * For zod types, this uses `zod-to-json-schema`.
+ * For other types, it assumes the type has a `toJsonSchema` method (e.g. arktype).
+ */
+function toJsonSchema(input: unknown): Result<JSONSchema7> {
+  try {
+    const vendor = getVendor(input)
+    if (vendor === 'zod') {
+      return {success: true, value: zodToJsonSchema(input as never) as JSONSchema7}
+    }
+    if (vendor === 'arktype') {
+      return {success: true, value: prepareArktypeType(input).toJsonSchema()}
+    }
+
+    return {success: false, error: `Schema not convertible to JSON schema`}
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return {success: false, error: `Failed to convert input to JSON Schema: ${message}`}
+  }
+}
+
+function getVendor(schema: unknown) {
+  // note: don't check for typeof schema === 'object' because arktype schemas are functions (you call them directly instead of `.parse(...)`)
+  return (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor ?? null
+}
+
+function looksJsonSchemaable(value: unknown) {
+  const vendor = getVendor(value)
+  return vendor === 'zod' || vendor === 'arktype'
+}
+
+function prepareArktypeType(input: any) {
+  /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-constant-condition, @typescript-eslint/no-explicit-any */
+  let innerType = input
+  while (innerType) {
+    if (innerType?.in && innerType.in !== innerType) {
+      innerType = innerType.in
+    } else {
+      break
+    }
+  }
+  return innerType as {toJsonSchema: () => JSONSchema7}
+}
+
+// #endregion vendor

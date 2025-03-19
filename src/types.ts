@@ -19,7 +19,7 @@ export type TrpcCliParams<R extends AnyRouter> = {
 
 /** Rough shape of the `@trpc/server` (v11) module. Needed to pass in to `createCli` when using trpc v11. */
 export type TrpcServerModuleLike = {
-  initTRPC: {create: () => {createCallerFactory: CreateCallerFactoryLike}}
+  initTRPC: {create: () => {createCallerFactory: CreateCallerFactoryLike<{}>}}
 }
 
 /**
