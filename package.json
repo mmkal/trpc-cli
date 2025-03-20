@@ -73,7 +73,7 @@
     "trpcserver10": "npm:@trpc/server@10.45.2",
     "trpcserver11": "npm:@trpc/server@11.0.0-rc.840",
     "tsx": "4.19.3",
-    "typescript": "5.6.3",
+    "typescript": "5.8.2",
     "valibot": "1.0.0",
     "vitest": "2.1.9"
   }
