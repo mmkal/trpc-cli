@@ -97,7 +97,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
                 },
               },
             },
-            getPojoInput: parsedCliParams => JSON.parse(parsedCliParams.options.input as string) as {},
+            getPojoInput: parsedCliParams => {
+              if (parsedCliParams.options.input == null) return parsedCliParams.options.input
+              return JSON.parse(parsedCliParams.options.input as string) as {}
+            },
           },
           incompatiblePairs: [],
           type,
@@ -182,7 +185,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       })
 
       const unusedFlagAliases: Record<string, string> = {...meta.aliases?.flags}
-      Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
+      const addOptionForProperty = ([propertyKey, propertyValue]: [string, JsonSchema7Type]) => {
         const description = getDescription(propertyValue)
 
         const longOption = `--${kebabCase(propertyKey)}`
@@ -356,7 +359,19 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         )
 
         command.addOption(option)
-      })
+      }
+
+      if (
+        'additionalProperties' in procedureInputs.optionsJsonSchema &&
+        procedureInputs.optionsJsonSchema.additionalProperties !== false
+      ) {
+        program.allowUnknownOption()
+        program.allowExcessArguments()
+        command.allowUnknownOption()
+        command.allowExcessArguments()
+      }
+
+      Object.entries(flagJsonSchemaProperties).forEach(addOptionForProperty)
 
       const invalidFlagAliases = Object.entries(unusedFlagAliases).map(([flag, alias]) => `${flag}: ${alias}`)
       if (invalidFlagAliases.length) {
@@ -368,6 +383,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         program.__ran ||= []
         program.__ran.push(command)
         const options = command.opts()
+        // console.dir({options, args}, {depth: null})
 
         if (args.at(-2) !== options) {
           // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break

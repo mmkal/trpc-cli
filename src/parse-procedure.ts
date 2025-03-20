@@ -72,6 +72,10 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
 }
 
 function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> {
+  if (mergedSchema.additionalProperties) {
+    return {success: false, error: `Inputs with additional properties are not currently supported`}
+  }
+
   if (mergedSchema.type === 'string') {
     return {
       success: true,
