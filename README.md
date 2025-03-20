@@ -1,6 +1,8 @@
 # trpc-cli [![Build Status](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/mmkal/trpc-cli/actions/workflows/ci.yml/badge.svg) [![npm](https://badgen.net/npm/v/trpc-cli)](https://www.npmjs.com/package/trpc-cli) [![X Follow](https://img.shields.io/twitter/follow/mmkalmmkal)](https://x.com/mmkalmmkal)
 
-Turn a [tRPC](https://trpc.io) router into a type-safe, fully-functional, documented CLI with autocomplete support.
+🔥 **Build production-quality command-line tools in minutes, not days** 🔥
+
+trpc-cli transforms your [tRPC](https://trpc.io) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, robust input validation, auto-generated help documentation, and command completion for free.
 
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
 - [Motivation](#motivation)
@@ -245,9 +247,7 @@ path/to/cli copy a.txt b.txt --mkdirp
 
 >Note: object types for flags must appear _last_ in the `.input(...)` tuple, when being used with positional parameters. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed.
 
-Procedures with incompatible inputs will be returned in the `ignoredProcedures` property.
-
->You can also pass an existing tRPC router that's primarily designed to be deployed as a server to it, in order to invoke your procedures directly, in development.
+>You can pass an existing tRPC router that's primarily designed to be deployed as a server, in order to invoke your procedures directly in development.
 
 #### JSON input
 
@@ -275,39 +275,28 @@ cli.run()
 
 The above can be invoked with either `yarn` or `yarn install`. You can also set `default: true` on subcommands, which makes them the default for their parent.
 
-### Ignored procedures
+### Complex inputs with JSON
 
-If a procedure has an input that cannot be mapped to positional parameters and CLI flags, it will be ignored. You can access the ignored procedures, along with the associated error messages encountered when trying to map those procedures into commands, with the `.ignoredProcedures` property.
+Procedures with inputs that cannot be cleanly mapped to positional parameters and CLI flags are automatically configured to accept a JSON string via the `--input` flag. This ensures that every procedure in your router is accessible via the CLI, even those with complex input types.
 
 ```ts
 const router = t.router({
   foo: t.procedure
-    // input can't be mapped to a command - tuples must start with string/number positional parameters:
+    // This input type can't be directly mapped to CLI arguments
+    // (object in the middle of a tuple doesn't work for positional args):
     .input(z.tuple([z.string(), z.object({abc: z.string()}), z.string()]))
-    .query(() => 'ok'),
+    .query(({input}) => `Got ${input[0]}, ${input[1].abc}, and ${input[2]}`),
 })
 
 const cli = createCli({router})
 
-if (cli.ignoredProcedures.length > 0) {
-  throw new Error(
-    `Some procedures weren't mapped into commands: ${JSON.stringify(cli.ignoredProcedures, null, 2)}`,
-  )
-}
+// Even though the input isn't ideal for CLI, you can still use it:
+// mycli foo --input '["first", {"abc": "middle"}, "last"]'
 ```
 
-The above will throw an error looking like:
+Rather than ignoring these procedures, trpc-cli makes them available through JSON input, allowing you to pass complex data structures that wouldn't work well with traditional CLI arguments.
 
-```
-Some procedures weren't mapped into commands: [
-  {
-    "procedure": "foo",
-    "reason": "Invalid input type [ZodString, ZodObject, ZodString]. Positional parameters must be strings or numbers."
-  }
-]
-```
-
-Note: by design, `createCli` simply collects these procedures rather than throwing so that you can pass any router to it - the procedures which _can_ be mapped into commands will still work. It is up to you if you want to throw if some are ignored.
+You can also explicitly opt into this behavior for any procedure by setting `jsonInput: true` in its meta, regardless of whether its input could be mapped to CLI arguments.
 
 ### API docs
 
