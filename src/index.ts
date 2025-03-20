@@ -361,16 +361,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         command.addOption(option)
       }
 
-      if (
-        'additionalProperties' in procedureInputs.optionsJsonSchema &&
-        procedureInputs.optionsJsonSchema.additionalProperties !== false
-      ) {
-        program.allowUnknownOption()
-        program.allowExcessArguments()
-        command.allowUnknownOption()
-        command.allowExcessArguments()
-      }
-
       Object.entries(flagJsonSchemaProperties).forEach(addOptionForProperty)
 
       const invalidFlagAliases = Object.entries(unusedFlagAliases).map(([flag, alias]) => `${flag}: ${alias}`)
