@@ -54,8 +54,8 @@ test('cli help add', async () => {
     to know how many apples there are in total.
 
     Arguments:
-      parameter_1   (required)
-      parameter_2   (required)
+      parameter_1  number (required)
+      parameter_2  number (required)
 
     Options:
       -h, --help   display help for command
@@ -72,8 +72,8 @@ test('cli help divide', async () => {
     and \`subtract\` isn't quite powerful enough for you.
 
     Arguments:
-      numerator    numerator (required)
-      denominator  denominator (required)
+      numerator    number numerator (required)
+      denominator  number denominator (required)
 
     Options:
       -h, --help   display help for command
@@ -102,8 +102,8 @@ test('cli add failure', async () => {
     to know how many apples there are in total.
 
     Arguments:
-      parameter_1   (required)
-      parameter_2   (required)
+      parameter_1  number (required)
+      parameter_2  number (required)
 
     Options:
       -h, --help   display help for command
@@ -128,8 +128,8 @@ test('cli divide failure', async () => {
     and \`subtract\` isn't quite powerful enough for you.
 
     Arguments:
-      numerator    numerator (required)
-      denominator  denominator (required)
+      numerator    number numerator (required)
+      denominator  number denominator (required)
 
     Options:
       -h, --help   display help for command
@@ -339,7 +339,7 @@ test('fs copy help', async () => {
 
     Arguments:
       Source path        Source path (required)
-      Destination path   Destination path
+      Destination path   string | null Destination path
 
     Options:
       --force [boolean]  Overwrite destination if it exists (default: false)

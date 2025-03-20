@@ -126,8 +126,8 @@ test('make sure parsing works correctly', async () => {
     Usage: program add [options] <parameter_1> <parameter_2>
 
     Arguments:
-      parameter_1   (required)
-      parameter_2   (required)
+      parameter_1  number (required)
+      parameter_2  number (required)
 
     Options:
       -h, --help   display help for command
