@@ -171,11 +171,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       procedureInputs.positionalParameters.forEach(param => {
         const descriptionParts = [
-          // param.type, //
+          param.type === 'string' ? '' : param.type, // "string" is the default assumption, don't bother showing it
           param.description,
           param.required ? '(required)' : '',
         ]
-        const argument = new Argument(param.name, descriptionParts.join(' '))
+        const argument = new Argument(param.name, descriptionParts.filter(Boolean).join(' '))
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
