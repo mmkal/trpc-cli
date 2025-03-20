@@ -12,7 +12,7 @@ trpc-cli transforms your [tRPC](https://trpc.io) router into a professional-grad
    - [Disclaimer](#disclaimer)
    - [Parameters and flags](#parameters-and-flags)
    - [Default command](#default-command)
-   - [Ignored procedures](#ignored-procedures)
+   - [Complex inputs with JSON](#complex-inputs-with-json)
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
 - [Validators](#validators)
@@ -431,8 +431,8 @@ Add two numbers. Use this if you and your friend both have apples, and you want
 to know how many apples there are in total.
 
 Arguments:
-  parameter_1   (required)
-  parameter_2   (required)
+  parameter_1  number (required)
+  parameter_2  number (required)
 
 Options:
   -h, --help   display help for command
@@ -465,8 +465,8 @@ Add two numbers. Use this if you and your friend both have apples, and you want
 to know how many apples there are in total.
 
 Arguments:
-  parameter_1   (required)
-  parameter_2   (required)
+  parameter_1  number (required)
+  parameter_2  number (required)
 
 Options:
   -h, --help   display help for command
