@@ -71,7 +71,7 @@
     "pkg-pr-new": "^0.0.41",
     "strip-ansi": "7.1.0",
     "trpcserver10": "npm:@trpc/server@10.45.2",
-    "trpcserver11": "npm:@trpc/server@11.0.0-rc.839",
+    "trpcserver11": "npm:@trpc/server@11.0.0-rc.840",
     "tsx": "4.19.1",
     "typescript": "5.6.3",
     "valibot": "1.0.0",
