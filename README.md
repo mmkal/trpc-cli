@@ -4,13 +4,17 @@
 
 trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, robust input validation, auto-generated help documentation, and command completion for free.
 
-✅ Get all of trpc's type safety and DX building a CLI
-✅ Automatic positional arguments and options via zod input types (or arktype, or valibot)
-✅ Easily add subcommands via nested trpc routers
-✅ Rich helptext out of the box
-✅ Batteries included - no need to install any other libraries (even trpc!)
-✅ Use advanced tRPC features like context and middleware in your CLI
-✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
+- ✅ Get all of trpc's type safety and DX building a CLI
+- ✅ Automatic positional arguments and options via zod input types (or arktype, or valibot)
+- ✅ Easily add subcommands via nested trpc routers
+- ✅ Rich helptext out of the box
+- ✅ Batteries included - no need to install any other libraries (even trpc!)
+- ✅ Use advanced tRPC features like context and middleware in your CLI
+- ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
+
+---
+
+## Contents
 
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
 - [Motivation](#motivation)
