@@ -329,8 +329,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option.argParser(value => numberParser(value))
         } else if (propertyType === 'array') {
           option = new Option(`${flags} [values...]`, description)
-          if (defaultValue.exists) option.default(defaultValue.value)
-          else if (isValueRequired) option.default([])
+          if (isValueRequired && !defaultValue.exists) option.default([])
           const itemTypes =
             'items' in propertyValue && propertyValue.items
               ? getSchemaTypes(propertyValue.items as JsonSchema7Type)
@@ -346,6 +345,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }
         }
         option ||= new Option(`${flags} [json]`, description)
+        if (defaultValue.exists && option.defaultValue !== defaultValue.value) {
+          option.default(defaultValue.value)
+        }
 
         if (option.flags.includes('<')) {
           option.makeOptionMandatory()

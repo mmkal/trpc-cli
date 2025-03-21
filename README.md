@@ -2,6 +2,8 @@
 
 🔥 **Build production-quality command-line tools in minutes, not days** 🔥
 
+![Demo](./docs/demo.gif)
+
 trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, robust input validation, auto-generated help documentation, and command completion for free.
 
 - ✅ Get all of trpc's type safety and DX building a CLI
@@ -726,7 +728,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:72faa81c6576474f5c9965523accbd81 -->
+<!-- hash:db92443db1beeaa3608be050420248a0 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -833,7 +835,7 @@ const router = trpc.router({
         )
       }),
   }),
-}) satisfies trpcCompat.Trpc10RouterLike
+}) satisfies trpcCompat.Trpc11RouterLike
 
 const cli = createCli({router})
 
