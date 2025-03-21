@@ -82,7 +82,7 @@ const router = trpc.router({
         return ctx.filter(migrations.filter(m => m.content.includes(input.searchTerm)))
       }),
   }),
-}) satisfies trpcCompat.Trpc10RouterLike
+}) satisfies trpcCompat.Trpc11RouterLike
 
 const cli = createCli({router})
 
