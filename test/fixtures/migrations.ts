@@ -8,7 +8,7 @@ const migrations = getMigrations()
 const searchProcedure = trpc.procedure
   .meta({
     aliases: {
-      flags: {status: 's'},
+      options: {status: 's'},
     },
   })
   .input(
@@ -72,7 +72,7 @@ const router = trpc.router({
       .meta({
         description: 'Look for migrations by their script content',
         aliases: {
-          flags: {searchTerm: 'q'},
+          options: {searchTerm: 'q'},
         },
       })
       .input(

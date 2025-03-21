@@ -27,7 +27,7 @@ export type TrpcServerModuleLike = {
  */
 
 export interface TrpcCliMeta {
-  /** Version of the script displayed in `--help` output. Use to avoid enabling `--version` flag. */
+  /** Version of the script displayed in `--help` output. Use to avoid enabling `--version` option. */
   version?: string
   /** Description of the script or command to display in `--help` output. */
   description?: string
@@ -40,8 +40,8 @@ export interface TrpcCliMeta {
   aliases?: {
     /** Aliases for the command. Note: take care to avoid conflicts with other commands. */
     command?: string[]
-    /** Aliases for the flags. Note: take care to avoid conflicts with other flags. An error will be thrown if an alias is defined for a non-existent flag. */
-    flags?: Record<string, string>
+    /** Aliases for the options. Note: take care to avoid conflicts with other options. An error will be thrown if an alias is defined for a non-existent option. */
+    options?: Record<string, string>
   }
   /** If true, will use a single CLI option expect the entire input to be parsed in as JSON, e.g. `--input '{"foo": "bar"}`. Can be useful to opt out of the default mapping of input schemas to CLI options. */
   jsonInput?: boolean

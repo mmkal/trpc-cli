@@ -260,7 +260,7 @@ test('tuple input with flags', async () => {
   `)
 })
 
-test('single character flag', async () => {
+test('single character option', async () => {
   const router = t.router({
     foo: t.procedure
       .input(z.object({a: z.string()})) //
@@ -302,10 +302,10 @@ test('command alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias', async () => {
+test('option alias', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'x'}}})
+      .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -316,10 +316,10 @@ test('flag alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias can be two characters', async () => {
+test('option alias can be two characters', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
+      .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -330,10 +330,10 @@ test('flag alias can be two characters', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias typo', async () => {
+test('option alias typo', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frooozenLockfile: 'x'}}})
+      .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -341,7 +341,7 @@ test('flag alias typo', async () => {
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
   await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
-    `Error: Invalid flag aliases: frooozenLockfile: x`,
+    `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
 

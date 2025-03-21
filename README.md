@@ -2,7 +2,15 @@
 
 🔥 **Build production-quality command-line tools in minutes, not days** 🔥
 
-trpc-cli transforms your [tRPC](https://trpc.io) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, robust input validation, auto-generated help documentation, and command completion for free.
+trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, robust input validation, auto-generated help documentation, and command completion for free.
+
+✅ Get all of trpc's type safety and DX building a CLI
+✅ Automatic positional arguments and options via zod input types (or arktype, or valibot)
+✅ Easily add subcommands via nested trpc routers
+✅ Rich helptext out of the box
+✅ Batteries included - no need to install any other libraries (even trpc!)
+✅ Use advanced tRPC features like context and middleware in your CLI
+✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
 - [Motivation](#motivation)
@@ -10,7 +18,7 @@ trpc-cli transforms your [tRPC](https://trpc.io) router into a professional-grad
 - [Usage](#usage)
    - [Quickstart](#quickstart)
    - [Disclaimer](#disclaimer)
-   - [Parameters and flags](#parameters-and-flags)
+   - [Parameters and options](#parameters-and-options)
    - [Default command](#default-command)
    - [Complex inputs with JSON](#complex-inputs-with-json)
    - [API docs](#api-docs)
@@ -35,7 +43,7 @@ trpc-cli transforms your [tRPC](https://trpc.io) router into a professional-grad
 
 ## Motivation
 
-tRPC offers best-in-class type-safety and DX for building "procedures" that validate their inputs, and abide by their own contracts. This library gives you all those DX benefits, and allows mapping the procedures directly to a CLI. This offers the easiest way to build a CLI while mapping parsed flags into strongly-typed inputs, and automatically outputs `--help` documentation that's always up-to-date.
+tRPC offers best-in-class type-safety and DX for building "procedures" that validate their inputs, and abide by their own contracts. This library gives you all those DX benefits, and allows mapping the procedures directly to a CLI. This offers the easiest way to build a CLI while mapping parsed options into strongly-typed inputs, and automatically outputs `--help` documentation that's always up-to-date.
 
 This isn't just the easiest and safest way to build a CLI, but you also get all the benefits of tRPC (and zod). For inputs, you can use zod regex types, transforms, refinements, and those will map directly into useful help-text for CLI users, and corresponding type correctness when maintaining your CLI program. You can also use tRPC context and middleware functionality just like you could if you were building a server. And as an added bonus, it becomes trivially easy to turn your CLI program into a fully-functional HTTP server. Or, you could add a "programmatic usage" to your library, just by wrapping your server with the built-in `createCaller` function from tRPC. This would all, of course, have runtime and compile-time type safety.
 
@@ -92,13 +100,13 @@ cli.run()
 
 >Note that this library is still v0, so parts of the API may change slightly. The basic usage of `createCli({router}).run()` will remain though, and any breaking changes will be published via release notes.
 
-### Parameters and flags
+### Parameters and options
 
-CLI positional parameters and flags are derived from each procedure's input type. Inputs use `zod` types for the procedure to be mapped to a CLI command.
+CLI positional arguments and options are derived from each procedure's input type. Inputs use `zod` types for the procedure to be mapped to a CLI command.
 
-#### Positional parameters
+#### positional arguments
 
-Positional parameters passed to the CLI can be declared with types representing strings, numbers or booleans:
+positional arguments passed to the CLI can be declared with types representing strings, numbers or booleans:
 
 ```ts
 t.router({
@@ -110,7 +118,7 @@ t.router({
 
 You can also use anything that accepts string, number, or boolean inputs, like `z.enum(['up', 'down'])`, `z.number().int()`, `z.literal(123)`, `z.string().regex(/^\w+$/)` etc.
 
-Multiple positional parameters can use a `z.tuple(...)` input type:
+Multiple positional arguments can use a `z.tuple(...)` input type:
 
 ```ts
 t.router({
@@ -122,11 +130,11 @@ t.router({
 
 Which is invoked like `path/to/cli add 2 3` (outputting `5`).
 
->Note: positional parameters can use `.optional()` or `.nullish()`, but not `.nullable()`.
+>Note: positional arguments can use `.optional()` or `.nullish()`, but not `.nullable()`.
 
->Note: positional parameters can be named using `.describe('name of parameter')`, but names should not include any special characters.
+>Note: positional arguments can be named using `.describe('name of parameter')`, but names should not include any special characters.
 
->Note: positional parameters are parsed based on the expected target type. Booleans must be written as `true` or `false`, spelled out. In most cases, though, you'd be better off using [flags](#flags) for boolean inputs.
+>Note: positional arguments are parsed based on the expected target type. Booleans must be written as `true` or `false`, spelled out. In most cases, though, you'd be better off using [options](#options) for boolean inputs.
 
 Array/spread parameters can use an array input type:
 
@@ -140,9 +148,9 @@ t.router({
 })
 ```
 
-Which is invoked like `path/to/cli lint file1 file2 file3 file4`.
+Which is invoked like `path/to/mycli lint file1 file2 file3 file4`.
 
-Array inputs can also be used with [flags](#flags) by nesting them in a tuple.
+Array inputs can also be used with [options](#options) by nesting them in a tuple.
 
 ```ts
 t.router({
@@ -166,14 +174,14 @@ t.router({
 
 Which could be invoked with any of:
 
-- `path/to/cli lint file1 file2 file3 file4 --max-warnings 10`
-- `path/to/cli lint file1 file2 file3 file4 --maxWarnings=10`
-- `path/to/cli lint --maxWarnings=10 file1 file2 file3 file4`
-- `path/to/cli lint --maxWarnings 10 file1 file2 file3 file4`
+- `mycli lint file1 file2 file3 file4 --max-warnings 10`
+- `mycli lint file1 file2 file3 file4 --maxWarnings=10`
+- `mycli lint --maxWarnings=10 file1 file2 file3 file4`
+- `mycli lint --maxWarnings 10 file1 file2 file3 file4`
 
-#### Flags
+#### Options
 
-`z.object(...)` inputs become flags (passed with `--foo bar` or `--foo=bar`) syntax. Values are accepted in `--kebab-case`, and are parsed like in most CLI programs:
+`z.object(...)` inputs become options (passed with `--foo bar` or `--foo=bar`) syntax. Values are accepted in `--kebab-case`, and are parsed like in most CLI programs:
 
 Strings:
 
@@ -204,7 +212,7 @@ Other types:
 - `z.object({ foo: z.object({ bar: z.number() }) })` will parse inputs as JSON:
    - `--foo '{"bar": 1}'` maps to `{foo: {bar: 1}}`
 
-Multi-word flags:
+Multi-word options:
 
 - `z.object({ multiWord: z.string() })` will map:
   - `--multi-word foo` to `{multiWord: 'foo'}`
@@ -213,7 +221,7 @@ Unions and intersections should also work as expected, but make sure to test the
 
 #### Both
 
-To use positional parameters _and_ flags, use a tuple with an object at the end:
+To use positional arguments _and_ options, use a tuple with an object at the end:
 
 ```ts
 t.router({
@@ -245,15 +253,9 @@ You might use the above with a command like:
 path/to/cli copy a.txt b.txt --mkdirp
 ```
 
->Note: object types for flags must appear _last_ in the `.input(...)` tuple, when being used with positional parameters. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed.
+>Note: object types for options must appear _last_ in the `.input(...)` tuple, when being used with positional arguments. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed.
 
 >You can pass an existing tRPC router that's primarily designed to be deployed as a server, in order to invoke your procedures directly in development.
-
-#### JSON input
-
-Some procedures have complex inputs that can't be mapped directly to positional parameters and flags. When this happens, the procedure must be called with a single `--input` flag, followed by a JSON string. It will simply be passed through to the procedure, which will then perform the usual input validation - including by tools other than zod. It's more inconvenient to type, but just as safe and powerful.
-
-You can also set `{jsonInput: true}` on the procedure's meta to opt in to this behaviour on any procedure.
 
 ### Default command
 
@@ -277,7 +279,7 @@ The above can be invoked with either `yarn` or `yarn install`. You can also set 
 
 ### Complex inputs with JSON
 
-Procedures with inputs that cannot be cleanly mapped to positional parameters and CLI flags are automatically configured to accept a JSON string via the `--input` flag. This ensures that every procedure in your router is accessible via the CLI, even those with complex input types.
+Procedures with inputs that cannot be cleanly mapped to positional arguments and CLI options are automatically configured to accept a JSON string via the `--input` option. This ensures that every procedure in your router is accessible via the CLI, even those with complex input types.
 
 ```ts
 const router = t.router({
@@ -301,16 +303,17 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L65)
+#### [createCli](./src/index.ts#L66)
 
 Run a trpc router as a CLI.
 
 ##### Params
 
-|name   |description                                                                              |
-|-------|-----------------------------------------------------------------------------------------|
-|router |A trpc router                                                                            |
-|context|The context to use when calling the procedures - needed if your router requires a context|
+|name      |description                                                                              |
+|----------|-----------------------------------------------------------------------------------------|
+|router    |A trpc router                                                                            |
+|context   |The context to use when calling the procedures - needed if your router requires a context|
+|trpcServer|The trpc server module to use. Only needed if using trpc v10.                            |
 
 ##### Returns
 
@@ -440,7 +443,7 @@ Options:
 ```
 <!-- codegen:end -->
 
-When passing a command along with its flags, the return value will be logged to stdout:
+When passing a command along with its options, the return value will be logged to stdout:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add 2 3'} -->
 `node path/to/calculator add 2 3` output:
@@ -475,7 +478,7 @@ Options:
 <!-- codegen:end -->
 
 
-Note that procedures can define [`meta`](https://trpc.io/docs/server/metadata#create-router-with-typed-metadata) value with `description`, `usage` and `help` props. Zod's [`describe`](https://zod.dev/?id=describe) method allows adding descriptions to individual flags.
+Note that procedures can define [`meta`](https://trpc.io/docs/server/metadata#create-router-with-typed-metadata) value with `description`, `usage` and `help` props. Zod's [`describe`](https://zod.dev/?id=describe) method allows adding descriptions to individual options.
 
 ```ts
 import {type TrpcCliMeta} from 'trpc-cli'
@@ -502,7 +505,7 @@ const appRouter = trpc.router({
 
 You can use any validator that [trpc supports](https://trpc.io/docs/server/validators), but for inputs to be converted into CLI arguments/options, they must be JSON schema compatible. The following validators are supported so far. Contributions are welcome for other validators - the requirement is that they must have a helper function that converts them into a JSON schema representation.
 
-Note that JSON schema representations are not in general perfect 1-1 mappings with every validator library's API, so some procedures may default to use the JSON `--input` flag instead.
+Note that JSON schema representations are not in general perfect 1-1 mappings with every validator library's API, so some procedures may default to use the JSON `--input` option instead.
 
 ### zod
 
@@ -529,8 +532,8 @@ const cli = createCli({router})
 cli.run() // e.g. `mycli add --left 1 --right 2`
 ```
 
-Note: you will need to install `arktype` as a dependency separately
-Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` flag to pass in a JSON string. Check your CLI help text to see if this is the case. See https://github.com/arktypeio/arktype/issues/1379 for more info.
+- Note: you will need to install `arktype` as a dependency separately
+- Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` option to pass in a JSON string. Check your CLI help text to see if this is the case. See https://github.com/arktypeio/arktype/issues/1379 for more info.
 
 ### valibot
 
@@ -553,11 +556,9 @@ const cli = createCli({router})
 cli.run() // e.g. `mycli add 1 2`
 ```
 
-Note: some valibot features like `v.pipe(...)` can not be converted to JSON schema by `@valibot/to-json-schema`. For these cases, trpc-cli will transform the input schema before converting to JSON schema. If you spot any problems with this, please raise an issue or add your use case in the [related valibot issue](https://github.com/fabian-hiller/valibot/issues/1090).
-
 ## tRPC v10 vs v11
 
-Both versions 10 and 11 of `@trpc/server` are both supported, but if using tRPC v11 you must pass in your `@trpc/server` module to `createCli`:
+Both versions 10 and 11 of `@trpc/server` are both supported. v11 is included in the dependencies of this packages, so that you can use it out of the box, but you can also use your own installation. If using tRPC v10 you must pass in your `@trpc/server` module to `createCli`:
 
 ```ts
 const cli = createCli({router, trpcServer: import('@trpc/server')})
@@ -570,7 +571,7 @@ const cli = createCli({router, trpcServer: await import('@trpc/server')})
 const cli = createCli({router, trpcServer: require('@trpc/server')})
 ```
 
-Note: in future, when trpc v11 is out of preview, there may be a new version of `trpc-cli` that will automatically support it (and may possibly require passing in the v10 module instead).
+Note: previously, when trpc v11 was in preview, v10 was included in the dependencies.
 
 ## Output and lifecycle
 
@@ -703,7 +704,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 - Return values are logged using `console.info` (can be configured to pass in a custom logger)
 - `process.exit(...)` called with either 0 or 1 depending on successful resolve
 - Help text shown on invalid inputs
-- Support flag aliases via `aliases` meta property (see migrations example below)
+- Support option aliases via `aliases` meta property (see migrations example below)
 - Union types work, but they should ideally be non-overlapping for best results
 - Limitation: Only zod types are supported right now
 - Limitation: Only object types are allowed as input. No positional arguments supported
@@ -720,7 +721,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:97ca7a803daf45d77855458dab42c340 -->
+<!-- hash:72faa81c6576474f5c9965523accbd81 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -732,7 +733,7 @@ const migrations = getMigrations()
 const searchProcedure = trpc.procedure
   .meta({
     aliases: {
-      flags: {status: 's'},
+      options: {status: 's'},
     },
   })
   .input(
@@ -809,7 +810,7 @@ const router = trpc.router({
       .meta({
         description: 'Look for migrations by their script content',
         aliases: {
-          flags: {searchTerm: 'q'},
+          options: {searchTerm: 'q'},
         },
       })
       .input(

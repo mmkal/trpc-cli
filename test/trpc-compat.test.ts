@@ -1,6 +1,6 @@
 import {initTRPC as initTRPC_v10} from 'trpcserver10'
 import {initTRPC as initTRPC_v11} from 'trpcserver11'
-import {expect, expectTypeOf, test, vi} from 'vitest'
+import {expect, expectTypeOf, test} from 'vitest'
 import {createCli, TrpcCliMeta, TrpcServerModuleLike, z} from '../src'
 import {Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat'
 
@@ -12,7 +12,9 @@ expect.addSnapshotSerializer({
   },
 })
 
-test('can create cli from trpc v10', async () => {
+test('trpc v10 shape check', async () => {
+  expectTypeOf(await import('trpcserver10')).toMatchTypeOf<TrpcServerModuleLike>()
+
   const t = initTRPC_v10.context<{customContext: true}>().meta<TrpcCliMeta>().create()
 
   const router = t.router({
@@ -51,22 +53,11 @@ test('can create cli from trpc v10', async () => {
     router._def.procedures.add._def._input_in satisfies [number, number]
     router._def.procedures.add._def._output_out satisfies number
   }
-
-  const cli = createCli({router})
-
-  expect(cli).toBeDefined()
-
-  const log = vi.fn()
-  const exit = vi.fn()
-  await expect(
-    cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}}),
-  ).rejects.toThrowError(/Program exit/)
-
-  expect(exit).toHaveBeenCalledWith(0)
-  expect(log).toHaveBeenCalledWith(3)
 })
 
-test('can create cli from trpc v11', async () => {
+test('trpc v11 shape check', async () => {
+  expectTypeOf(await import('trpcserver11')).toMatchTypeOf<TrpcServerModuleLike>()
+
   const t = initTRPC_v11.context<{customContext: true}>().meta<TrpcCliMeta>().create()
 
   const trpc = t
@@ -114,23 +105,9 @@ test('can create cli from trpc v11', async () => {
     router._def.procedures.add._def.$types.input satisfies [number, number]
     router._def.procedures.add._def.$types.output satisfies number
   }
-
-  expectTypeOf<typeof import('trpcserver11')>().toMatchTypeOf<TrpcServerModuleLike>()
-
-  const cli = createCli({router, trpcServer: import('trpcserver11')})
-
-  expect(cli).toBeDefined()
-
-  const log = vi.fn()
-  const exit = vi.fn()
-  await expect(
-    cli.run({argv: ['add', '1', '2'], logger: {info: log}, process: {exit: exit as never}}),
-  ).rejects.toThrowError(/Program exit/)
-  expect(exit).toHaveBeenCalledWith(0)
-  expect(log).toHaveBeenCalledWith(3)
 })
 
-test('error when using trpc v11 without createCallerFactory', async () => {
+test('trpc v11 works without hoop-jumping', async () => {
   const t = initTRPC_v11.context<{customContext: true}>().meta<TrpcCliMeta>().create()
 
   const router = t.router({
@@ -144,17 +121,62 @@ test('error when using trpc v11 without createCallerFactory', async () => {
 
   const cli = createCli({router})
 
-  const runAndCaptureProcessExit = async ({argv}: {argv: string[]}) => {
-    return cli.run({
-      argv,
-      logger: {error: () => void 0},
-      process: {exit: () => void 0 as never},
-    })
+  const runAndCaptureProcessExit = async ({argv}: {argv: string[]}): Promise<Error | undefined> => {
+    return cli
+      .run({argv, logger: {info: () => {}, error: () => {}}, process: {exit: () => void 0 as never}})
+      .catch(e => e)
   }
-  await expect(runAndCaptureProcessExit({argv: ['add', '1', '2']})).rejects.toThrowErrorMatchingInlineSnapshot(
-    `
-      [FailedToExitError: Program exit after failure. The process was expected to exit with exit code 1 but did not. This may be because a custom \`process\` parameter was used. The exit reason is in the \`cause\` property.]
-        Caused by: [Error: createCallerFactory version mismatch - pass in the \`@trpc/server\` module to \`createCli\` explicitly]
-    `,
+  const error = await runAndCaptureProcessExit({argv: ['add', '1', '2']})
+  expect(error).toMatchObject({exitCode: 0})
+  expect(error?.cause).toBe(3)
+})
+
+test('trpc v10 works when passing in trpcServer', async () => {
+  const t = initTRPC_v10.context<{customContext: true}>().meta<TrpcCliMeta>().create()
+
+  const router = t.router({
+    add: t.procedure
+      .meta({description: 'Add two numbers'})
+      .input(z.tuple([z.number(), z.number()])) //
+      .mutation(({input}) => {
+        return input[0] + input[1]
+      }),
+  })
+
+  const cli = createCli({router, trpcServer: import('trpcserver10')})
+
+  const runAndCaptureProcessExit = async ({argv}: {argv: string[]}): Promise<Error | undefined> => {
+    return cli
+      .run({argv, logger: {info: () => {}, error: () => {}}, process: {exit: () => void 0 as never}})
+      .catch(e => e)
+  }
+  const error = await runAndCaptureProcessExit({argv: ['add', '1', '2']})
+  expect(error).toMatchObject({exitCode: 0})
+  expect(error?.cause).toBe(3)
+})
+
+test('trpc v10 has helpful error when not passing in trpcServer', async () => {
+  const t = initTRPC_v10.context<{customContext: true}>().meta<TrpcCliMeta>().create()
+
+  const router = t.router({
+    add: t.procedure
+      .meta({description: 'Add two numbers'})
+      .input(z.tuple([z.number(), z.number()])) //
+      .mutation(({input}) => {
+        return input[0] + input[1]
+      }),
+  })
+
+  const cli = createCli({router})
+
+  const runAndCaptureProcessExit = async ({argv}: {argv: string[]}): Promise<Error | undefined> => {
+    return cli
+      .run({argv, logger: {info: () => {}, error: () => {}}, process: {exit: () => void 0 as never}})
+      .catch(e => e)
+  }
+  const error = await runAndCaptureProcessExit({argv: ['add', '1', '2']})
+  expect(error).toMatchObject({exitCode: 1})
+  expect(error?.cause).toMatchInlineSnapshot(
+    `[Error: Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the \`@trpc/server\` module to \`createCli\` explicitly]`,
   )
 })
