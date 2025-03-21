@@ -1,4 +1,5 @@
 import type {JsonSchema7ObjectType, JsonSchema7Type} from 'zod-to-json-schema'
+import {explain} from './explain-json-schema'
 
 const capitaliseFromCamelCase = (camel: string) => {
   const parts = camel.split(/(?=[A-Z])/)
@@ -69,6 +70,21 @@ export const incompatiblePropertyPairs = (sch: JsonSchema7Type): Array<[string, 
  * A few common properties are given special treatment, most others are just stringified and output in `key: value` format.
  */
 export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
+  if (Math.random()) {
+    const ex = explain(v, depth)
+      ?.trim()
+      .split('\n')
+      .map(line => line.slice(4))
+      // .map(l =>
+      //   l
+      //     .trim()
+      //     .replace(/^[ *]+/, '')
+      //     .trim(),
+      // )
+      .join('\n')
+      .trim()
+    // if (ex) return ex
+  }
   if ('items' in v && v.items) {
     const {items, ...rest} = v
     return [getDescription(items as JsonSchema7Type, 1), getDescription(rest), 'array'].filter(Boolean).join(' ')
@@ -91,7 +107,11 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
         if (typeof vv === 'object') return `${capitaliseFromCamelCase(k)}: ${JSON.stringify(vv)}`
         return `${capitaliseFromCamelCase(k)}: ${vv}`
       })
-      .join('; ') || ''
+      .join('; ') +
+    explain(v, depth, true)
+      ?.split('\n')
+      .map(line => line.trim())
+      .join('\n')
   )
 }
 
