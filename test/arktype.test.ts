@@ -292,7 +292,7 @@ test('tuple input with flags', async () => {
   )
 })
 
-test('single character flag', async () => {
+test('single character option', async () => {
   const router = t.router({
     foo: t.procedure
       .input(type({a: 'string'})) //
@@ -334,10 +334,10 @@ test('command alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias', async () => {
+test('option alias', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'x'}}})
+      .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(type({frozenLockfile: 'boolean'}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -348,10 +348,10 @@ test('flag alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias can be two characters', async () => {
+test('option alias can be two characters', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
+      .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(type({frozenLockfile: 'boolean'}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -362,10 +362,10 @@ test('flag alias can be two characters', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias typo', async () => {
+test('option alias typo', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frooozenLockfile: 'x'}}})
+      .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(type({frozenLockfile: 'boolean'}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -373,7 +373,7 @@ test('flag alias typo', async () => {
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
   await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
-    `Error: Invalid flag aliases: frooozenLockfile: x`,
+    `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
 
@@ -585,7 +585,7 @@ test('defaults and negations', async () => {
   expect(await run(router, ['optionalBoolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['defaultTrueBoolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  // todo: make this work - arktype doesn't report defaults to the produced json schema so we don't know to add the negation flag
+  // todo: make this work - arktype doesn't report defaults to the produced json schema so we don't know to add the negation option
   // expect(await run(router, ['defaultTrueBoolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['defaultFalseBoolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
