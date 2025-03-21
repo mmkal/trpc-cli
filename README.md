@@ -17,6 +17,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 ## Contents
 
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
+- [Contents](#contents)
 - [Motivation](#motivation)
 - [Installation](#installation)
 - [Usage](#usage)
