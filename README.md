@@ -10,7 +10,11 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - ✅ Rich helptext out of the box
 - ✅ Batteries included - no need to install any other libraries (even trpc!)
 - ✅ Use advanced tRPC features like context and middleware in your CLI
-✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
+- ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
+
+---
+
+## Contents
 
 <!-- codegen:start {preset: markdownTOC, maxDepth: 3} -->
 - [Motivation](#motivation)
