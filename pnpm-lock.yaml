@@ -70,8 +70,8 @@ importers:
         specifier: 7.1.0
         version: 7.1.0
       trpcserver10:
-        specifier: npm:@trpc/server@10.45.2
-        version: '@trpc/server@10.45.2'
+        specifier: npm:@trpc/server@11.0.0
+        version: '@trpc/server@11.0.0(typescript@5.8.2)'
       trpcserver11:
         specifier: npm:@trpc/server@11.0.0-rc.840
         version: '@trpc/server@11.0.0-rc.840(typescript@5.8.2)'
@@ -936,9 +936,6 @@ packages:
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: '>=8.40.0'
-
-  '@trpc/server@10.45.2':
-    resolution: {integrity: sha512-wOrSThNNE4HUnuhJG6PfDRp4L2009KDVxsd+2VYH8ro6o/7/jwYZ8Uu5j+VaW+mOmc8EHerHzGcdbGNQSAUPgg==}
 
   '@trpc/server@11.0.0':
     resolution: {integrity: sha512-xY9q/b/wR/tWGYTm5xmRjivkYD2EZZXmOKmHuNJRYZuLbieeNUsdfQRjJC409WB1pjKWInomhHwuA8bahZJ4lQ==}
@@ -4727,8 +4724,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
-
-  '@trpc/server@10.45.2': {}
 
   '@trpc/server@11.0.0(typescript@5.8.2)':
     dependencies:
