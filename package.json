@@ -61,7 +61,7 @@
     "@types/node": "20.17.25",
     "@valibot/to-json-schema": "1.0.0",
     "arktype": "2.1.9",
-    "eslint": "8",
+    "eslint": "9",
     "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb",
     "execa": "9.3.1",
     "expect-type": "1.2.0",
