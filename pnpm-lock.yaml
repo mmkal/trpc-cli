@@ -13,7 +13,7 @@ importers:
         version: 11.0.0(typescript@5.8.2)
       '@types/omelette':
         specifier: ^0.4.4
-        version: 0.4.4
+        version: 0.4.5
       commander:
         specifier: ^13.1.0
         version: 13.1.0
@@ -990,8 +990,8 @@ packages:
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
 
-  '@types/omelette@0.4.4':
-    resolution: {integrity: sha512-aEZ+4w3lvomNt6hX+H+VZey8a3fXa/jL6zZdu0vHrc7aGIe2yIybHQgIl7eXcMPchVaPekebQQ2Con7wGgB3mQ==}
+  '@types/omelette@0.4.5':
+    resolution: {integrity: sha512-zUCJpVRwfMcZfkxSCGp73mgd3/xesvPz5tQJIORlfP/zkYEyp9KUfF7IP3RRjyZR3DwxkPs96/IFf70GmYZYHQ==}
 
   '@types/semver@7.5.8':
     resolution: {integrity: sha512-I8EUhyrgfLrcTkzV3TSsGyl1tSuPrEDzr0yd5m90UgNxQkyDXULk3b6MlQqTCpZpNtWe1K0hzclnZkTcLBe2UQ==}
@@ -4773,7 +4773,7 @@ snapshots:
 
   '@types/normalize-package-data@2.4.4': {}
 
-  '@types/omelette@0.4.4': {}
+  '@types/omelette@0.4.5': {}
 
   '@types/semver@7.5.8': {}
 
