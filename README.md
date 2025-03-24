@@ -2,6 +2,8 @@
 
 🔥 **Build production-quality command-line tools in minutes, not days** 🔥
 
+![Demo](./docs/usage-demo.gif)
+
 trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, robust input validation, auto-generated help documentation, and command completion for free.
 
 - ✅ Get all of trpc's type safety and DX building a CLI
