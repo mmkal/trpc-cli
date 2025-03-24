@@ -209,7 +209,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         if (defaultValue.value === true) {
           const negation = new Option(
             longOption.replace('--', '--no-'),
-            `Negate \`${propertyKey}\` property ${description || ''}`.trim(),
+            `Negate \`${longOption}\` option. ${description || ''}`.trim(),
           )
           command.addOption(negation)
         }
@@ -346,6 +346,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }
         }
         option ||= new Option(`${flags} [json]`, description)
+        if (defaultValue.exists && option.defaultValue !== defaultValue.value) {
+          option.default(defaultValue.value)
+        }
 
         if (option.flags.includes('<')) {
           option.makeOptionMandatory()
