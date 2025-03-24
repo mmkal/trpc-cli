@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import * as trpcServer10 from '@trpc/server'
+import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
 import {ZodError} from 'zod'
@@ -60,6 +60,7 @@ export interface TrpcCli {
  *
  * @param router A trpc router
  * @param context The context to use when calling the procedures - needed if your router requires a context
+ * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
@@ -97,7 +98,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
                 },
               },
             },
-            getPojoInput: parsedCliParams => JSON.parse(parsedCliParams.options.input as string) as {},
+            getPojoInput: parsedCliParams => {
+              if (parsedCliParams.options.input == null) return parsedCliParams.options.input
+              return JSON.parse(parsedCliParams.options.input as string) as {}
+            },
           },
           incompatiblePairs: [],
           type,
@@ -143,7 +147,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       procedurePath: string,
       {procedure, procedureInputs, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
-      const flagJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
+      const optionJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
       command.exitOverride(ec => {
         _process.exit(ec.exitCode)
         throw new FailedToExitError(`Command ${command.name()} exitOverride`, {exitCode: ec.exitCode, cause: ec})
@@ -171,30 +175,30 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       procedureInputs.positionalParameters.forEach(param => {
         const descriptionParts = [
-          // param.type, //
+          param.type === 'string' ? '' : param.type, // "string" is the default assumption, don't bother showing it
           param.description,
           param.required ? '(required)' : '',
         ]
-        const argument = new Argument(param.name, descriptionParts.join(' '))
+        const argument = new Argument(param.name, descriptionParts.filter(Boolean).join(' '))
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
       })
 
-      const unusedFlagAliases: Record<string, string> = {...meta.aliases?.flags}
-      Object.entries(flagJsonSchemaProperties).forEach(([propertyKey, propertyValue]) => {
+      const unusedOptionAliases: Record<string, string> = {...meta.aliases?.options}
+      const addOptionForProperty = ([propertyKey, propertyValue]: [string, JsonSchema7Type]) => {
         const description = getDescription(propertyValue)
 
         const longOption = `--${kebabCase(propertyKey)}`
         let flags = longOption
-        const alias = meta.aliases?.flags?.[propertyKey]
+        const alias = meta.aliases?.options?.[propertyKey]
         if (alias) {
           let prefix = '-'
           if (alias.startsWith('-')) prefix = ''
           else if (alias.length > 1) prefix = '--'
 
           flags = `${prefix}${alias}, ${flags}`
-          delete unusedFlagAliases[propertyKey]
+          delete unusedOptionAliases[propertyKey]
         }
 
         const defaultValue =
@@ -356,11 +360,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         )
 
         command.addOption(option)
-      })
+      }
 
-      const invalidFlagAliases = Object.entries(unusedFlagAliases).map(([flag, alias]) => `${flag}: ${alias}`)
-      if (invalidFlagAliases.length) {
-        throw new Error(`Invalid flag aliases: ${invalidFlagAliases.join(', ')}`)
+      Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
+
+      const invalidOptionAliases = Object.entries(unusedOptionAliases).map(([option, alias]) => `${option}: ${alias}`)
+      if (invalidOptionAliases.length) {
+        throw new Error(`Invalid option aliases: ${invalidOptionAliases.join(', ')}`)
       }
 
       // Set the action for this command
@@ -368,6 +374,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         program.__ran ||= []
         program.__ran.push(command)
         const options = command.opts()
+        // console.dir({options, args}, {depth: null})
 
         if (args.at(-2) !== options) {
           // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break
@@ -382,7 +389,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const positionalValues = args.slice(0, -2)
 
         const input = procedureInputs.getPojoInput({positionalValues, options})
-        const resolvedTrpcServer = await (params.trpcServer || trpcServer10)
+        const resolvedTrpcServer = await (params.trpcServer || trpcServer11)
 
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
         if (deprecatedCreateCaller) {
@@ -538,10 +545,11 @@ export const trpcCli = createCli
 
 function transformError(err: unknown, command: Command) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
-    const message = 'createCallerFactory version mismatch - pass in the `@trpc/server` module to `createCli` explicitly'
-    return new Error(message)
+    return new Error(
+      'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
+    )
   }
-  if (looksLikeInstanceof(err, trpcServer10.TRPCError)) {
+  if (looksLikeInstanceof(err, trpcServer11.TRPCError)) {
     const cause = err.cause
     if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues

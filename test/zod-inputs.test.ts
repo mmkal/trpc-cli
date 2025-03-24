@@ -260,7 +260,7 @@ test('tuple input with flags', async () => {
   `)
 })
 
-test('single character flag', async () => {
+test('single character option', async () => {
   const router = t.router({
     foo: t.procedure
       .input(z.object({a: z.string()})) //
@@ -302,10 +302,10 @@ test('command alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias', async () => {
+test('option alias', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'x'}}})
+      .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -316,10 +316,10 @@ test('flag alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias can be two characters', async () => {
+test('option alias can be two characters', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
+      .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -330,10 +330,10 @@ test('flag alias can be two characters', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias typo', async () => {
+test('option alias typo', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frooozenLockfile: 'x'}}})
+      .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -341,7 +341,7 @@ test('flag alias typo', async () => {
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
   await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
-    `Error: Invalid flag aliases: frooozenLockfile: x`,
+    `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
 
@@ -435,6 +435,32 @@ test('mixed array input', async () => {
 
   const result = await run(router, ['test', '12', 'true', '3.14', 'null', 'undefined', 'hello'])
   expect(result).toMatchInlineSnapshot(`"list: [12,true,3.14,"null","undefined","hello"]"`)
+})
+
+test('record input', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.record(z.number()).optional()) //
+      .query(({input}) => `input: ${JSON.stringify(input)}`),
+  })
+
+  expect(await run(router, ['test', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program test [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Inputs with additional properties
+                      are not currently supported)
+      -h, --help      display help for command
+    "
+  `)
+  expect(await run(router, ['test'])).toMatchInlineSnapshot(`"input: undefined"`)
+  expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
+  await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: Validation error
+      - Expected number, received string at "--foo"
+  `)
 })
 
 test("nullable array inputs aren't supported", async () => {

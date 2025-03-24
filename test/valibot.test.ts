@@ -125,10 +125,10 @@ test('refine in a union pedantry', async () => {
 
   // Valibot should handle this better than arktype did
   await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options] <string>
+    "Usage: program foo [options] <value>
 
     Arguments:
-      string       (required)
+      value       string | number (required)
 
     Options:
       -h, --help  display help for command
@@ -158,14 +158,13 @@ test('transform in a union', async () => {
   })
 
   expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program foo [options]
+    "Usage: program foo [options] <value>
+
+    Arguments:
+      value       string | number (required)
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Failed to convert input to JSON
-                      Schema: A "pipe" with multiple schemas cannot be converted to
-                      JSON Schema.)
-      -h, --help      display help for command
+      -h, --help  display help for command
     "
   `)
   // expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
@@ -217,7 +216,7 @@ test('optional input', async () => {
     "Usage: program foo [options] <string>
 
     Arguments:
-      string       (required)
+      string      (required)
 
     Options:
       -h, --help  display help for command
@@ -318,7 +317,7 @@ test('tuple input with flags', async () => {
   )
 })
 
-test('single character flag', async () => {
+test('single character option', async () => {
   const router = t.router({
     foo: t.procedure
       .input(v.object({a: v.string()})) //
@@ -360,10 +359,10 @@ test('command alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias', async () => {
+test('option alias', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'x'}}})
+      .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -374,10 +373,10 @@ test('flag alias', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias can be two characters', async () => {
+test('option alias can be two characters', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frozenLockfile: 'xx'}}})
+      .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -388,10 +387,10 @@ test('flag alias can be two characters', async () => {
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
-test('flag alias typo', async () => {
+test('option alias typo', async () => {
   const yarn = t.router({
     install: t.procedure
-      .meta({aliases: {flags: {frooozenLockfile: 'x'}}})
+      .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
@@ -399,7 +398,7 @@ test('flag alias typo', async () => {
   const params: TrpcCliParams<typeof yarn> = {router: yarn}
 
   await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
-    `Error: Invalid flag aliases: frooozenLockfile: x`,
+    `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
 
@@ -475,7 +474,7 @@ test('number array input with constraints', async () => {
     "Usage: program foo [options] <parameter_1...>
 
     Arguments:
-      parameter_1   (required)
+      parameter_1  (required)
 
     Options:
       -h, --help   display help for command
@@ -649,9 +648,11 @@ test('defaults and negations', async () => {
 })
 
 test('valibot schemas to JSON schema', () => {
+  // just a test to quickly see how valibot schemas are converted to JSON schema
+  // honestly not a test of trpc-cli at all but useful for debugging
   const toJsonSchema = (schema: any) => {
     try {
-      return require('@valibot/to-json-schema').toJsonSchema(schema)
+      return require('@valibot/to-json-schema').toJsonSchema(schema, {errorMode: 'ignore'})
     } catch (e) {
       return e
     }
@@ -667,7 +668,19 @@ test('valibot schemas to JSON schema', () => {
         ),
       ]),
     ),
-  ).toMatchInlineSnapshot(`Error: A "pipe" with multiple schemas cannot be converted to JSON Schema.`)
+  ).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
+      ],
+    }
+  `)
 
   expect(
     toJsonSchema(
@@ -676,7 +689,12 @@ test('valibot schemas to JSON schema', () => {
         v.custom(n => Number.isInteger(n)),
       ),
     ),
-  ).toMatchInlineSnapshot(`Error: A "pipe" with multiple schemas cannot be converted to JSON Schema.`)
+  ).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "number",
+    }
+  `)
 
   expect(
     toJsonSchema(
@@ -688,7 +706,19 @@ test('valibot schemas to JSON schema', () => {
         ),
       ]),
     ),
-  ).toMatchInlineSnapshot(`Error: The "transform" action cannot be converted to JSON Schema.`)
+  ).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
+      ],
+    }
+  `)
 
   expect(toJsonSchema(v.object({foo: v.optional(v.string(), 'hi')}))).toMatchInlineSnapshot(`
     {
@@ -717,6 +747,79 @@ test('valibot schemas to JSON schema', () => {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "description": "a piece of text",
       "type": "string",
+    }
+  `)
+
+  expect(
+    toJsonSchema(
+      v.pipe(
+        v.union([
+          v.string(),
+          v.pipe(
+            v.number(),
+            v.custom(n => Number.isInteger(n)),
+          ),
+        ]),
+        v.transform(u => ({u})),
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
+      ],
+    }
+  `)
+
+  expect(
+    toJsonSchema(
+      v.array(
+        v.pipe(
+          v.number(),
+          v.custom(n => Number.isInteger(n)),
+        ),
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "items": {
+        "type": "number",
+      },
+      "type": "array",
+    }
+  `)
+
+  expect(
+    toJsonSchema(
+      v.union([
+        v.string(),
+        v.pipe(
+          v.pipe(
+            v.number(),
+            v.custom(n => Number.isInteger(n)),
+          ),
+          v.transform(n => `Roman numeral: ${'I'.repeat(n)}`),
+        ),
+      ]),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
+      ],
     }
   `)
 })
