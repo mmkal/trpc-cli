@@ -6,6 +6,13 @@ import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
 expect.addSnapshotSerializer({
+  test: val => typeof val === 'string' && /\$ark\.fn\d+\b/.test(val),
+  serialize(val) {
+    return val.replaceAll(/\$ark\.fn\d+\b/g, '$ark.fn...')
+  },
+})
+
+expect.addSnapshotSerializer({
   test: val => looksLikeInstanceof(val, Error),
   serialize(val, config, indentation, depth, refs, printer) {
     let topLine = `${val.constructor.name}: ${val.message}`
@@ -121,14 +128,13 @@ test('refine in a union pedantry', async () => {
 
   // todo: arktype doesn't make it easy to extract the "in" type from a complex-ish type (in this case a union, where one of the constituents has a predicate)
   await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options]
+    Usage: program foo [options]
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
                       converted to CLI arguments: Failed to convert input to JSON
-                      Schema: Predicate $ark.fn11 is not convertible to JSON Schema)
+                      Schema: Predicate $ark.fn... is not convertible to JSON Schema)
       -h, --help      display help for command
-    "
   `)
   // expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
   // expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
@@ -150,14 +156,13 @@ test('transform in a union', async () => {
 
   // todo: arktype can hopefully address the below problem
   expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program foo [options]
+    Usage: program foo [options]
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
                       converted to CLI arguments: Failed to convert input to JSON
-                      Schema: Predicate $ark.fn12 is not convertible to JSON Schema)
+                      Schema: Predicate $ark.fn... is not convertible to JSON Schema)
       -h, --help      display help for command
-    "
   `)
   // expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
   // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
@@ -435,14 +440,13 @@ test('number array input with constraints', async () => {
 
   // todo: hopefully get the below problem addressed in arktype
   await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options]
+    Usage: program foo [options]
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
                       converted to CLI arguments: Failed to convert input to JSON
-                      Schema: Predicate $ark.fn14 is not convertible to JSON Schema)
+                      Schema: Predicate $ark.fn... is not convertible to JSON Schema)
       -h, --help      display help for command
-    "
   `)
   // await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
   //   CLI exited with code 1
