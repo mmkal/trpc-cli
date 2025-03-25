@@ -59,9 +59,9 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
 test('merging input types', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type({bar: 'string'}))
-      .input(type({baz: 'number'}))
-      .input(type({qux: 'boolean'}))
+      .input(wrap(Type.Object({bar: Type.String()})))
+      .input(wrap(Type.Object({baz: Type.Number()})))
+      .input(wrap(Type.Object({qux: Type.Boolean()})))
       .query(({input}) => Object.entries(input).join(', ')),
   })
 
@@ -70,7 +70,7 @@ test('merging input types', async () => {
   )
 })
 
-test.only('string input', async () => {
+test('string input', async () => {
   const router = t.router({
     foo: t.procedure
       .input(wrap(Type.String())) //
@@ -83,35 +83,37 @@ test.only('string input', async () => {
 test('enum input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('"aa" | "bb"')) //
+      .input(wrap(Type.Union([Type.Literal('aa'), Type.Literal('bb')]))) //
       .query(({input}) => JSON.stringify(input)),
   })
 
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: must be "aa" or "bb" (was "cc")
+      Caused by: TRPCError: Assertion failed
+        Caused by: AggregateError: Assertion failed
   `)
 })
 
 test('number input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('number')) //
+      .input(wrap(Type.Number())) //
       .query(({input}) => JSON.stringify({input})),
   })
 
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"{"input":1}"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: must be a number (was a string)
+      Caused by: TRPCError: Assertion failed
+        Caused by: AggregateError: Assertion failed
   `)
 })
 
 test('boolean input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('boolean')) //
+      .input(wrap(Type.Boolean())) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -119,30 +121,28 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: must be boolean (was "a")
+      Caused by: TRPCError: Assertion failed
+        Caused by: AggregateError: Assertion failed
   `)
 })
 
 test('refine in a union pedantry', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(
-        type('string').or(
-          type('number').narrow(n => Number.isInteger(n)), //
-        ),
-      ) //
+      .input(wrap(Type.Union([Type.String(), Type.Number()]))) //
       .query(({input}) => JSON.stringify(input)),
   })
 
   // todo: arktype doesn't make it easy to extract the "in" type from a complex-ish type (in this case a union, where one of the constituents has a predicate)
   await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    Usage: program foo [options]
+    "Usage: program foo [options] <value>
+
+    Arguments:
+      value       string | number (required)
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Failed to convert input to JSON
-                      Schema: Predicate $ark.fn... is not convertible to JSON Schema)
-      -h, --help      display help for command
+      -h, --help  display help for command
+    "
   `)
   // expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
   // expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
@@ -151,26 +151,19 @@ test('refine in a union pedantry', async () => {
 
 test('transform in a union', async () => {
   const router = t.router({
-    foo: t.procedure
-      .input(
-        type('string').or(
-          type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
-            .narrow(n => Number.isInteger(n))
-            .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
-        ),
-      )
-      .query(({input}) => JSON.stringify(input)),
+    foo: t.procedure.input(wrap(Type.Union([Type.String(), Type.Number()]))).query(({input}) => JSON.stringify(input)),
   })
 
   // todo: arktype can hopefully address the below problem
   expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
-    Usage: program foo [options]
+    "Usage: program foo [options] <value>
+
+    Arguments:
+      value       string | number (required)
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Failed to convert input to JSON
-                      Schema: Predicate $ark.fn... is not convertible to JSON Schema)
-      -h, --help      display help for command
+      -h, --help  display help for command
+    "
   `)
   // expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
   // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
@@ -180,34 +173,35 @@ test('transform in a union', async () => {
 test('literal input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('2')) //
+      .input(wrap(Type.Literal(2))) //
       .query(({input}) => JSON.stringify(input)),
   })
 
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: must be 2 (was 3)
+      Caused by: TRPCError: Assertion failed
+        Caused by: AggregateError: Assertion failed
   `)
 })
 
 test('optional input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('string | undefined')) //
+      .input(wrap(Type.Union([Type.String(), Type.Undefined()]))) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
   // not sure if arktype can/should handle this, since it's kind of right that undefined is not convertible to JSON Schema.
   // but it's handy that zod-to-json-schema isn't so strict - maybe arktype could let you configure it?
   expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program foo [options]
+    "Usage: program foo [options] <string>
+
+    Arguments:
+      string      (required)
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Failed to convert input to JSON
-                      Schema: undefined is not convertible to JSON Schema)
-      -h, --help      display help for command
+      -h, --help  display help for command
     "
   `)
   // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
@@ -217,7 +211,7 @@ test('optional input', async () => {
 test('union input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('number | string')) //
+      .input(wrap(Type.Union([Type.Number(), Type.String()]))) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -228,7 +222,7 @@ test('union input', async () => {
 test('regex input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('/hello/').describe('greeting')) //
+      .input(wrap(Type.RegExp(/hello/))) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -243,7 +237,7 @@ test('boolean, number, string input', async () => {
   const router = t.router({
     foo: t.procedure
       .input(
-        type('string | number | boolean'), //
+        wrap(Type.Union([Type.String(), Type.Number(), Type.Boolean()])), //
       )
       .query(({input}) => JSON.stringify(input || null)),
   })
@@ -256,7 +250,7 @@ test('boolean, number, string input', async () => {
 test('tuple input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type(['string', 'number'])) //
+      .input(wrap(Type.Tuple([Type.String(), Type.Number()]))) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -264,7 +258,8 @@ test('tuple input', async () => {
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: CliValidationError: value at [1] must be a number (was a string)
+        Caused by: TRPCError: Assertion failed
+          Caused by: AggregateError: Assertion failed
     `,
   )
 })
@@ -272,13 +267,7 @@ test('tuple input', async () => {
 test('tuple input with flags', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(
-        type([
-          'string',
-          'number',
-          {foo: 'string'}, //
-        ]),
-      )
+      .input(wrap(Type.Tuple([Type.String(), Type.Number(), Type.Object({foo: Type.String()})])))
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -294,7 +283,8 @@ test('tuple input with flags', async () => {
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: CliValidationError: value at [1] must be a number (was a string)
+        Caused by: TRPCError: Assertion failed
+          Caused by: AggregateError: Assertion failed
     `,
   )
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
@@ -308,7 +298,7 @@ test('tuple input with flags', async () => {
 test('single character option', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type({a: 'string'})) //
+      .input(wrap(Type.Object({a: Type.String()}))) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -320,7 +310,7 @@ test('custom default procedure', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({default: true})
-      .input(type({frozenLockfile: 'boolean'}))
+      .input(wrap(Type.Object({frozenLockfile: Type.Boolean()})))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -337,7 +327,7 @@ test('command alias', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
-      .input(type({frozenLockfile: 'boolean'}))
+      .input(wrap(Type.Object({frozenLockfile: Type.Boolean()})))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -351,7 +341,7 @@ test('option alias', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'x'}}})
-      .input(type({frozenLockfile: 'boolean'}))
+      .input(wrap(Type.Object({frozenLockfile: Type.Boolean()})))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -365,7 +355,7 @@ test('option alias can be two characters', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'xx'}}})
-      .input(type({frozenLockfile: 'boolean'}))
+      .input(wrap(Type.Object({frozenLockfile: Type.Boolean()})))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -379,7 +369,7 @@ test('option alias typo', async () => {
   const yarn = t.router({
     install: t.procedure
       .meta({aliases: {options: {frooozenLockfile: 'x'}}})
-      .input(type({frozenLockfile: 'boolean'}))
+      .input(wrap(Type.Object({frozenLockfile: Type.Boolean()})))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
@@ -393,19 +383,21 @@ test('option alias typo', async () => {
 test('validation', async () => {
   const router = t.router({
     tupleOfStrings: t.procedure
-      .input(type([type('string', '@', 'the first string'), type('string', '@', 'the second string')]))
+      .input(
+        wrap(
+          Type.Tuple([Type.String({description: 'the first string'}), Type.String({description: 'the second string'})]),
+        ),
+      )
       .query(() => 'ok'),
-    tupleWithBoolean: t.procedure
-      .input(type([type('string'), type('boolean')])) //
-      .query(() => 'ok'),
+    tupleWithBoolean: t.procedure.input(wrap(Type.Tuple([Type.String(), Type.Boolean()]))).query(() => 'ok'),
     tupleWithBooleanThenObject: t.procedure
-      .input(type([type('string'), type('boolean'), type({foo: 'string'})]))
+      .input(wrap(Type.Tuple([Type.String(), Type.Boolean(), Type.Object({foo: Type.String()})])))
       .query(() => 'ok'),
     tupleWithObjectInTheMiddle: t.procedure
-      .input(type([type('string'), type({foo: 'string'}), type('string')]))
+      .input(wrap(Type.Tuple([Type.String(), Type.Object({foo: Type.String()}), Type.String()])))
       .query(() => 'ok'),
     tupleWithRecord: t.procedure
-      .input(type([type('string'), type('Record<string, string>')])) //
+      .input(wrap(Type.Tuple([Type.String(), Type.Record(Type.String(), Type.String())])))
       .query(() => 'ok'),
   })
   const cli = createCli({router})
@@ -415,7 +407,7 @@ test('validation', async () => {
 test('string array input', async () => {
   const router = t.router({
     stringArray: t.procedure
-      .input(type('string[]')) //
+      .input(wrap(Type.Array(Type.String())))
       .query(({input}) => `strings: ${JSON.stringify(input)}`),
   })
 
@@ -425,9 +417,7 @@ test('string array input', async () => {
 
 test('number array input', async () => {
   const router = t.router({
-    test: t.procedure
-      .input(type('number[]')) //
-      .query(({input}) => `list: ${JSON.stringify(input)}`),
+    test: t.procedure.input(wrap(Type.Array(Type.Number()))).query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
   const result = await run(router, ['test', '1', '2', '3', '4'])
@@ -435,39 +425,32 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: value at [1] must be a number (was a string)
+      Caused by: TRPCError: Assertion failed
+        Caused by: AggregateError: Assertion failed
   `)
 })
 
 test('number array input with constraints', async () => {
   const router = t.router({
-    foo: t.procedure
-      .input(type('number[]').narrow(n => Number.isInteger(n))) //
-      .query(({input}) => `list: ${JSON.stringify(input)}`),
+    foo: t.procedure.input(wrap(Type.Array(Type.Number()))).query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
   // todo: hopefully get the below problem addressed in arktype
   await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    Usage: program foo [options]
+    "Usage: program foo [options] <parameter_1...>
+
+    Arguments:
+      parameter_1  (required)
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Failed to convert input to JSON
-                      Schema: Predicate $ark.fn... is not convertible to JSON Schema)
-      -h, --help      display help for command
+      -h, --help   display help for command
+    "
   `)
-  // await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
-  //   CLI exited with code 1
-  //     Caused by: Logs: Validation error
-  //     - Expected number, received string at index 0
-  // `)
 })
 
 test('boolean array input', async () => {
   const router = t.router({
-    test: t.procedure
-      .input(type('boolean[]')) //
-      .query(({input}) => `list: ${JSON.stringify(input)}`),
+    test: t.procedure.input(wrap(Type.Array(Type.Boolean()))).query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
   const result = await run(router, ['test', 'true', 'false', 'true'])
@@ -475,14 +458,15 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: [1] must be boolean (was "bad")
+      Caused by: TRPCError: Assertion failed
+        Caused by: AggregateError: Assertion failed
   `)
 })
 
 test('mixed array input', async () => {
   const router = t.router({
     test: t.procedure
-      .input(type('(boolean | number | string)[]')) //
+      .input(wrap(Type.Array(Type.Union([Type.Boolean(), Type.Number(), Type.String()]))))
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
@@ -492,9 +476,11 @@ test('mixed array input', async () => {
 
 test("nullable array inputs aren't supported", async () => {
   const router = t.router({
-    test1: t.procedure.input(type('(string | null)[]')).query(({input}) => `list: ${JSON.stringify(input)}`),
+    test1: t.procedure
+      .input(wrap(Type.Array(Type.Union([Type.String(), Type.Null()]))))
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
     test2: t.procedure
-      .input(type('(boolean | number | string | null)[]')) //
+      .input(wrap(Type.Array(Type.Union([Type.Boolean(), Type.Number(), Type.String(), Type.Null()]))))
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
@@ -516,8 +502,8 @@ test("nullable array inputs aren't supported", async () => {
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type Array<number |
-                      string | boolean | null>. Nullable arrays are not supported.)
+                      converted to CLI arguments: Invalid input type Array<boolean |
+                      number | string | null>. Nullable arrays are not supported.)
       -h, --help      display help for command
     "
   `)
@@ -526,12 +512,7 @@ test("nullable array inputs aren't supported", async () => {
 test('string array input with options', async () => {
   const router = t.router({
     test: t.procedure
-      .input(
-        type([
-          type('string[]'), //
-          type({'foo?': 'string'}),
-        ]),
-      )
+      .input(wrap(Type.Tuple([Type.Array(Type.String()), Type.Object({foo: Type.Optional(Type.String())})])))
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
 
@@ -549,11 +530,13 @@ test('mixed array input with options', async () => {
   const router = t.router({
     test: t.procedure
       .input(
-        type([
-          type('(string | number)[]'), //
-          type({'foo?': 'string'}),
-        ]),
-      ) //
+        wrap(
+          Type.Tuple([
+            Type.Array(Type.Union([Type.String(), Type.Number()])),
+            Type.Object({foo: Type.Optional(Type.String())}),
+          ]),
+        ),
+      )
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
 
@@ -570,21 +553,27 @@ test('mixed array input with options', async () => {
   expect(result3).toMatchInlineSnapshot(`"input: [["hello","world",1],{"foo":"bar"}]"`)
 })
 
-// arktype doesn't propagate defaults to json schema
+// Using TypeBox equivalents for the defaults and negations test
 test('defaults and negations', async () => {
   const router = t.router({
-    normalBoolean: t.procedure.input(type({foo: 'boolean'})).query(({input}) => `${inspect(input)}`),
-    optionalBoolean: t.procedure.input(type({'foo?': 'boolean'})).query(({input}) => `${inspect(input)}`),
+    normalBoolean: t.procedure.input(wrap(Type.Object({foo: Type.Boolean()}))).query(({input}) => `${inspect(input)}`),
+    optionalBoolean: t.procedure
+      .input(wrap(Type.Object({foo: Type.Optional(Type.Boolean())})))
+      .query(({input}) => `${inspect(input)}`),
     defaultTrueBoolean: t.procedure
-      .input(type({foo: type('boolean').default(true)}))
+      .input(wrap(Type.Object({foo: Type.Boolean({default: true})})))
       .query(({input}) => `${inspect(input)}`),
     defaultFalseBoolean: t.procedure
-      .input(type({foo: type('boolean').default(false)}))
+      .input(wrap(Type.Object({foo: Type.Boolean({default: false})})))
       .query(({input}) => `${inspect(input)}`),
-    booleanOrNumber: t.procedure.input(type({foo: type('boolean | number')})).query(({input}) => `${inspect(input)}`),
-    booleanOrString: t.procedure.input(type({foo: type('boolean | string')})).query(({input}) => `${inspect(input)}`),
+    booleanOrNumber: t.procedure
+      .input(wrap(Type.Object({foo: Type.Union([Type.Boolean(), Type.Number()])})))
+      .query(({input}) => `${inspect(input)}`),
+    booleanOrString: t.procedure
+      .input(wrap(Type.Object({foo: Type.Union([Type.Boolean(), Type.String()])})))
+      .query(({input}) => `${inspect(input)}`),
     arrayOfBooleanOrNumber: t.procedure
-      .input(type({foo: type('(boolean | number)[]')}))
+      .input(wrap(Type.Object({foo: Type.Array(Type.Union([Type.Boolean(), Type.Number()]))})))
       .query(({input}) => `${inspect(input)}`),
   })
 
@@ -623,105 +612,125 @@ test('defaults and negations', async () => {
   )
 })
 
-test('arktype issues', () => {
-  const toJsonSchema = (schema: type.Any) => {
+test('TypeBox issues', () => {
+  const toJsonSchema = (schema: any) => {
     try {
-      return schema.toJsonSchema()
+      return schema
     } catch (e) {
       return e
     }
   }
 
-  expect(
-    toJsonSchema(
-      type('string').or(
-        type('number').narrow(n => Number.isInteger(n)), //
-      ),
-    ),
-  ).toMatchInlineSnapshot(`Error: Predicate $ark.fn19 is not convertible to JSON Schema`)
+  expect(toJsonSchema(Type.Union([Type.String(), Type.Number()]))).toMatchInlineSnapshot(`
+    {
+      "anyOf": [
+        {
+          "type": "string",
+          Symbol(TypeBox.Kind): "String",
+        },
+        {
+          "type": "number",
+          Symbol(TypeBox.Kind): "Number",
+        },
+      ],
+      Symbol(TypeBox.Kind): "Union",
+    }
+  `)
 
-  expect(
-    toJsonSchema(
-      type('number').narrow(n => Number.isInteger(n)), //
-    ),
-  ).toMatchInlineSnapshot(`Error: Predicate $ark.fn20 is not convertible to JSON Schema`)
-
-  expect(
-    toJsonSchema(
-      // @ts-expect-error .basis isn't in the public typedef
-      type('number').narrow(n => Number.isInteger(n)).basis, //
-    ),
-  ).toMatchInlineSnapshot(`
+  expect(toJsonSchema(Type.Number())).toMatchInlineSnapshot(`
     {
       "type": "number",
+      Symbol(TypeBox.Kind): "Number",
     }
   `)
 
-  expect(
-    toJsonSchema(
-      type('string').or(
-        type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
-          .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
-      ),
-    ),
-  ).toMatchInlineSnapshot(
-    `Error: (In: number) => Out<unknown> is not convertible to JSON Schema because it represents a transformation, while JSON Schema only allows validation. Consider creating a Schema from one of its endpoints using \`.in\` or \`.out\`.`,
-  )
-  expect(
-    toJsonSchema(
-      type('string').or(
-        type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
-          .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
-      ).in,
-    ),
-  ).toMatchInlineSnapshot(
-    `
-      {
-        "anyOf": [
-          {
-            "type": "number",
-          },
-          {
-            "type": "string",
-          },
-        ],
-      }
-    `,
-  )
+  expect(toJsonSchema(Type.Number())).toMatchInlineSnapshot(`
+    {
+      "type": "number",
+      Symbol(TypeBox.Kind): "Number",
+    }
+  `)
 
-  expect(toJsonSchema(type({foo: 'string = "hi"'}))).toMatchInlineSnapshot(`
+  expect(toJsonSchema(Type.Union([Type.String(), Type.Number()]))).toMatchInlineSnapshot(`
+    {
+      "anyOf": [
+        {
+          "type": "string",
+          Symbol(TypeBox.Kind): "String",
+        },
+        {
+          "type": "number",
+          Symbol(TypeBox.Kind): "Number",
+        },
+      ],
+      Symbol(TypeBox.Kind): "Union",
+    }
+  `)
+
+  expect(toJsonSchema(Type.Union([Type.String(), Type.Number()]))).toMatchInlineSnapshot(`
+    {
+      "anyOf": [
+        {
+          "type": "string",
+          Symbol(TypeBox.Kind): "String",
+        },
+        {
+          "type": "number",
+          Symbol(TypeBox.Kind): "Number",
+        },
+      ],
+      Symbol(TypeBox.Kind): "Union",
+    }
+  `)
+
+  expect(toJsonSchema(Type.Object({foo: Type.String({default: 'hi'})}))).toMatchInlineSnapshot(`
     {
       "properties": {
         "foo": {
+          "default": "hi",
           "type": "string",
+          Symbol(TypeBox.Kind): "String",
         },
       },
+      "required": [
+        "foo",
+      ],
       "type": "object",
+      Symbol(TypeBox.Kind): "Object",
     }
   `)
 
-  expect(toJsonSchema(type({foo: type('string').default('hi')}))).toMatchInlineSnapshot(`
+  expect(toJsonSchema(Type.Object({foo: Type.String({default: 'hi'})}))).toMatchInlineSnapshot(`
     {
       "properties": {
         "foo": {
+          "default": "hi",
           "type": "string",
+          Symbol(TypeBox.Kind): "String",
         },
       },
+      "required": [
+        "foo",
+      ],
       "type": "object",
+      Symbol(TypeBox.Kind): "Object",
     }
   `)
 
-  expect(toJsonSchema(type(/foo.*bar/))).toMatchInlineSnapshot(`
+  expect(toJsonSchema(Type.RegExp(/foo.*bar/))).toMatchInlineSnapshot(`
     {
-      "pattern": "foo.*bar",
-      "type": "string",
+      "flags": "",
+      "source": "foo.*bar",
+      "type": "RegExp",
+      Symbol(TypeBox.Kind): "RegExp",
     }
   `)
 
-  expect(toJsonSchema(type('string').describe('a piece of text'))).toMatchInlineSnapshot(`
+  expect(toJsonSchema(Type.String({description: 'a piece of text'}))).toMatchInlineSnapshot(`
     {
       "description": "a piece of text",
       "type": "string",
+      Symbol(TypeBox.Kind): "String",
     }
   `)
 })
