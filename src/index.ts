@@ -575,10 +575,23 @@ function transformError(err: unknown, command: Command) {
         cause.issues = originalIssues
       }
     }
+    if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(err.cause, AggregateError)) {
+      const looksLikeTypeSchemaIssues = err.cause.errors.every(e => {
+        return typeof e?.message === 'string' && Array.isArray(e?.path)
+      })
+      if (looksLikeTypeSchemaIssues) {
+        return new CliValidationError(
+          err.cause.errors
+            .map(e => [e.path.filter(Boolean).join('.'), e.message].filter(Boolean).join(': '))
+            .join('\n'),
+          {cause: err.cause},
+        )
+      }
+    }
     if (
       err.code === 'BAD_REQUEST' &&
       (err.cause?.constructor?.name === 'TraversalError' || // arktype error
-        err.cause?.constructor?.name === 'StandardSchemaV1Error') // valibot error
+        err.cause?.constructor?.name === 'StandardSchemaV1Error') // standard-schema errors (valibot, effect, more...)
     ) {
       return new CliValidationError(err.cause.message + '\n\n' + command.helpInformation())
     }

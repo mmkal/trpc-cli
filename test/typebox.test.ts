@@ -90,7 +90,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: Assertion failed
+      Caused by: CliValidationError: Expected union value
         Caused by: AggregateError: Assertion failed
   `)
 })
@@ -105,7 +105,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"{"input":1}"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: Assertion failed
+      Caused by: CliValidationError: Expected number
         Caused by: AggregateError: Assertion failed
   `)
 })
@@ -121,7 +121,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: Assertion failed
+      Caused by: CliValidationError: Expected boolean
         Caused by: AggregateError: Assertion failed
   `)
 })
@@ -180,7 +180,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: Assertion failed
+      Caused by: CliValidationError: Expected 2
         Caused by: AggregateError: Assertion failed
   `)
 })
@@ -222,14 +222,25 @@ test('union input', async () => {
 test('regex input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(wrap(Type.RegExp(/hello/))) //
+      .input(wrap(Type.String({pattern: /hello/.source}))) // note: don't use Type.RegExp(/hello/) because that uses a special "JS" type: https://github.com/sinclairzx81/typebox?tab=readme-ov-file#types-javascript
       .query(({input}) => JSON.stringify(input || null)),
   })
 
+  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program foo [options] <string>
+
+    Arguments:
+      string      (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: must be greeting (was "goodbye xyz")
+      Caused by: CliValidationError: Expected string to match 'hello'
+        Caused by: AggregateError: Assertion failed
   `)
 })
 
@@ -258,7 +269,7 @@ test('tuple input', async () => {
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: TRPCError: Assertion failed
+        Caused by: CliValidationError: /1: Expected number
           Caused by: AggregateError: Assertion failed
     `,
   )
@@ -283,7 +294,7 @@ test('tuple input with flags', async () => {
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: TRPCError: Assertion failed
+        Caused by: CliValidationError: /1: Expected number
           Caused by: AggregateError: Assertion failed
     `,
   )
@@ -425,7 +436,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: Assertion failed
+      Caused by: CliValidationError: /1: Expected number
         Caused by: AggregateError: Assertion failed
   `)
 })
@@ -458,7 +469,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: Assertion failed
+      Caused by: CliValidationError: /1: Expected boolean
         Caused by: AggregateError: Assertion failed
   `)
 })
