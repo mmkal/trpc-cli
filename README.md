@@ -34,6 +34,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
    - [zod](#zod)
    - [arktype](#arktype)
    - [valibot](#valibot)
+   - [effect](#effect)
 - [tRPC v10 vs v11](#trpc-v10-vs-v11)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Testing your CLI](#testing-your-cli)
@@ -556,6 +557,35 @@ const router = t.router({
   add: t.procedure
     .input(v.tuple([v.number(), v.number()]))
     .query(({input}) => input[0] + input[1]),
+})
+
+const cli = createCli({router})
+
+cli.run() // e.g. `mycli add 1 2`
+```
+
+### effect
+
+You can also use `effect` schemas, with some caveats. First, to use effect schemas with trpc, you need to convert them to [standard-schema format](https://github.com/standard-schema/standard-schema) which requires an extra step - you can't pass in an effect `Schema` directly. And unfortunately, the `standardSchemaV1` function effect provides doesn't keep the original effect schema, so you need to make a helper function to keep it around (copy the implementation of `toStandardSchemaV1` below).
+
+```ts
+import {Schema} from 'effect'
+import {type TrpcCliMeta} from 'trpc-cli'
+
+const t = initTRPC.meta<TrpcCliMeta>().create()
+
+const toStandardSchemaV1 = <A, I>(schema: Schema.Schema<A, I, never>) => {
+  const standard = Schema.standardSchemaV1(schema)
+  return {
+    ...standard,
+    '~standard': {...standard['~standard'], original: schema},
+  }
+}
+
+const router = t.router({
+  add: t.procedure
+    .input(toStandardSchemaV1(Schema.Tuple(Schema.Number, Schema.Number)))
+    .query(({input}) => input.left + input.right),
 })
 
 const cli = createCli({router})
