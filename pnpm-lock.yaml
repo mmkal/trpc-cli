@@ -4,13 +4,18 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@trpc/server@11.0.0':
+    hash: ckdvgs7nyw2nwywgc6uwqszykm
+    path: patches/@trpc__server@11.0.0.patch
+
 importers:
 
   .:
     dependencies:
       '@trpc/server':
         specifier: ^11.0.0
-        version: 11.0.0(typescript@5.6.3)
+        version: 11.0.0(patch_hash=ckdvgs7nyw2nwywgc6uwqszykm)(typescript@5.6.3)
       '@types/omelette':
         specifier: ^0.4.4
         version: 0.4.4
@@ -76,8 +81,8 @@ importers:
         specifier: npm:@trpc/server@10.45.2
         version: '@trpc/server@10.45.2'
       trpcserver11:
-        specifier: npm:@trpc/server@11.0.0-rc.839
-        version: '@trpc/server@11.0.0-rc.839(typescript@5.6.3)'
+        specifier: npm:@trpc/server@11.0.0
+        version: '@trpc/server@11.0.0(patch_hash=ckdvgs7nyw2nwywgc6uwqszykm)(typescript@5.6.3)'
       tsx:
         specifier: 4.19.1
         version: 4.19.1
@@ -833,11 +838,6 @@ packages:
 
   '@trpc/server@11.0.0':
     resolution: {integrity: sha512-xY9q/b/wR/tWGYTm5xmRjivkYD2EZZXmOKmHuNJRYZuLbieeNUsdfQRjJC409WB1pjKWInomhHwuA8bahZJ4lQ==}
-    peerDependencies:
-      typescript: '>=5.7.2'
-
-  '@trpc/server@11.0.0-rc.839':
-    resolution: {integrity: sha512-qkF1Zt8wQKK+Lw+xgWLgQBfwJ3aW4InC5BMyMAEPyHN7ygSf0oDub3QOWJ9Ou9i36D4xjOz4/avQ7ZiedyApWg==}
     peerDependencies:
       typescript: '>=5.7.2'
 
@@ -4650,11 +4650,7 @@ snapshots:
 
   '@trpc/server@10.45.2': {}
 
-  '@trpc/server@11.0.0(typescript@5.6.3)':
-    dependencies:
-      typescript: 5.6.3
-
-  '@trpc/server@11.0.0-rc.839(typescript@5.6.3)':
+  '@trpc/server@11.0.0(patch_hash=ckdvgs7nyw2nwywgc6uwqszykm)(typescript@5.6.3)':
     dependencies:
       typescript: 5.6.3
 

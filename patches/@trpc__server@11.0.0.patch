@@ -1,0 +1,54 @@
+diff --git a/dist/unstable-core-do-not-import/parser.js b/dist/unstable-core-do-not-import/parser.js
+index 5578ceb0a089aebc9e6af45049261670fb2079a8..7adb71b5c515e35bd6208cf696e0c9fd386bc271 100644
+--- a/dist/unstable-core-do-not-import/parser.js
++++ b/dist/unstable-core-do-not-import/parser.js
+@@ -4,11 +4,12 @@ var error = require('../vendor/standard-schema-v1/error.js');
+ 
+ function getParseFn(procedureParser) {
+     const parser = procedureParser;
++    const isStandardSchema = '~standard' in parser
+     if (typeof parser === 'function' && typeof parser.assert === 'function') {
+         // ParserArkTypeEsque - arktype schemas shouldn't be called as a function because they return a union type instead of throwing
+         return parser.assert.bind(parser);
+     }
+-    if (typeof parser === 'function') {
++    if (typeof parser === 'function' && !isStandardSchema) {
+         // ParserValibotEsque (>= v0.31.0)
+         // ParserCustomValidatorEsque
+         return parser;
+@@ -37,7 +38,7 @@ function getParseFn(procedureParser) {
+             return value;
+         };
+     }
+-    if ('~standard' in parser) {
++    if (isStandardSchema) {
+         // StandardSchemaEsque
+         return async (value)=>{
+             const result = await parser['~standard'].validate(value);
+diff --git a/dist/unstable-core-do-not-import/parser.mjs b/dist/unstable-core-do-not-import/parser.mjs
+index fee2a473d66f5b880187d3d927f21ee72848db85..7bc44b789a28cd07159089e30ddfc04ca2820dff 100644
+--- a/dist/unstable-core-do-not-import/parser.mjs
++++ b/dist/unstable-core-do-not-import/parser.mjs
+@@ -2,11 +2,12 @@ import { StandardSchemaV1Error } from '../vendor/standard-schema-v1/error.mjs';
+ 
+ function getParseFn(procedureParser) {
+     const parser = procedureParser;
++    const isStandardSchema = '~standard' in parser
+     if (typeof parser === 'function' && typeof parser.assert === 'function') {
+         // ParserArkTypeEsque - arktype schemas shouldn't be called as a function because they return a union type instead of throwing
+         return parser.assert.bind(parser);
+     }
+-    if (typeof parser === 'function') {
++    if (typeof parser === 'function' && !isStandardSchema) {
+         // ParserValibotEsque (>= v0.31.0)
+         // ParserCustomValidatorEsque
+         return parser;
+@@ -35,7 +36,7 @@ function getParseFn(procedureParser) {
+             return value;
+         };
+     }
+-    if ('~standard' in parser) {
++    if (isStandardSchema) {
+         // StandardSchemaEsque
+         return async (value)=>{
+             const result = await parser['~standard'].validate(value);
