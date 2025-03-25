@@ -566,7 +566,7 @@ cli.run() // e.g. `mycli add 1 2`
 
 ### effect
 
-You can also use `effect` schemas, with some caveats. First, to use effect schemas with trpc, you need to convert them to [standard-schema format](https://github.com/standard-schema/standard-schema) which requires an extra step - you can't pass in an effect `Schema` directly. And unfortunately, the `standardSchemaV1` function effect provides doesn't keep the original effect schema, so you need to make a helper function to keep it around (copy the implementation of `toStandardSchemaV1` below).
+You can also use `effect` schemas - see [trpc docs on using effect validators](https://trpc.io/docs/server/validators#with-effect) - you'll need to use the `Schema.standardSchemaV1` helper that ships with `effect`:
 
 ```ts
 import {Schema} from 'effect'
@@ -574,17 +574,9 @@ import {type TrpcCliMeta} from 'trpc-cli'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
-const toStandardSchemaV1 = <A, I>(schema: Schema.Schema<A, I, never>) => {
-  const standard = Schema.standardSchemaV1(schema)
-  return {
-    ...standard,
-    '~standard': {...standard['~standard'], original: schema},
-  }
-}
-
 const router = t.router({
   add: t.procedure
-    .input(toStandardSchemaV1(Schema.Tuple(Schema.Number, Schema.Number)))
+    .input(Schema.standardSchemaV1(Schema.Tuple(Schema.Number, Schema.Number)))
     .query(({input}) => input.left + input.right),
 })
 
