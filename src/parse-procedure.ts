@@ -428,11 +428,17 @@ const jsonSchemaConverters = {
     }
     return valibotToJsonSchema(input, {errorMode: 'ignore'})
   },
+  toJsonSchema: (input: unknown) => {
+    return (input as {toJsonSchema: () => JSONSchema7}).toJsonSchema()
+  },
 } satisfies Record<string, (input: unknown) => JSONSchema7>
 
 function getVendor(schema: unknown) {
   // note: don't check for typeof schema === 'object' because arktype schemas are functions (you call them directly instead of `.parse(...)`)
-  return (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor ?? null
+  const standardSchemaVendor = (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor
+  if (standardSchemaVendor) return standardSchemaVendor
+  if (schema && 'toJsonSchema' in (schema as {})) return 'toJsonSchema'
+  return null
 }
 
 function looksJsonSchemaable(value: unknown) {
