@@ -568,6 +568,8 @@ cli.run() // e.g. `mycli add 1 2`
 
 You can also use `effect` schemas - see [trpc docs on using effect validators](https://trpc.io/docs/server/validators#with-effect) - you'll need to use the `Schema.standardSchemaV1` helper that ships with `effect`:
 
+>Note: `effect` support requires `effect >= 3.14.2` and `@trpc/server >= 11.0.1`.
+
 ```ts
 import {Schema} from 'effect'
 import {type TrpcCliMeta} from 'trpc-cli'
