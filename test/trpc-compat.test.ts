@@ -13,7 +13,7 @@ expect.addSnapshotSerializer({
 })
 
 test('trpc v10 shape check', async () => {
-  expectTypeOf(await import('trpcserver10')).toMatchTypeOf<TrpcServerModuleLike>()
+  expectTypeOf(await import('trpcserver10')).toExtend<TrpcServerModuleLike>()
 
   const t = initTRPC_v10.context<{customContext: true}>().meta<TrpcCliMeta>().create()
 
@@ -36,7 +36,7 @@ test('trpc v10 shape check', async () => {
   expect(router._def.procedures).toHaveProperty('foo.bar')
   expect(router._def.procedures).not.toHaveProperty('foo')
 
-  expectTypeOf(router).toMatchTypeOf<Trpc10RouterLike>()
+  expectTypeOf(router).toExtend<Trpc10RouterLike>()
 
   expect(router._def.procedures.add._def.mutation).toBe(true)
   expect(router._def.procedures.add._def.query).toBeUndefined()
@@ -56,7 +56,7 @@ test('trpc v10 shape check', async () => {
 })
 
 test('trpc v11 shape check', async () => {
-  expectTypeOf(await import('trpcserver11')).toMatchTypeOf<TrpcServerModuleLike>()
+  expectTypeOf(await import('trpcserver11')).toExtend<TrpcServerModuleLike>()
 
   const t = initTRPC_v11.context<{customContext: true}>().meta<TrpcCliMeta>().create()
 

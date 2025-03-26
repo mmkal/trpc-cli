@@ -12,12 +12,12 @@ export type TrpcCliParams<R extends AnyRouter> = {
   /** @deprecated this is actually **removed** not deprecated; set `default: true` on the procedure `meta` instead */
   _default?: never // {procedure: Extract<keyof R['_def']['procedures'], string>}
 
-  /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v11. */
+  /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v10. */
   // createCallerFactory?: CreateCallerFactoryLike
   trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
 }
 
-/** Rough shape of the `@trpc/server` (v11) module. Needed to pass in to `createCli` when using trpc v11. */
+/** Rough shape of the `@trpc/server` (v10) module. Needed to pass in to `createCli` when using trpc v10. */
 export type TrpcServerModuleLike = {
   initTRPC: {create: () => {createCallerFactory: CreateCallerFactoryLike<{}>}}
 }
@@ -118,4 +118,25 @@ export interface OmeletteInstanceLike {
   cleanupShellInitFile: () => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tree: (value: any) => this
+}
+
+export type TrpcCliRunParams = {
+  argv?: string[]
+  logger?: Logger
+  completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
+  /** Format an error thrown by the root procedure before logging to `logger.error` */
+  formatError?: (error: unknown) => string
+  process?: {
+    exit: (code: number) => never
+  }
+}
+
+export type CommanderProgramLike = {
+  parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
+  helpInformation: () => string
+}
+
+export interface TrpcCli {
+  run: (params?: TrpcCliRunParams) => Promise<void>
+  buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
 }

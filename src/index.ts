@@ -11,7 +11,7 @@ import {flattenedProperties, incompatiblePropertyPairs, getDescription, getSchem
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {Logger, OmeletteInstanceLike, TrpcCliMeta, TrpcCliParams} from './types'
+import {TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
 
 export * from './types'
@@ -33,27 +33,6 @@ export class Command extends BaseCommand {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 
 export {AnyRouter, AnyProcedure} from './trpc-compat'
-
-type TrpcCliRunParams = {
-  argv?: string[]
-  logger?: Logger
-  completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
-  /** Format an error thrown by the root procedure before logging to `logger.error` */
-  formatError?: (error: unknown) => string
-  process?: {
-    exit: (code: number) => never
-  }
-}
-
-type CommanderProgramLike = {
-  parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
-  helpInformation: () => string
-}
-
-export interface TrpcCli {
-  run: (params?: TrpcCliRunParams) => Promise<void>
-  buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
-}
 
 /**
  * Run a trpc router as a CLI.
