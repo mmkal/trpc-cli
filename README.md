@@ -34,6 +34,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
    - [zod](#zod)
    - [arktype](#arktype)
    - [valibot](#valibot)
+   - [effect](#effect)
 - [tRPC v10 vs v11](#trpc-v10-vs-v11)
 - [Output and lifecycle](#output-and-lifecycle)
 - [Testing your CLI](#testing-your-cli)
@@ -559,6 +560,29 @@ const router = t.router({
 })
 
 const cli = createCli({router})
+
+cli.run() // e.g. `mycli add 1 2`
+```
+
+### effect
+
+You can also use `effect` schemas - see [trpc docs on using effect validators](https://trpc.io/docs/server/validators#with-effect) - you'll need to use the `Schema.standardSchemaV1` helper that ships with `effect`:
+
+>Note: `effect` support requires `effect >= 3.14.2` (which in turn depends on `@trpc/server >= 11.0.1` if passing in a custom `trpcServer`).
+
+```ts
+import {Schema} from 'effect'
+import {type TrpcCliMeta} from 'trpc-cli'
+
+const t = initTRPC.meta<TrpcCliMeta>().create()
+
+const router = t.router({
+  add: t.procedure
+    .input(Schema.standardSchemaV1(Schema.Tuple(Schema.Number, Schema.Number)))
+    .query(({input}) => input.left + input.right),
+})
+
+const cli = createCli({router, trpcServer: import('@trpc/server')})
 
 cli.run() // e.g. `mycli add 1 2`
 ```

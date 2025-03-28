@@ -428,6 +428,14 @@ const jsonSchemaConverters = {
     }
     return valibotToJsonSchema(input, {errorMode: 'ignore'})
   },
+  effect: (input: unknown) => {
+    const effect = require('effect') as typeof import('effect')
+    if (!effect.Schema.isSchema(input)) {
+      const message = `input was not an effect schema - please use effect version 3.14.2 or higher. See https://github.com/mmkal/trpc-cli/pull/63`
+      throw new Error(message)
+    }
+    return effect.JSONSchema.make(input) as JSONSchema7
+  },
 } satisfies Record<string, (input: unknown) => JSONSchema7>
 
 function getVendor(schema: unknown) {
