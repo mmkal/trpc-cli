@@ -429,7 +429,7 @@ const jsonSchemaConverters = {
     return valibotToJsonSchema(input, {errorMode: 'ignore'})
   },
   effect: (input: unknown) => {
-    const effect = require('effect') as typeof import('effect')
+    const effect = eval(`require('effect')`) as typeof import('effect')
     if (!effect.Schema.isSchema(input)) {
       const message = `input was not an effect schema - please use effect version 3.14.2 or higher. See https://github.com/mmkal/trpc-cli/pull/63`
       throw new Error(message)
@@ -463,7 +463,7 @@ function prepareArktypeType(type: any) {
 
 function getValibotToJsonSchema() {
   try {
-    return require('@valibot/to-json-schema').toJsonSchema as (
+    return eval(`require('@valibot/to-json-schema')`).toJsonSchema as (
       input: unknown,
       options?: {errorMode?: 'throw' | 'ignore' | 'warn'},
     ) => JSONSchema7
