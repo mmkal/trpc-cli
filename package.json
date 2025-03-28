@@ -64,7 +64,7 @@
     "effect": "3.14.2",
     "eslint": "8",
     "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb",
-    "execa": "9.3.1",
+    "execa": "9.5.2",
     "expect-type": "1.2.0",
     "fs-syncer": "0.5.3",
     "np": "10.2.0",
