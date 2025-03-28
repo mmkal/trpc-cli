@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@trpc/server':
-        specifier: ^11.0.1-canary.14
-        version: 11.0.1-canary.14(typescript@5.8.2)
+        specifier: ^11.0.1
+        version: 11.0.1(typescript@5.8.2)
       '@types/omelette':
         specifier: ^0.4.4
         version: 0.4.5
@@ -76,8 +76,8 @@ importers:
         specifier: npm:@trpc/server@10.45.2
         version: '@trpc/server@10.45.2'
       trpcserver11:
-        specifier: npm:@trpc/server@11.0.1-canary.14
-        version: '@trpc/server@11.0.1-canary.14(typescript@5.8.2)'
+        specifier: npm:@trpc/server@11.0.1
+        version: '@trpc/server@11.0.1(typescript@5.8.2)'
       tsx:
         specifier: 4.19.3
         version: 4.19.3
@@ -946,8 +946,8 @@ packages:
   '@trpc/server@10.45.2':
     resolution: {integrity: sha512-wOrSThNNE4HUnuhJG6PfDRp4L2009KDVxsd+2VYH8ro6o/7/jwYZ8Uu5j+VaW+mOmc8EHerHzGcdbGNQSAUPgg==}
 
-  '@trpc/server@11.0.1-canary.14':
-    resolution: {integrity: sha512-VOFOBVMiWPqGa8bllhIfhB5cQsTdxzIJIrKrZw11Km8STt3zTyGhZl1a5FIfCTIvnnUVTkepW8S1lxgE7EJpTg==}
+  '@trpc/server@11.0.1':
+    resolution: {integrity: sha512-DZS3+bONLno4oJjHBMrS3xRPtoZsnmBImDH/Mmo1QhaFt3Xp/S0Riu7WU/oofsLTVj2m1UO5LlgLJFumvlSNoQ==}
     peerDependencies:
       typescript: '>=5.7.2'
 
@@ -4743,7 +4743,7 @@ snapshots:
 
   '@trpc/server@10.45.2': {}
 
-  '@trpc/server@11.0.1-canary.14(typescript@5.8.2)':
+  '@trpc/server@11.0.1(typescript@5.8.2)':
     dependencies:
       typescript: 5.8.2
 

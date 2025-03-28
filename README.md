@@ -568,7 +568,7 @@ cli.run() // e.g. `mycli add 1 2`
 
 You can also use `effect` schemas - see [trpc docs on using effect validators](https://trpc.io/docs/server/validators#with-effect) - you'll need to use the `Schema.standardSchemaV1` helper that ships with `effect`:
 
->Note: `effect` support requires `effect >= 3.14.2` (and `@trpc/server >= 11.0.1` if you are not using the `trpcServer` from this library).
+>Note: `effect` support requires `effect >= 3.14.2` (which in turn depends on `@trpc/server >= 11.0.1` if passing in a custom `trpcServer`).
 
 ```ts
 import {Schema} from 'effect'
@@ -582,7 +582,7 @@ const router = t.router({
     .query(({input}) => input.left + input.right),
 })
 
-const cli = createCli({router})
+const cli = createCli({router, trpcServer: import('@trpc/server')})
 
 cli.run() // e.g. `mycli add 1 2`
 ```
