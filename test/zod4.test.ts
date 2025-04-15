@@ -1,3 +1,5 @@
+process.env.TEST_FILE = 'zod4.test.ts'
+
 import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
@@ -142,6 +144,7 @@ test('transform in a union', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
+  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`""`)
   expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
   expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
   expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
@@ -476,13 +479,13 @@ test("nullable array inputs aren't supported", async () => {
   })
 
   await expect(run(router, ['test1', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program test1 [options] <parameter_1...>
-
-    Arguments:
-      parameter_1  (required)
+    "Usage: program test1 [options]
 
     Options:
-      -h, --help   display help for command
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Invalid input type Array<string |
+                      null>. Nullable arrays are not supported.)
+      -h, --help      display help for command
     "
   `)
   const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])

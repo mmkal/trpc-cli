@@ -19,11 +19,6 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
 }
 
-export type ZodModuleLike = {
-  toJSONSchema?: (schema: never) => {}
-  string: () => {}
-}
-
 /** Rough shape of the `@trpc/server` (v10) module. Needed to pass in to `createCli` when using trpc v10. */
 export type TrpcServerModuleLike = {
   initTRPC: {create: () => {createCallerFactory: CreateCallerFactoryLike<{}>}}
@@ -156,9 +151,13 @@ export type Dependencies = {
    * For zod v3 (the default), the `zod-to-json-schema` package is used for JSON schema output and
    * `zod-validation-error` is used for readable error messages.
    */
-  zod?: ZodModuleLike
-  // todo: make this `@valibot/to-json-schema`
-  valibotToJsonSchema?: (input: unknown, options?: {errorMode?: 'throw' | 'ignore' | 'warn'}) => JSONSchema7
+  zod?: {
+    toJSONSchema?: (schema: never) => {}
+    string: () => {}
+  }
+  '@valibot/to-json-schema'?: {
+    toJsonSchema: (input: unknown, options?: {errorMode?: 'throw' | 'ignore' | 'warn'}) => JSONSchema7
+  }
   effect?: {
     Schema: {isSchema: (input: unknown) => input is 'JSONSchemaMakeable'}
     JSONSchema: {make: (input: 'JSONSchemaMakeable') => JSONSchema7}

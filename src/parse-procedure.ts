@@ -15,7 +15,8 @@ function toJsonSchema(input: unknown, dependencies: Dependencies): Result<JSONSc
     const vendor = getVendor(input)
     if (vendor && vendor in jsonSchemaConverters) {
       const converter = jsonSchemaConverters[vendor as keyof typeof jsonSchemaConverters]
-      return {success: true, value: converter(input)}
+      const converted = converter(input)
+      return {success: true, value: converted}
     }
 
     return {success: false, error: `Schema not convertible to JSON schema`}
@@ -31,6 +32,7 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
     value !== null &&
     (('type' in value && (typeof value.type === 'string' || Array.isArray(value.type))) ||
       'const' in value ||
+      'oneOf' in value ||
       'anyOf' in value)
   )
 }
@@ -144,6 +146,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
 function isOptional(schema: JSONSchema7Definition) {
+  if ((schema as {$originalSchema?: {isOptional?: () => boolean}}).$originalSchema?.isOptional?.()) return true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
   return anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}'
 }
@@ -227,7 +230,7 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
 function isNullable(schema: JSONSchema7) {
   if (Array.isArray(schema.type) && schema.type.includes('null')) return true
   if (schema.type === 'null') return true
-  if (schema.anyOf?.some(sub => isNullable(toRoughJsonSchema7(sub)))) return true
+  if ((schema.anyOf || schema.oneOf)?.some(sub => isNullable(toRoughJsonSchema7(sub)))) return true
   if (schema.const === null) return true
   return false
 }
@@ -419,25 +422,41 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 /** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
-const getJsonSchemaConverters = (dependencies: Dependencies) =>
-  ({
+const getJsonSchemaConverters = (dependencies: Dependencies) => {
+  return {
     zod: (input: unknown) => {
       if (dependencies.zod?.toJSONSchema) {
-        return dependencies.zod.toJSONSchema(input as {}) as JSONSchema7
+        // zod4 has toJSONSchema built in.
+        const converted = dependencies.zod.toJSONSchema(input as never) as JSONSchema7
+        if (
+          (input as {isOptional?: () => boolean})?.isOptional?.() &&
+          Object.keys(converted).length === 1 // suggests all we've got is a `{type: 'string'}`-ass result
+        ) {
+          return {anyOf: [{not: {}}, converted]} // todo[zod@>=4.0.0] workaround for https://github.com/colinhacks/zod/issues/4164 - mimic the zod-to-json-schema behaviour
+        }
+
+        return converted
       }
       return zodToJsonSchema(input as never) as JSONSchema7
     },
     arktype: (input: unknown) => prepareArktypeType(input).toJsonSchema(),
     valibot: (input: unknown) => {
-      let valibotToJsonSchema = dependencies.valibotToJsonSchema
-      if (!valibotToJsonSchema) {
+      let valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema']
+      if (!valibotToJsonSchemaLib) {
         try {
-          valibotToJsonSchema = eval(`require('@valibot/to-json-schema')`).toJsonSchema
+          valibotToJsonSchemaLib = eval(`require('@valibot/to-json-schema')`)
         } catch (e: unknown) {
           throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`, {cause: e})
         }
       }
-      return valibotToJsonSchema!(input, {errorMode: 'ignore'})
+
+      const valibotToJsonSchema = valibotToJsonSchemaLib?.toJsonSchema
+      if (!valibotToJsonSchema) {
+        throw new Error(
+          `no 'toJsonSchema' function found in @valibot/to-json-schema - check you are using a supported version`,
+        )
+      }
+      return valibotToJsonSchema(input, {errorMode: 'ignore'})
     },
     effect: (input: unknown) => {
       const effect = dependencies.effect || (eval(`require('effect')`) as Dependencies['effect'])
@@ -450,7 +469,8 @@ const getJsonSchemaConverters = (dependencies: Dependencies) =>
       }
       return effect.JSONSchema.make(input)
     },
-  }) satisfies Record<string, (input: unknown) => JSONSchema7>
+  } satisfies Record<string, (input: unknown) => JSONSchema7>
+}
 
 function getVendor(schema: unknown) {
   // note: don't check for typeof schema === 'object' because arktype schemas are functions (you call them directly instead of `.parse(...)`)
