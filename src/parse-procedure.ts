@@ -89,7 +89,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
             array: false,
             description: mergedSchema.description || '',
             name: mergedSchema.title || 'string',
-            required: true,
+            required: !isOptional(mergedSchema),
           },
         ],
         optionsJsonSchema: {},
@@ -146,7 +146,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
 function isOptional(schema: JSONSchema7Definition) {
-  if ((schema as {$originalSchema?: {isOptional?: () => boolean}}).$originalSchema?.isOptional?.()) return true
+  if ((schema as {$zod?: {optional?: boolean}}).$zod?.optional) return true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
   return anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}'
 }
@@ -426,16 +426,21 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
   return {
     zod: (input: unknown) => {
       if (dependencies.zod?.toJSONSchema) {
+        const toJSONSchema = dependencies.zod.toJSONSchema as typeof import('zod4').toJSONSchema
         // zod4 has toJSONSchema built in.
-        const converted = dependencies.zod.toJSONSchema(input as never) as JSONSchema7
-        if (
-          (input as {isOptional?: () => boolean})?.isOptional?.() &&
-          Object.keys(converted).length === 1 // suggests all we've got is a `{type: 'string'}`-ass result
-        ) {
-          return {anyOf: [{not: {}}, converted]} // todo[zod@>=4.0.0] workaround for https://github.com/colinhacks/zod/issues/4164 - mimic the zod-to-json-schema behaviour
-        }
+        const converted = toJSONSchema(input as never, {
+          // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
+          pipes: 'input',
+          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          override: ctx => {
+            if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
+              ctx.jsonSchema.$zod = {optional: true}
+            }
+          },
+          unrepresentable: 'any',
+        })
 
-        return converted
+        return converted as JSONSchema7
       }
       return zodToJsonSchema(input as never) as JSONSchema7
     },

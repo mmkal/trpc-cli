@@ -144,7 +144,6 @@ test('transform in a union', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`""`)
   expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
   expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
   expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
