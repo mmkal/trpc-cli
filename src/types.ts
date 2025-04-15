@@ -152,6 +152,7 @@ export type Dependencies = {
    * `zod-validation-error` is used for readable error messages.
    */
   zod?: {
+    prettifyError?: (error: never) => string
     toJSONSchema?: (schema: never) => {}
     string: () => {}
   }

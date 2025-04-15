@@ -11,7 +11,7 @@ import {flattenedProperties, incompatiblePropertyPairs, getDescription, getSchem
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
+import {Dependencies, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
 
 export * from './types'
@@ -389,7 +389,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const caller = createCallerFactory(router)(params.context)
 
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-          throw transformError(err, command)
+          throw transformError(err, command, params)
         })
         command.__result = result
         if (result != null) logger.info?.(result)
@@ -529,7 +529,7 @@ function kebabCase(propName: string) {
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-function transformError(err: unknown, command: Command) {
+function transformError(err: unknown, command: Command, dependencies: Dependencies) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error(
       'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
@@ -547,6 +547,11 @@ function transformError(err: unknown, command: Command) {
             path: ['--' + issue.path[0], ...issue.path.slice(1)],
           }
         })
+
+        if (dependencies.zod?.prettifyError) {
+          const prettyMessage = dependencies.zod.prettifyError(cause as never)
+          return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
+        }
 
         const validationError = zodValidationError.fromError(cause, {
           prefixSeparator: '\n  - ',
