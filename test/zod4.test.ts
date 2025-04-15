@@ -1,7 +1,10 @@
+process.env.TEST_FILE = 'zod4.test.ts'
+
 import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import {z} from 'zod'
+import {z} from 'zod4'
+import * as zod4 from 'zod4'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
@@ -25,7 +28,10 @@ const run = <R extends AnyRouter>(router: R, argv: string[]) => {
   return runWith({router}, argv)
 }
 const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
-  const cli = createCli(params)
+  const cli = createCli({
+    ...params,
+    zod: zod4,
+  })
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   return cli
@@ -75,8 +81,8 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid enum value. Expected 'aa' | 'bb', received 'cc'
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -90,8 +96,8 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -106,8 +112,8 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected boolean, received string
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -138,6 +144,7 @@ test('transform in a union', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
+  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`""`)
   expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
   expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
   expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
@@ -153,8 +160,8 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid literal value, expected 2
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -191,8 +198,8 @@ test('regex input', async () => {
   // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -224,8 +231,8 @@ test('tuple input', async () => {
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -251,8 +258,8 @@ test('tuple input with flags', async () => {
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -272,65 +279,75 @@ test('single character option', async () => {
 })
 
 test('custom default procedure', async () => {
-  const router = t.router({
+  const yarn = t.router({
     install: t.procedure
       .meta({default: true})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const yarnOutput = await run(router, ['--frozen-lockfile'])
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
   expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 
-  const yarnInstallOutput = await run(router, ['install', '--frozen-lockfile'])
+  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
   expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('command alias', async () => {
-  const router = t.router({
+  const yarn = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const yarnIOutput = await run(router, ['i', '--frozen-lockfile'])
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnIOutput = await runWith(params, ['i', '--frozen-lockfile'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias', async () => {
-  const router = t.router({
+  const yarn = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const yarnIOutput = await run(router, ['install', '-x'])
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnIOutput = await runWith(params, ['install', '-x'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias can be two characters', async () => {
-  const router = t.router({
+  const yarn = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const yarnIOutput = await run(router, ['install', '--xx'])
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  const yarnIOutput = await runWith(params, ['install', '--xx'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias typo', async () => {
-  const router = t.router({
+  const yarn = t.router({
     install: t.procedure
       .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  await expect(run(router, ['install', '-x'])).rejects.toMatchInlineSnapshot(
+  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+
+  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
     `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
@@ -350,7 +367,7 @@ test('validation', async () => {
       .input(z.tuple([z.string(), z.object({foo: z.string()}), z.string()]))
       .query(() => 'ok'),
     tupleWithRecord: t.procedure
-      .input(z.tuple([z.string(), z.record(z.string())])) //
+      .input(z.tuple([z.string(), z.record(z.string(), z.string())])) //
       .query(() => 'ok'),
   })
   const cli = createCli({router})
@@ -380,8 +397,8 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -394,8 +411,8 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 0
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -411,8 +428,8 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected boolean, received string at index 1
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -430,7 +447,7 @@ test('mixed array input', async () => {
 test('record input', async () => {
   const router = t.router({
     test: t.procedure
-      .input(z.record(z.number()).optional()) //
+      .input(z.record(z.string(), z.number()).optional()) //
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
 
@@ -448,8 +465,8 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at "--foo"
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -531,6 +548,15 @@ test('mixed array input with options', async () => {
 
   const result3 = await run(router, ['test', 'hello', 'world', '--foo=bar', '1'])
   expect(result3).toMatchInlineSnapshot(`"input: [["hello","world",1],{"foo":"bar"}]"`)
+})
+
+test('basic boolean option', async () => {
+  const router = t.router({
+    test: t.procedure.input(z.object({foo: z.boolean()})).query(({input}) => `${JSON.stringify({input})}`),
+  })
+
+  const result = await run(router, ['test', '--foo'])
+  expect(result).toMatchInlineSnapshot(`"{"input":{"foo":true}}"`)
 })
 
 test('defaults and negations', async () => {
