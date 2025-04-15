@@ -44,7 +44,11 @@ export {AnyRouter, AnyProcedure} from './trpc-compat'
  */
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
-    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[])
+    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], {
+      zod: params.zod,
+      valibotToJsonSchema: params.valibotToJsonSchema,
+      effect: params.effect,
+    })
     // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
     let type: 'mutation' | 'query' | 'subscription'
     if (isTrpc11Procedure(procedure)) {
@@ -298,6 +302,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         let option: Option
 
+        console.log({propertyType, flags, description})
+
         // eslint-disable-next-line unicorn/prefer-switch
         if (propertyType === 'string') {
           option = new Option(`${flags} ${bracketise('string')}`, description)
@@ -384,6 +390,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           (resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike)
         const caller = createCallerFactory(router)(params.context)
 
+        console.log({procedurePath, input})
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
           throw transformError(err, command)
         })
