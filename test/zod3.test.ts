@@ -21,14 +21,18 @@ expect.addSnapshotSerializer({
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
-const run = <R extends AnyRouter>(router: R, argv: string[]) => {
-  return runWith({router}, argv)
+const run = <R extends AnyRouter>(router: R, argv: string[], {expectJsonInput = false} = {}) => {
+  return runWith({router}, argv, {expectJsonInput})
 }
-const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
+const runWith = async <R extends AnyRouter>(
+  params: TrpcCliParams<R>,
+  argv: string[],
+  {expectJsonInput = false} = {},
+): Promise<string> => {
   const cli = createCli(params)
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
-  return cli
+  const result: string = await cli
     .run({
       argv,
       logger: {info: addLogs, error: addLogs},
@@ -39,6 +43,12 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
       if (e.exitCode === 0) return e.cause
       throw e
     })
+
+  const hasJsonInput = result.includes('--input [json]')
+  if (result.includes('--') && hasJsonInput !== expectJsonInput) {
+    throw new Error(`${hasJsonInput ? 'Got' : 'Did not get'} --input [json]:\n\n${result}`)
+  }
+  return result
 }
 
 test('merging input types', async () => {
@@ -434,7 +444,7 @@ test('record input', async () => {
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
 
-  expect(await run(router, ['test', '--help'])).toMatchInlineSnapshot(`
+  expect(await run(router, ['test', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
     "Usage: program test [options]
 
     Options:
@@ -461,7 +471,7 @@ test("nullable array inputs aren't supported", async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['test1', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test1', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test1 [options]
 
     Options:
@@ -471,10 +481,10 @@ test("nullable array inputs aren't supported", async () => {
       -h, --help      display help for command
     "
   `)
-  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])
+  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])], {expectJsonInput: true})
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
 
-  await expect(run(router, ['test2', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test2', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test2 [options]
 
     Options:
