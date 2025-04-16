@@ -406,7 +406,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         // Create parent command if it doesn't exist
         if (!commandTree[currentPath]) {
           const parentCommand = commandTree[parentPath]
-          const newCommand = new Command(segment)
+          const newCommand = new Command(kebabCase(segment))
           newCommand.showHelpAfterError()
           parentCommand.addCommand(newCommand)
           commandTree[currentPath] = newCommand
@@ -418,7 +418,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const parentPath = segments.length > 1 ? segments.slice(0, -1).join('.') : ''
       const parentCommand = commandTree[parentPath]
 
-      const leafCommand = new Command(leafName)
+      const leafCommand = new Command(leafName && kebabCase(leafName))
       configureCommand(leafCommand, procedurePath, commandConfig)
       parentCommand.addCommand(leafCommand)
 

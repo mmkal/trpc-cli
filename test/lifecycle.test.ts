@@ -117,8 +117,8 @@ const run = async (argv: string[]) => {
 
 test('make sure parsing works correctly', async () => {
   await expect(run(['add', '2', '3'])).resolves.toBe(5)
-  await expect(run(['squareRoot', '--', '4'])).resolves.toBe(2)
-  await expect(run(['squareRoot', '--', '-1'])).rejects.toMatchInlineSnapshot(`[Error: Get real]`)
+  await expect(run(['square-root', '--', '4'])).resolves.toBe(2)
+  await expect(run(['square-root', '--', '-1'])).rejects.toMatchInlineSnapshot(`[Error: Get real]`)
   await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
     [Error: Validation error
       - Expected number, received string at index 1

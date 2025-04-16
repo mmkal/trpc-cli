@@ -95,8 +95,8 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
     }
   }
 
-  if (acceptedLiteralTypes(mergedSchema).length > 0) {
-    return parseLiteralInput(mergedSchema)
+  if (acceptedPrimitiveTypes(mergedSchema).length > 0) {
+    return parsePrimitiveInput(mergedSchema)
   }
 
   if (isTuple(mergedSchema)) {
@@ -147,8 +147,8 @@ function isOptional(schema: JSONSchema7Definition) {
   return anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}'
 }
 
-function parseLiteralInput(schema: JSONSchema7): Result<ParsedProcedure> {
-  const typeName = acceptedLiteralTypes(schema).join(' | ')
+function parsePrimitiveInput(schema: JSONSchema7): Result<ParsedProcedure> {
+  const typeName = acceptedPrimitiveTypes(schema).join(' | ')
   const name = (schema.title || schema.description || /\W/.test(typeName) ? 'value' : typeName).replaceAll(/\s+/g, '_')
   return {
     success: true,
@@ -176,8 +176,8 @@ const schemaDefPropValue = <K extends keyof JSONSchema7>(
   return undefined
 }
 
-const literalCandidateTypes = ['string', 'number', 'boolean', 'integer'] as const
-function acceptedLiteralTypes(schema: JSONSchema7Definition): Array<(typeof literalCandidateTypes)[number]> {
+const primitiveCandidateTypes = ['string', 'number', 'boolean', 'integer'] as const
+function acceptedPrimitiveTypes(schema: JSONSchema7Definition): Array<(typeof primitiveCandidateTypes)[number]> {
   let constVals: string[] | undefined = [toRoughJsonSchema7(schema).const, toRoughJsonSchema7(schema).enum]
     .flat()
     .filter(Boolean)
@@ -186,10 +186,10 @@ function acceptedLiteralTypes(schema: JSONSchema7Definition): Array<(typeof lite
   const typeList =
     constVals ||
     schemaDefPropValue(schema, 'type') ||
-    schemaDefPropValue(schema, 'oneOf')?.flatMap(s => acceptedLiteralTypes(s)) ||
-    schemaDefPropValue(schema, 'anyOf')?.flatMap(s => acceptedLiteralTypes(s))
+    schemaDefPropValue(schema, 'oneOf')?.flatMap(s => acceptedPrimitiveTypes(s)) ||
+    schemaDefPropValue(schema, 'anyOf')?.flatMap(s => acceptedPrimitiveTypes(s))
   const acceptedJsonSchemaTypes = new Set([typeList].flat().filter(Boolean))
-  return literalCandidateTypes.filter(c => acceptedJsonSchemaTypes.has(c))
+  return primitiveCandidateTypes.filter(c => acceptedJsonSchemaTypes.has(c))
 }
 
 function parseMultiInputs(inputs: unknown[]): Result<ParsedProcedure> {
@@ -273,10 +273,10 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
   if (!Array.isArray(items)) throw new Error('.items is not an array, is this really a tuple?')
 
   const flagsSchemaIndex = items.findIndex(item => {
-    if (acceptedLiteralTypes(item as JSONSchema7).length > 0) {
+    if (acceptedPrimitiveTypes(item as JSONSchema7).length > 0) {
       return false // it's a string, number or boolean
     }
-    if (looksLikeArray(item) && acceptedLiteralTypes(item.items as JSONSchema7).length > 0) {
+    if (looksLikeArray(item) && acceptedPrimitiveTypes(item.items as JSONSchema7).length > 0) {
       return false // it's an array of strings, numbers or booleans
     }
     return true // it's not a string, number, boolean or array of strings, numbers or booleans. So it's probably a flags object
@@ -347,7 +347,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
 const convertPositional = (schema: JSONSchema7Definition, value: string) => {
   let preprocessed: string | number | boolean | undefined = undefined
 
-  const acceptedTypes = new Set(acceptedLiteralTypes(schema))
+  const acceptedTypes = new Set(acceptedPrimitiveTypes(schema))
 
   if (acceptedTypes.has('string')) {
     preprocessed = value
