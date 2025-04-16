@@ -4,6 +4,7 @@
   "description": "Turn a tRPC router into a type-safe, fully-functional, documented CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": "dist/cli.js",
   "files": [
     "dist"
   ],
