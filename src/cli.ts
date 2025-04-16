@@ -23,25 +23,27 @@ const trpcCliRouter = t.router({
       z.tuple([
         z.string().describe('filepath of module with trpc router'),
         z.object({
-          importFirst: z
+          export: z
             .string()
-            .array()
             .optional()
-            .describe('A module to import before the trpc router, for example `tsx/cjs`'),
+            .describe(
+              'The name of the export to use from the module. If not provided, all exports will be checked for a trpc router.',
+            ),
         }),
       ]),
     )
     .mutation(async ({input: [filepath, options]}) => {
-      for (const importFirst of options.importFirst ?? []) {
-        await import(importFirst)
-      }
-
       const fullpath = path.resolve(process.cwd(), filepath)
       const mdl = (await import(fullpath)) as {}
       let router: Trpc11RouterLike
       const isTrpcRouterLike = (value: unknown): value is Trpc11RouterLike =>
         Boolean((value as Trpc11RouterLike)?._def?.procedures)
-      if (isTrpcRouterLike(mdl)) {
+      if (options.export) {
+        router = (mdl as {[key: string]: Trpc11RouterLike})[options.export]
+        if (!isTrpcRouterLike(router)) {
+          throw new Error(`Expected a trpc router in ${filepath}.${options.export}, got ${typeof router}`)
+        }
+      } else if (isTrpcRouterLike(mdl)) {
         router = mdl
       } else {
         const routerExports = Object.values(mdl).filter(isTrpcRouterLike)
@@ -50,6 +52,7 @@ const trpcCliRouter = t.router({
         }
         router = routerExports[0]
       }
+
       const cli = createCli({router})
       await cli.run()
     }),
