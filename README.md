@@ -423,7 +423,7 @@ Commands:
                                         number and you want to make it smaller
                                         and `subtract` isn't quite powerful
                                         enough for you.
-  squareRoot <number>                   Square root of a number. Useful if you
+  square-root <number>                  Square root of a number. Useful if you
                                         have a square, know the area, and want
                                         to find the length of the side.
   help [command]                        display help for command
@@ -909,7 +909,7 @@ Commands:
                     applied.
   create [options]  Create a new migration
   list [options]    List all migrations
-  search            Available subcommands: byName, byContent
+  search            Available subcommands: by-name, by-content
   help [command]    display help for command
 ```
 <!-- codegen:end -->
@@ -928,7 +928,7 @@ Commands:
                     applied.
   create [options]  Create a new migration
   list [options]    List all migrations
-  search            Available subcommands: byName, byContent
+  search            Available subcommands: by-name, by-content
   help [command]    display help for command
 ```
 <!-- codegen:end -->
@@ -947,7 +947,7 @@ Commands:
                     applied.
   create [options]  Create a new migration
   list [options]    List all migrations
-  search            Available subcommands: byName, byContent
+  search            Available subcommands: by-name, by-content
   help [command]    display help for command
 ```
 <!-- codegen:end -->
