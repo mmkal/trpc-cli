@@ -38,7 +38,7 @@ test('cli help', async () => {
                                               number and you want to make it smaller
                                               and \`subtract\` isn't quite powerful
                                               enough for you.
-        squareRoot <number>                   Square root of a number. Useful if you
+        square-root <number>                  Square root of a number. Useful if you
                                               have a square, know the area, and want
                                               to find the length of the side.
         help [command]                        display help for command"
@@ -166,7 +166,7 @@ test('cli non-existent command', async () => {
                                             number and you want to make it smaller
                                             and \`subtract\` isn't quite powerful
                                             enough for you.
-      squareRoot <number>                   Square root of a number. Useful if you
+      square-root <number>                  Square root of a number. Useful if you
                                             have a square, know the area, and want
                                             to find the length of the side.
       help [command]                        display help for command
@@ -198,7 +198,7 @@ test('cli no command', async () => {
                                             number and you want to make it smaller
                                             and \`subtract\` isn't quite powerful
                                             enough for you.
-      squareRoot <number>                   Square root of a number. Useful if you
+      square-root <number>                  Square root of a number. Useful if you
                                             have a square, know the area, and want
                                             to find the length of the side.
       help [command]                        display help for command
@@ -219,7 +219,7 @@ test('migrations help', async () => {
                         applied.
       create [options]  Create a new migration
       list [options]    List all migrations
-      search            Available subcommands: byName, byContent
+      search            Available subcommands: by-name, by-content
       help [command]    display help for command"
   `)
 })
@@ -259,13 +259,13 @@ test('migrations search.byName help', async () => {
                         applied.
       create [options]  Create a new migration
       list [options]    List all migrations
-      search            Available subcommands: byName, byContent
+      search            Available subcommands: by-name, by-content
       help [command]    display help for command"
   `)
 })
 
 test('migrations search.byName', async () => {
-  const output = await tsx('migrations', ['search', 'byName', '--name', 'two'])
+  const output = await tsx('migrations', ['search', 'by-name', '--name', 'two'])
   expect(output).toMatchInlineSnapshot(`
     "{
       "name": "two",
@@ -292,7 +292,7 @@ test('migrations search.byContent', async () => {
                         applied.
       create [options]  Create a new migration
       list [options]    List all migrations
-      search            Available subcommands: byName, byContent
+      search            Available subcommands: by-name, by-content
       help [command]    display help for command
     "
   `)
@@ -418,7 +418,7 @@ test('fs diff', async () => {
 })
 
 test('thrown error in procedure includes call stack', async () => {
-  const output = await tsx('calculator', ['squareRoot', '--', '-1'])
+  const output = await tsx('calculator', ['square-root', '--', '-1'])
   expect(output).toMatch(/Error: Get real/)
   expect(output).toMatch(/at .* \(.*calculator.ts:\d+:\d+\)/)
 })
