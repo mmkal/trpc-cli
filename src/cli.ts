@@ -13,11 +13,6 @@ const trpcCliRouter = t.router({
     .meta({
       description: 'Run an existing trpc router as a CLI',
       default: true,
-      aliases: {
-        options: {
-          importFirst: 'i',
-        },
-      },
     })
     .input(
       z.tuple([
@@ -34,19 +29,19 @@ const trpcCliRouter = t.router({
     )
     .mutation(async ({input: [filepath, options]}) => {
       const fullpath = path.resolve(process.cwd(), filepath)
-      const mdl = (await import(fullpath)) as {}
+      const importedModule = (await import(fullpath)) as {}
       let router: Trpc11RouterLike
       const isTrpcRouterLike = (value: unknown): value is Trpc11RouterLike =>
         Boolean((value as Trpc11RouterLike)?._def?.procedures)
       if (options.export) {
-        router = (mdl as {[key: string]: Trpc11RouterLike})[options.export]
+        router = (importedModule as {[key: string]: Trpc11RouterLike})[options.export]
         if (!isTrpcRouterLike(router)) {
           throw new Error(`Expected a trpc router in ${filepath}.${options.export}, got ${typeof router}`)
         }
-      } else if (isTrpcRouterLike(mdl)) {
-        router = mdl
+      } else if (isTrpcRouterLike(importedModule)) {
+        router = importedModule
       } else {
-        const routerExports = Object.values(mdl).filter(isTrpcRouterLike)
+        const routerExports = Object.values(importedModule).filter(isTrpcRouterLike)
         if (routerExports.length !== 1) {
           throw new Error(`Expected exactly one trpc router in ${filepath}, found ${routerExports.length}`)
         }
