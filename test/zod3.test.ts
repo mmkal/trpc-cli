@@ -21,14 +21,18 @@ expect.addSnapshotSerializer({
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
-const run = <R extends AnyRouter>(router: R, argv: string[]) => {
-  return runWith({router}, argv)
+const run = <R extends AnyRouter>(router: R, argv: string[], {expectJsonInput = false} = {}) => {
+  return runWith({router}, argv, {expectJsonInput})
 }
-const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
+const runWith = async <R extends AnyRouter>(
+  params: TrpcCliParams<R>,
+  argv: string[],
+  {expectJsonInput = false} = {},
+): Promise<string> => {
   const cli = createCli(params)
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
-  return cli
+  const result: string = await cli
     .run({
       argv,
       logger: {info: addLogs, error: addLogs},
@@ -39,6 +43,12 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
       if (e.exitCode === 0) return e.cause
       throw e
     })
+
+  const hasJsonInput = result.includes('--input [json]')
+  if (result.includes('--') && hasJsonInput !== expectJsonInput) {
+    throw new Error(`${hasJsonInput ? 'Got' : 'Did not get'} --input [json]:\n\n${result}`)
+  }
+  return result
 }
 
 test('merging input types', async () => {
@@ -272,75 +282,65 @@ test('single character option', async () => {
 })
 
 test('custom default procedure', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({default: true})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
+  const yarnOutput = await run(router, ['--frozen-lockfile'])
   expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 
-  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
+  const yarnInstallOutput = await run(router, ['install', '--frozen-lockfile'])
   expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('command alias', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['i', '--frozen-lockfile'])
+  const yarnIOutput = await run(router, ['i', '--frozen-lockfile'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['install', '-x'])
+  const yarnIOutput = await run(router, ['install', '-x'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias can be two characters', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['install', '--xx'])
+  const yarnIOutput = await run(router, ['install', '--xx'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias typo', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
+  await expect(run(router, ['install', '-x'])).rejects.toMatchInlineSnapshot(
     `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
@@ -374,7 +374,7 @@ test('string array input', async () => {
       .query(({input}) => `strings: ${JSON.stringify(input)}`),
   })
 
-  const result = await run(router, ['stringArray', 'hello', 'world'])
+  const result = await run(router, ['string-array', 'hello', 'world'])
   expect(result).toMatchInlineSnapshot(`"strings: ["hello","world"]"`)
 })
 
@@ -444,7 +444,7 @@ test('record input', async () => {
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
 
-  expect(await run(router, ['test', '--help'])).toMatchInlineSnapshot(`
+  expect(await run(router, ['test', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
     "Usage: program test [options]
 
     Options:
@@ -471,7 +471,7 @@ test("nullable array inputs aren't supported", async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['test1', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test1', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test1 [options]
 
     Options:
@@ -481,10 +481,10 @@ test("nullable array inputs aren't supported", async () => {
       -h, --help      display help for command
     "
   `)
-  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])
+  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])], {expectJsonInput: true})
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
 
-  await expect(run(router, ['test2', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test2', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test2 [options]
 
     Options:
@@ -564,36 +564,40 @@ test('defaults and negations', async () => {
       .query(({input}) => `${inspect(input)}`),
   })
 
-  expect(await run(router, ['normalBoolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
-  expect(await run(router, ['normalBoolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['normal-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['normal-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
 
-  expect(await run(router, ['optionalBoolean'])).toMatchInlineSnapshot(`"{}"`)
-  expect(await run(router, ['optionalBoolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['optionalBoolean', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['optionalBoolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['optional-boolean'])).toMatchInlineSnapshot(`"{}"`)
+  expect(await run(router, ['optional-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['optional-boolean', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['optional-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
-  expect(await run(router, ['defaultTrueBoolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['defaultTrueBoolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['default-true-boolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['default-true-boolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
-  expect(await run(router, ['defaultFalseBoolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
-  expect(await run(router, ['defaultFalseBoolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['default-false-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['default-false-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
 
-  expect(await run(router, ['booleanOrNumber'])).toMatchInlineSnapshot(`"{ foo: false }"`)
-  expect(await run(router, ['booleanOrNumber', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['booleanOrNumber', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
-  expect(await run(router, ['booleanOrNumber', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['booleanOrNumber', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: 1 }"`)
+  expect(await run(router, ['boolean-or-number'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['boolean-or-number', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['boolean-or-number', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['boolean-or-number', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['boolean-or-number', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: 1 }"`)
 
-  expect(await run(router, ['booleanOrString'])).toMatchInlineSnapshot(`"{ foo: false }"`)
-  expect(await run(router, ['booleanOrString', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['booleanOrString', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: '1' }"`)
-  expect(await run(router, ['booleanOrString', '--foo', 'a'])).toMatchInlineSnapshot(`"{ foo: 'a' }"`)
+  expect(await run(router, ['boolean-or-string'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['boolean-or-string', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['boolean-or-string', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: '1' }"`)
+  expect(await run(router, ['boolean-or-string', '--foo', 'a'])).toMatchInlineSnapshot(`"{ foo: 'a' }"`)
 
-  expect(await run(router, ['arrayOfBooleanOrNumber'])).toMatchInlineSnapshot(`"{ foo: [] }"`)
-  expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: [ true ] }"`)
-  expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: [ 1 ] }"`)
-  expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: [ 1 ] }"`)
-  expect(await run(router, ['arrayOfBooleanOrNumber', '--foo', 'true', '1'])).toMatchInlineSnapshot(
+  expect(await run(router, ['array-of-boolean-or-number'])).toMatchInlineSnapshot(`"{ foo: [] }"`)
+  expect(await run(router, ['array-of-boolean-or-number', '--foo', 'true'])).toMatchInlineSnapshot(
+    `"{ foo: [ true ] }"`,
+  )
+  expect(await run(router, ['array-of-boolean-or-number', '--foo', '1'])).toMatchInlineSnapshot(`"{ foo: [ 1 ] }"`)
+  expect(await run(router, ['array-of-boolean-or-number', '--foo', '--foo', '1'])).toMatchInlineSnapshot(
+    `"{ foo: [ 1 ] }"`,
+  )
+  expect(await run(router, ['array-of-boolean-or-number', '--foo', 'true', '1'])).toMatchInlineSnapshot(
     `"{ foo: [ true, 1 ] }"`,
   )
 })

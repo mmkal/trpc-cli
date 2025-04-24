@@ -13,6 +13,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - ✅ Batteries included - no need to install any other libraries (even trpc!)
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
+- ✅ No config needed. Run on an existing router with `npx trpc-cli src/your-router.ts`
 
 ---
 
@@ -24,6 +25,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - [Installation](#installation)
 - [Usage](#usage)
    - [Quickstart](#quickstart)
+   - [Existing routers](#existing-routers)
    - [Disclaimer](#disclaimer)
    - [Parameters and options](#parameters-and-options)
    - [Default command](#default-command)
@@ -103,6 +105,18 @@ export const router = t.router({
 const cli = createCli({router})
 cli.run()
 ```
+
+### Existing routers
+
+If you already have a trpc router (say, for a regular server rather), you can invoke it as a CLI without writing any additional code - just use the built in bin script:
+
+```
+npx trpc-cli src/your-router.ts
+npx trpc-cli src/your-router.ts --help
+npx trpc-cli src/your-router.ts yourprocedure --foo bar
+```
+
+Note - in the above example `src/your-router.ts` will be imported, and then its exports will be checked to see if they match the shape of a tRPC router. If no routers or more than one router is found, an error will be thrown.
 
 ### Disclaimer
 
@@ -423,7 +437,7 @@ Commands:
                                         number and you want to make it smaller
                                         and `subtract` isn't quite powerful
                                         enough for you.
-  squareRoot <number>                   Square root of a number. Useful if you
+  square-root <number>                  Square root of a number. Useful if you
                                         have a square, know the area, and want
                                         to find the length of the side.
   help [command]                        display help for command
@@ -909,7 +923,7 @@ Commands:
                     applied.
   create [options]  Create a new migration
   list [options]    List all migrations
-  search            Available subcommands: byName, byContent
+  search            Available subcommands: by-name, by-content
   help [command]    display help for command
 ```
 <!-- codegen:end -->
@@ -928,7 +942,7 @@ Commands:
                     applied.
   create [options]  Create a new migration
   list [options]    List all migrations
-  search            Available subcommands: byName, byContent
+  search            Available subcommands: by-name, by-content
   help [command]    display help for command
 ```
 <!-- codegen:end -->
@@ -947,7 +961,7 @@ Commands:
                     applied.
   create [options]  Create a new migration
   list [options]    List all migrations
-  search            Available subcommands: byName, byContent
+  search            Available subcommands: by-name, by-content
   help [command]    display help for command
 ```
 <!-- codegen:end -->
