@@ -533,6 +533,36 @@ Note that JSON schema representations are not in general perfect 1-1 mappings wi
 
 Zod support is built-in, including the `zod-to-json-schema` conversion helper. You can also "bring your own" zod module (e.g. if you want to use a newer/older version of zod than the one included in `trpc-cli`).
 
+#### zod v4
+
+You can use zod v4 right now, but you'll need to pass it in to `createCli` so that trpc-cli knows how to format errors and parse your router's inputs:
+
+```ts
+import * as zod from 'zod' // zod v4!
+
+const cli = createCli({
+  router: myRouter,
+  zod,
+})
+```
+
+And that's it! Everything else will *just work*. You can start taking advantage of zod's new `meta` feature too to improve parameter names:
+
+```ts
+const myRouter = t.router({
+  createFile: t.procedure
+    .input(
+      z.string().meta({
+        title: 'filepath',
+        description: 'Path to the file to be created',
+      }),
+    )
+    .mutation(async ({input}) => {
+      /* */
+    }),
+})
+```
+
 ### arktype
 
 `arktype` includes a `toJsonSchema` method on its types, so no extra dependencies are reuqired if you're using arktype to validate your inputs.
