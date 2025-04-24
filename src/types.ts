@@ -1,7 +1,6 @@
 import type {JSONSchema7} from 'json-schema'
 import {type JsonSchema7Type} from 'zod-to-json-schema'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat'
-import type {ZodModuleLike} from './types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
