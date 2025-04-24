@@ -616,3 +616,69 @@ test('defaults and negations', async () => {
     `"{ foo: [ true, 1 ] }"`,
   )
 })
+
+test('use zod4 meta', async () => {
+  const myString = z
+    .string()
+    .meta({title: 'My String', description: 'A string which is mine. There are many like it but this one is mine.'})
+
+  expect(myString.description).toMatchInlineSnapshot(
+    `"A string which is mine. There are many like it but this one is mine."`,
+  )
+  expect(myString.meta()).toMatchInlineSnapshot(`
+    {
+      "description": "A string which is mine. There are many like it but this one is mine.",
+      "title": "My String",
+    }
+  `)
+
+  const router = t.router({
+    createFile: t.procedure
+      .input(
+        z.tuple([
+          z.string().meta({
+            title: 'File path',
+            description: 'The path to the file to be created. If necessary, parent folders will be created',
+          }),
+        ]),
+      )
+      .mutation(({input}) => `created file ${input[0]}`),
+    createFile2: t.procedure
+      .input(
+        z.tuple([
+          z.string().meta({
+            // title: 'File path', // commented out - description will be used instead
+            description: 'path to the file to be created',
+          }),
+        ]),
+      )
+      .mutation(({input}) => `created file ${input[0]}`),
+  })
+
+  const help = await run(router, ['create-file', '--help'])
+  expect(help).toMatchInlineSnapshot(`
+    "Usage: program create-file [options] <File path>
+
+    Arguments:
+      File path   The path to the file to be created. If necessary, parent folders
+                  will be created (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
+
+  const help2 = await run(router, ['create-file2', '--help'])
+  expect(help2).toMatchInlineSnapshot(`
+    "Usage: program create-file2 [options] <path to the file to be created>
+
+    Arguments:
+      path to the file to be created  path to the file to be created (required)
+
+    Options:
+      -h, --help                      display help for command
+    "
+  `)
+})
+
+// todo: either create a meta registry or use module augmentation to allow adding aliases for options etc.
