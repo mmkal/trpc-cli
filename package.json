@@ -40,16 +40,10 @@
   "peerDependenciesMeta": {
     "omelette": {
       "optional": true
-    },
-    "@trpc/server": {
-      "optional": true
-    },
-    "zod": {
-      "optional": true
     }
   },
   "dependencies": {
-    "@trpc/server": "^11.0.1",
+    "@trpc/server": "^11.1.1",
     "@types/omelette": "^0.4.4",
     "commander": "^13.1.0",
     "picocolors": "^1.0.1",
@@ -71,8 +65,8 @@
     "np": "10.2.0",
     "pkg-pr-new": "^0.0.43",
     "strip-ansi": "7.1.0",
-    "trpcserver10": "npm:@trpc/server@10.45.2",
-    "trpcserver11": "npm:@trpc/server@11.0.1",
+    "trpcserver10": "npm:@trpc/server@^10.45.2",
+    "trpcserver11": "npm:@trpc/server@^11.1.1",
     "tsx": "4.19.3",
     "typescript": "5.8.3",
     "valibot": "1.0.0",
