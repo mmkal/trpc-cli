@@ -81,8 +81,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid option: expected one of "aa"|"bb"
   `)
 })
 
@@ -96,8 +95,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
   `)
 })
 
@@ -112,8 +110,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string
   `)
 })
 
@@ -127,6 +124,35 @@ test('refine in a union pedantry', async () => {
   expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
   expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
   expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+})
+
+test('refinemenet type', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.string().refine(s => s.includes('o'), 'input must include o'))
+      .mutation(({input}) => `There are ${input.length - input.replaceAll('o', '').length} os in your string`),
+    bar: t.procedure
+      .input(z.object({greeting: z.string().refine(s => s.includes('o'), 'input must include o')}))
+      .mutation(
+        ({input}) =>
+          `There are ${input.greeting.length - input.greeting.replaceAll('o', '').length} os in your greeting`,
+      ),
+  })
+
+  expect(await run(router, ['foo', 'hello world'])).toMatchInlineSnapshot(`"There are 2 os in your string"`)
+  await expect(run(router, ['foo', 'bye earth'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ input must include o
+  `)
+
+  expect(await run(router, ['bar', '--greeting', 'hello world'])).toMatchInlineSnapshot(
+    `"There are 2 os in your greeting"`,
+  )
+  await expect(run(router, ['bar', '--greeting', 'bye earth'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ input must include o
+      → at greeting
+  `)
 })
 
 test('transform in a union', async () => {
@@ -159,8 +185,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected 2
   `)
 })
 
@@ -197,8 +222,7 @@ test('regex input', async () => {
   // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid string: must match pattern /hello/
   `)
 })
 
@@ -230,8 +254,8 @@ test('tuple input', async () => {
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
+      → at [1]
   `)
 })
 
@@ -257,8 +281,8 @@ test('tuple input with flags', async () => {
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
+      → at [1]
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -396,8 +420,8 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
+      → at [1]
   `)
 })
 
@@ -410,8 +434,8 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
+      → at [0]
   `)
 })
 
@@ -427,8 +451,8 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string
+      → at [1]
   `)
 })
 
@@ -464,8 +488,8 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
+      → at foo
   `)
 })
 

@@ -12,7 +12,7 @@ import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {Dependencies, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
-import {looksLikeInstanceof} from './util'
+import {looksLikeInstanceof, looksLikeStandardSchemaFailureResult} from './util'
 
 export * from './types'
 
@@ -537,6 +537,15 @@ function transformError(err: unknown, command: Command, dependencies: Dependenci
   }
   if (looksLikeInstanceof(err, trpcServer11.TRPCError)) {
     const cause = err.cause
+    if (err.code === 'BAD_REQUEST' && dependencies.zod?.prettifyError && looksLikeStandardSchemaFailureResult(cause)) {
+      // looks like zod 4 which has a built in prettifier (although does it??? what if someone uses zod 4 for *most* of their procedures but arktype or whatever for others? the errors will look like standard-schema errors but we won't know if we should be using zod 4's prettifier)
+      try {
+        const prettyMessage = dependencies.zod.prettifyError(cause as never)
+        return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
+      } finally {
+        // cause.issues = originalIssues
+      }
+    }
     if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues
       try {
@@ -563,6 +572,7 @@ function transformError(err: unknown, command: Command, dependencies: Dependenci
         cause.issues = originalIssues
       }
     }
+
     if (
       err.code === 'BAD_REQUEST' &&
       (err.cause?.constructor?.name === 'TraversalError' || // arktype error
