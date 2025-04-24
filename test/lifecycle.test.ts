@@ -1,4 +1,5 @@
 import {initTRPC} from '@trpc/server'
+import {Command} from 'commander'
 import {expect, test, vi} from 'vitest'
 import {createCli, TrpcCliMeta, z} from '../src'
 import {FailedToExitError} from '../src/errors'
@@ -132,5 +133,39 @@ test('make sure parsing works correctly', async () => {
     Options:
       -h, --help   display help for command
     ]
+  `)
+})
+
+test('modify commander program manually', async () => {
+  const cli = createCli({router: calculatorRouter})
+  const program = cli.buildProgram() as Command
+  program.usage('Here is how to use: `calculator add 1 1`')
+  program.addHelpText('afterAll', `Good luck have fun`)
+  const mockLog = vi.fn()
+  const result = await cli
+    .run(
+      {
+        argv: ['--help'],
+        process: {exit: () => void 0 as never},
+        logger: {...console, error: mockLog, info: mockLog},
+      },
+      program,
+    )
+    .catch(err => err?.cause)
+
+  expect(result).toMatchInlineSnapshot(`[CommanderError: (outputHelp)]`)
+  expect(mockLog.mock.calls.join('\n')).toMatchInlineSnapshot(`
+    "Usage: program Here is how to use: \`calculator add 1 1\`
+
+    Options:
+      -h, --help                       display help for command
+
+    Commands:
+      add <parameter_1> <parameter_2>
+      square-root <number>
+      help [command]                   display help for command
+
+    Good luck have fun
+    "
   `)
 })
