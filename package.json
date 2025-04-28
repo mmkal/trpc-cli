@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@types/json-schema": "7.0.15",
-    "@types/node": "20.17.31",
+    "@types/node": "20.17.32",
     "@valibot/to-json-schema": "1.0.0",
     "arktype": "2.1.9",
     "effect": "3.14.14",
