@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@trpc/server':
         specifier: ^11.1.1
-        version: 11.1.1(typescript@5.8.3)
+        version: 11.1.2(typescript@5.8.3)
       '@types/omelette':
         specifier: ^0.4.4
         version: 0.4.5
@@ -77,7 +77,7 @@ importers:
         version: '@trpc/server@10.45.2'
       trpcserver11:
         specifier: npm:@trpc/server@^11.1.1
-        version: '@trpc/server@11.1.1(typescript@5.8.3)'
+        version: '@trpc/server@11.1.2(typescript@5.8.3)'
       tsx:
         specifier: 4.19.4
         version: 4.19.4
@@ -946,8 +946,8 @@ packages:
   '@trpc/server@10.45.2':
     resolution: {integrity: sha512-wOrSThNNE4HUnuhJG6PfDRp4L2009KDVxsd+2VYH8ro6o/7/jwYZ8Uu5j+VaW+mOmc8EHerHzGcdbGNQSAUPgg==}
 
-  '@trpc/server@11.1.1':
-    resolution: {integrity: sha512-ZjPN3ypBHvGMAlMgeZPrxlRcH/3dn4AK0s5Ph1z+E6uiAvIQVCj7ZoMlXeeBsIy4THGDAk953jHVW2kMnlbb4g==}
+  '@trpc/server@11.1.2':
+    resolution: {integrity: sha512-Oi9zWHG0ZDkbDo4sYkduoV7q4sIe6UwjrRLC91vNMYQK+PVgpbTCmK1laRwewAGu0zaayqcGDosANjceOIC3GA==}
     peerDependencies:
       typescript: '>=5.7.2'
 
@@ -4743,7 +4743,7 @@ snapshots:
 
   '@trpc/server@10.45.2': {}
 
-  '@trpc/server@11.1.1(typescript@5.8.3)':
+  '@trpc/server@11.1.2(typescript@5.8.3)':
     dependencies:
       typescript: 5.8.3
 
