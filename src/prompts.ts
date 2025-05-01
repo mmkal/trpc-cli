@@ -101,7 +101,17 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
       throw new Error(`Unexpected args format, last arg is not the Command instance`, {cause: args})
     }
 
-    JSON.stringify({positionalValues, options}, (key, value) => {
+    positionalValues.forEach(value => {
+      const argumentInfo = parseUpstreamArgumentInfo(value)
+      if (argumentInfo) {
+        analysis.arguments.push({
+          ...argumentsMap.get(argumentInfo.id)!,
+          value: argumentInfo.value,
+          specified: argumentInfo.specified,
+        })
+      }
+    })
+    Object.values(options).forEach(value => {
       const upstreamOptionInfo = parseUpstreamOptionInfo(value)
       if (upstreamOptionInfo) {
         analysis.options.push({
@@ -110,18 +120,8 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
           specified: upstreamOptionInfo.specified,
         })
       }
-      const upstreamArgumentInfo = parseUpstreamArgumentInfo(value)
-      if (upstreamArgumentInfo) {
-        analysis.arguments.push({
-          ...argumentsMap.get(upstreamArgumentInfo.id)!,
-          value: upstreamArgumentInfo.value,
-          specified: upstreamArgumentInfo.specified,
-        })
-      }
-      return value
     })
     onAnalyze(analysis)
-    // console.log({options}, unsetValues)
   })
 
   command.commands.forEach(subcommand => {
