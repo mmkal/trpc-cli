@@ -7,7 +7,13 @@ import {JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
-import {flattenedProperties, incompatiblePropertyPairs, getDescription, getSchemaTypes} from './json-schema'
+import {
+  flattenedProperties,
+  incompatiblePropertyPairs,
+  getDescription,
+  getSchemaTypes,
+  getEnumChoices,
+} from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
@@ -331,6 +337,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         if (option.flags.includes('<')) {
           option.makeOptionMandatory()
+        }
+
+        const enumChoices = getEnumChoices(propertyValue)
+        if (enumChoices?.type === 'string_enum') {
+          option.choices(enumChoices.choices)
         }
 
         option.conflicts(
