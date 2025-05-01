@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
-import {Argument, Command as BaseCommand, CommanderError, InvalidArgumentError, Option} from 'commander'
+import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
 import {ZodError} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
@@ -40,8 +40,6 @@ export class Command extends BaseCommand {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 
 export {AnyRouter, AnyProcedure} from './trpc-compat'
-
-const promptsEnabled = Math.random() < -10
 
 /**
  * Run a trpc router as a CLI.
@@ -168,6 +166,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           param.required ? '(required)' : '',
         ]
         const argument = new Argument(param.name, descriptionParts.filter(Boolean).join(' '))
+        if (param.type === 'number') {
+          argument.argParser(value => {
+            const number = numberParser(value, {fallback: null})
+            if (number == null) throw new InvalidArgumentError(`Invalid number: ${value}`)
+            return value
+          })
+        }
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
@@ -200,17 +205,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             `Negate \`${longOption}\` option. ${description || ''}`.trim(),
           )
           command.addOption(negation)
-        }
-
-        const numberParser = (val: string, {fallback = val as unknown} = {}) => {
-          const number = Number(val)
-          return Number.isNaN(number) ? fallback : number
-        }
-
-        const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
-          if (val === 'true') return true
-          if (val === 'false') return false
-          return fallback
         }
 
         const rootTypes = getSchemaTypes(propertyValue).sort()
@@ -367,7 +361,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       // Set the action for this command
       command.action(async (...args) => {
-        if (runParams?.dummy) return
         program.__ran ||= []
         program.__ran.push(command)
         const options = command.opts()
@@ -488,59 +481,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
   async function run(runParams?: TrpcCliRunParams): Promise<void> {
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
     const argv = [...(runParams?.argv || process.argv)]
-    if (promptsEnabled) {
-      const modifiedRunParams: TrpcCliRunParams | undefined = {
-        ...runParams,
-        logger: {
-          error: _ => {},
-          info: _ => {},
-        },
-        process: {exit: _ => _ as never},
-        dummy: true,
-      }
-      for (let i = 0; i < 100; i++) {
-        const shadowProgram = buildProgram(modifiedRunParams)
-        shadowProgram.configureOutput({
-          writeErr: _ => {},
-          writeOut: _ => {},
-        })
-        const prompts = require('@inquirer/prompts') as typeof import('@inquirer/prompts')
-        try {
-          await shadowProgram.parseAsync(argv, opts)
-          break
-        } catch (shadowError) {
-          if (shadowError instanceof FailedToExitError) {
-            const cause = shadowError.cause
-            if (cause instanceof CommanderError && cause.code === 'commander.missingArgument') {
-              const value = await prompts.input({
-                message:
-                  cause.message
-                    .split(/error: /i)
-                    .pop()
-                    ?.replace(/^missing /, '')
-                    ?.trim() || 'enter argument value',
-              })
-              argv.push(value)
-              continue
-            }
-            if (cause instanceof CommanderError && cause.code === 'commander.missingMandatoryOptionValue') {
-              const value = await prompts.input({
-                message:
-                  cause.message
-                    .split(/error: /i)
-                    .pop()
-                    ?.replace(/ not specified$/, '')
-                    .trim() || 'enter option value',
-              })
-              argv.push(cause.message.match(/--\S+/)![0], value)
-              continue
-            }
-            throw shadowError
-          }
-          throw new FailedToExitError('Failed to run program', {exitCode: 1, cause: shadowError})
-        }
-      }
-    }
+
     const _process = runParams?.process || process
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = buildProgram(runParams)
@@ -639,3 +580,14 @@ function transformError(err: unknown, command: Command) {
 }
 
 export {FailedToExitError, CliValidationError} from './errors'
+
+const numberParser = (val: string, {fallback = val as unknown} = {}) => {
+  const number = Number(val)
+  return Number.isNaN(number) ? fallback : number
+}
+
+const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
+  if (val === 'true') return true
+  if (val === 'false') return false
+  return fallback
+}

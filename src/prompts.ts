@@ -1,5 +1,6 @@
 /* eslint-disable import-x/order */
-import {Argument, Command, Option} from 'commander'
+import {Argument, Command, CommanderError, Option} from 'commander'
+import {CommanderProgramLike} from './types'
 
 type UpstreamOptionInfo = {
   typeName: 'UpstreamOptionInfo'
@@ -21,8 +22,6 @@ type Analysis = {
   command: Shadowed<Command>
   arguments: WithValue<Argument>[]
   options: WithValue<Option>[]
-  // argumentsMap: Map<number, {shadow: Argument; original: Argument}>
-  // optionsMap: Map<number, {shadow: Option; original: Option}>
 }
 const parseUpstreamOptionInfo = (value: unknown): UpstreamOptionInfo | null => {
   if (typeof value !== 'string' || !value.startsWith('{')) return null
@@ -48,6 +47,11 @@ const parseUpstreamArgumentInfo = (value: unknown): UpstreamArgumentInfo | null 
 
 export const createShadowCommand = (command: Command, onAnalyze: (params: Analysis) => void): Command => {
   const shadow = new Command(command.name())
+  shadow.exitOverride()
+  shadow.configureOutput({
+    writeOut: () => {},
+    writeErr: () => {},
+  })
   const argumentsMap = new Map<number, Shadowed<Argument>>()
   const optionsMap = new Map<number, Shadowed<Option>>()
 
@@ -128,15 +132,22 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
   return shadow
 }
 
-export const promptify = (command: Command) => {
+export const promptify = (program: CommanderProgramLike, prompts: typeof import('@inquirer/prompts')) => {
+  const command = program as Command
   return {
     parseAsync: async (args: string[]) => {
       const nextArgs = [...args]
       const analysis = await new Promise<Analysis>((resolve, reject) => {
         const shadow = createShadowCommand(command, resolve)
-        shadow.parseAsync(process.argv).catch(reject)
+        shadow.parseAsync(process.argv).catch(e => {
+          if (e instanceof CommanderError && e.exitCode === 0) {
+            // commander tried to exit with code 0, probably rendered help - no analysis to provide
+            resolve({command: {shadow, original: command}, arguments: [], options: []})
+            return
+          }
+          reject(e as Error)
+        })
       })
-      const prompts = await import('@inquirer/prompts')
       const getMessage = (thing: {name: () => string; description: string | undefined}) => {
         let message = `Enter value for ${thing.name()}`
         if (thing.description) {
@@ -144,9 +155,26 @@ export const promptify = (command: Command) => {
         }
         return message
       }
+
       for (const arg of analysis.arguments) {
         if (!arg.specified) {
-          const promptedValue = await prompts.input({message: getMessage(arg.original), default: arg.value})
+          const parseArg =
+            'parseArg' in arg.original && typeof arg.original.parseArg === 'function'
+              ? (arg.original.parseArg as (value: string) => string | undefined)
+              : undefined
+          const promptedValue = await prompts.input({
+            message: getMessage(arg.original),
+            required: arg.original.required,
+            default: arg.value,
+            validate: input => {
+              try {
+                parseArg?.(input)
+                return true
+              } catch (e) {
+                return `${(e as Error)?.message || (e as string)}`
+              }
+            },
+          })
           nextArgs.push(promptedValue)
         }
       }
@@ -160,13 +188,33 @@ export const promptify = (command: Command) => {
               default: (option.original.defaultValue as boolean | undefined) ?? false,
             })
             if (promptedValue) nextArgs.push(fullFlag)
+          } else if (option.original.argChoices) {
+            const promptedValue = await prompts.select({
+              message: getMessage(option.original),
+              choices: option.original.argChoices,
+              default: option.original.defaultValue,
+            })
+            nextArgs.push(fullFlag, promptedValue as string)
+          } else if (option.original.description.endsWith(' array')) {
+            const values: string[] = []
+            do {
+              const promptedValue = await prompts.input({
+                message: getMessage(option.original),
+                default: option.original.defaultValue?.[values.length] as string,
+              })
+              if (!promptedValue) break
+              values.push(promptedValue)
+            } while (values)
+            nextArgs.push(fullFlag, ...values)
           } else {
+            // let's handle this as a string - but the `parseArg` function could turn it into a number or boolean or whatever
             const getParsedValue = (input: string) => {
               return option.original.parseArg ? option.original.parseArg(input, undefined as string | undefined) : input
             }
             const promptedValue = await prompts.input({
               message: getMessage(option.original),
               default: option.value,
+              required: option.original.required,
               validate: input => {
                 const parsed = getParsedValue(input)
                 if (parsed == null && input != null) return 'Invalid value'
@@ -180,7 +228,8 @@ export const promptify = (command: Command) => {
 
       return command.parseAsync(nextArgs)
     },
-  }
+    helpInformation: () => command.helpInformation(),
+  } satisfies CommanderProgramLike
 }
 
 if (require.main === module) {
@@ -190,18 +239,9 @@ if (require.main === module) {
       const {createCli} = await import('./index')
       const cli = createCli({router})
       const program = cli.buildProgram()
-      await promptify(program as Command).parseAsync(process.argv)
+      await promptify(program, await import('@inquirer/prompts')).parseAsync(process.argv)
       return
     }
-    const {router} = await import('../test/fixtures/ignoreme/prompto')
-    const {createCli} = await import('./index')
-    const cli = createCli({router})
-    const program = cli.buildProgram()
-    const analysis = await new Promise<Analysis>((resolve, reject) => {
-      const shadow = createShadowCommand(program as Command, resolve)
-      shadow.parseAsync(process.argv).catch(reject)
-    })
-    console.dir({analysis}, {depth: 4})
   }
   void main()
 }
