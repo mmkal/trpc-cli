@@ -318,10 +318,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
           else if (isValueRequired) option.default([])
-          const itemTypes =
-            'items' in propertyValue && propertyValue.items
-              ? getSchemaTypes(propertyValue.items as JsonSchema7Type)
-              : []
+          const itemsProp = 'items' in propertyValue ? (propertyValue.items as JsonSchema7Type) : null
+          const itemTypes = itemsProp ? getSchemaTypes(itemsProp) : []
+
+          const itemEnumTypes = itemsProp && getEnumChoices(itemsProp)
+          if (itemEnumTypes?.type === 'string_enum') {
+            option.choices(itemEnumTypes.choices)
+          }
 
           const itemParser = getValueParser(itemTypes)
           if (itemParser.parser) {

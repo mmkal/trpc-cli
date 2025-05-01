@@ -253,6 +253,30 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
             default: (option.original.defaultValue as boolean | undefined) ?? false,
           })
           if (promptedValue) nextArgs.push(fullFlag)
+        } else if (option.original.variadic && option.original.argChoices) {
+          const values: string[] = []
+          do {
+            const choices = option.original.argChoices.slice()
+            const set = new Set(choices)
+            const activeChoices = choices
+              .map(choice => ({
+                name: choice,
+                value: choice,
+              }))
+              .filter(choice => !values.includes(choice.value))
+
+            if (activeChoices.length === 0) break
+            const promptedValue = await _prompts.select({
+              message: getMessage(option.original),
+              choices: activeChoices.concat([{name: 'Done', value: ''}]),
+              default: option.original.defaultValue,
+              required: option.original.required,
+            })
+
+            if (!promptedValue) break
+            if (set.has(promptedValue)) values.push(fullFlag, promptedValue)
+          } while (values)
+          nextArgs.push(...values)
         } else if (option.original.argChoices) {
           const choices = option.original.argChoices.slice()
           const set = new Set(choices)
@@ -266,7 +290,6 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
             nextArgs.push(fullFlag, promptedValue)
           }
         } else if (option.original.variadic) {
-          // surely there's a better way to tell if this is an array option?
           const values: string[] = []
           do {
             const promptedValue = await _prompts.input({
