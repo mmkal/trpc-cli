@@ -78,6 +78,7 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
       .filter(([k, vv]) => {
         if (k === 'default' || k === 'additionalProperties') return false
         if (k === 'type' && typeof vv === 'string') return depth > 0 // don't show type: string at depth 0, that's the default
+        if (depth === 0 && k === 'enum' && getEnumChoices(v)?.type === 'string_enum') return false // don't show Enum: ["a","b"], that's handled by commander's `choices`
         return true
       })
       .sort(([a], [b]) => {
@@ -118,4 +119,71 @@ export const getSchemaTypes = (
   }
 
   return [...new Set(array)]
+}
+
+export const getEnumChoices = (propertyValue: JsonSchema7Type) => {
+  if (!propertyValue) return null
+  if (!('enum' in propertyValue && Array.isArray(propertyValue.enum))) {
+    // arktype prefers {anyOf: [{const: 'foo'}, {const: 'bar'}]} over {enum: ['foo', 'bar']} 🤷
+    if (
+      'anyOf' in propertyValue &&
+      propertyValue.anyOf?.every(subSchema => {
+        if (
+          subSchema &&
+          'const' in subSchema &&
+          Object.keys(subSchema).length === 1 &&
+          typeof subSchema.const === 'string'
+        ) {
+          return true
+        }
+        return false
+      })
+    ) {
+      // all the subschemas are string literals, so we can use them as choices
+      return {
+        type: 'string_enum',
+        choices: propertyValue.anyOf.map(subSchema => (subSchema as {const: string}).const),
+      } as const
+    }
+
+    if (
+      'anyOf' in propertyValue &&
+      propertyValue.anyOf?.every(subSchema => {
+        if (
+          subSchema &&
+          'const' in subSchema &&
+          Object.keys(subSchema).length === 1 &&
+          typeof subSchema.const === 'number'
+        ) {
+          return true
+        }
+        return false
+      })
+    ) {
+      // all the subschemas are string literals, so we can use them as choices
+      return {
+        type: 'number_enum',
+        choices: propertyValue.anyOf.map(subSchema => (subSchema as {const: number}).const),
+      } as const
+    }
+
+    return null
+  }
+
+  if (propertyValue.enum.every(s => typeof s === 'string')) {
+    return {
+      type: 'string_enum',
+      choices: propertyValue.enum as string[],
+    } as const
+  }
+
+  // commander doesn't like number enums - could enable with a parser but let's avoid for now
+  if (propertyValue.enum.every(s => typeof s === 'number')) {
+    return {
+      type: 'number_enum',
+      choices: propertyValue.enum as number[],
+    } as const
+  }
+
+  return null
 }
