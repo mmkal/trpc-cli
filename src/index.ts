@@ -35,7 +35,7 @@ export class Command extends BaseCommand {
 
 export {AnyRouter, AnyProcedure} from './trpc-compat'
 
-const promptsEnabled = Math.random() < 10
+const promptsEnabled = Math.random() < -10
 
 /**
  * Run a trpc router as a CLI.
@@ -308,7 +308,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option = new Option(flags, description)
         } else if (propertyType === 'number' || propertyType === 'integer') {
           option = new Option(`${flags} ${bracketise('number')}`, description)
-          option.argParser(value => numberParser(value))
+          option.argParser(value => numberParser(value, {fallback: null}))
         } else if (propertyType === 'array') {
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
@@ -495,11 +495,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         })
         const prompts = require('@inquirer/prompts') as typeof import('@inquirer/prompts')
         try {
-          // console.log('parsing', argv, opts)
           await shadowProgram.parseAsync(argv, opts)
           break
         } catch (shadowError) {
-          console.error({shadowError})
           if (shadowError instanceof FailedToExitError) {
             const cause = shadowError.cause
             if (cause instanceof CommanderError && cause.code === 'commander.missingArgument') {
@@ -514,6 +512,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
               argv.push(value)
               continue
             }
+            if (cause instanceof CommanderError && cause.code === 'commander.missingMandatoryOptionValue') {
+              const value = await prompts.input({
+                message:
+                  cause.message
+                    .split(/error: /i)
+                    .pop()
+                    ?.replace(/ not specified$/, '')
+                    .trim() || 'enter option value',
+              })
+              argv.push(cause.message.match(/--\S+/)![0], value)
+              continue
+            }
             throw shadowError
           }
           throw new FailedToExitError('Failed to run program', {exitCode: 1, cause: shadowError})
@@ -524,7 +534,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = buildProgram(runParams)
     program.exitOverride(exit => {
-      console.log('program.exitOverride', {exit})
       _process.exit(exit.exitCode)
       throw new FailedToExitError('Root command exitOverride', {exitCode: exit.exitCode, cause: exit})
     })

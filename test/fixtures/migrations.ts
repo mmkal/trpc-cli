@@ -24,7 +24,7 @@ const searchProcedure = trpc.procedure
     })
   })
 
-const router = trpc.router({
+export const router = trpc.router({
   up: trpc.procedure
     .meta({description: 'Apply migrations. By default all pending migrations will be applied.'})
     .input(
@@ -84,10 +84,13 @@ const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc11RouterLike
 
-const cli = createCli({router})
+if (require.main === module) {
+  const caller = router.createCaller({})
+  caller['search.byName']({name: 'one'}).then(console.log)
+  // const cli = createCli({router})
 
-void cli.run()
-
+  // void cli.run()
+}
 function getMigrations() {
   return [
     {name: 'one', content: 'create table one(id int, name text)', status: 'executed'},
