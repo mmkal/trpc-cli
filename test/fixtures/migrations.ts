@@ -85,11 +85,8 @@ export const router = trpc.router({
 }) satisfies trpcCompat.Trpc11RouterLike
 
 if (require.main === module) {
-  const caller = router.createCaller({})
-  caller['search.byName']({name: 'one'}).then(console.log)
-  // const cli = createCli({router})
-
-  // void cli.run()
+  const cli = createCli({router})
+  void cli.run()
 }
 function getMigrations() {
   return [
