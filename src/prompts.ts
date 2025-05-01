@@ -163,18 +163,8 @@ const enquirerToInquirer = (en: EnquirerLike): InquirerPromptsLike => {
         initial: params.default as {},
       })
     },
-    // form: async (params: any) => {
-    //   return en.prompt({
-    //     type: 'form',
-    //     name: 'x',
-    //     message: params.message,
-    //     choices: [
-    //       {name: 'aa', message: 'ay', type: 'confirm'},
-    //       {name: 'bb', message: 'bee', type: 'input'},
-    //       {name: 'cc', message: 'cee', type: 'select', choices: ['foo', 'bar', 'baz']},
-    //     ],
-    //   })
-    // },
+    // consider adding a "form" method - would be nice to see all the prompts at once
+    // form: async (params: any) => {},
   }
 }
 
