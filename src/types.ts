@@ -1,8 +1,9 @@
+import type {JSONSchema7} from 'json-schema'
 import {type JsonSchema7Type} from 'zod-to-json-schema'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type TrpcCliParams<R extends AnyRouter> = {
+export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** A tRPC router. Procedures will become CLI commands. */
   router: R
   /** Context to be supplied when invoking the router. */
@@ -12,7 +13,7 @@ export type TrpcCliParams<R extends AnyRouter> = {
   /** @deprecated this is actually **removed** not deprecated; set `default: true` on the procedure `meta` instead */
   _default?: never // {procedure: Extract<keyof R['_def']['procedures'], string>}
 
-  /** The `createCallerFactory` function from `@trpc/server`. Required when using trpc v10. */
+  /** The `@trpc/server` module to use for calling procedures. Required when using trpc v10. */
   // createCallerFactory?: CreateCallerFactoryLike
   trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
 }
@@ -139,4 +140,26 @@ export type CommanderProgramLike = {
 export interface TrpcCli {
   run: (params?: TrpcCliRunParams) => Promise<void>
   buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
+}
+
+// todo: allow these all to be async?
+export type Dependencies = {
+  /** A custom `zod` module to use for converting to JSON schema. Defaults to zod v3, which *doesn't* convert to JSON schema and generating readable error messages.
+   * Required when using zod v4 with (experimental) JSON schema output built-in.
+   *
+   * For zod v3 (the default), the `zod-to-json-schema` package is used for JSON schema output and
+   * `zod-validation-error` is used for readable error messages.
+   */
+  zod?: {
+    prettifyError?: (error: never) => string
+    toJSONSchema?: (schema: never) => {}
+    string: () => {}
+  }
+  '@valibot/to-json-schema'?: {
+    toJsonSchema: (input: unknown, options?: {errorMode?: 'throw' | 'ignore' | 'warn'}) => JSONSchema7
+  }
+  effect?: {
+    Schema: {isSchema: (input: unknown) => input is 'JSONSchemaMakeable'}
+    JSONSchema: {make: (input: 'JSONSchemaMakeable') => JSONSchema7}
+  }
 }
