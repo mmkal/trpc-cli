@@ -120,20 +120,9 @@ test('make sure parsing works correctly', async () => {
   await expect(run(['add', '2', '3'])).resolves.toBe(5)
   await expect(run(['square-root', '--', '4'])).resolves.toBe(2)
   await expect(run(['square-root', '--', '-1'])).rejects.toMatchInlineSnapshot(`[Error: Get real]`)
-  await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
-    [Error: Validation error
-      - Expected number, received string at index 1
-
-    Usage: program add [options] <parameter_1> <parameter_2>
-
-    Arguments:
-      parameter_1  number (required)
-      parameter_2  number (required)
-
-    Options:
-      -h, --help   display help for command
-    ]
-  `)
+  await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(
+    `[CommanderError: error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber]`,
+  )
 })
 
 test('modify commander program manually', async () => {
