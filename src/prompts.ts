@@ -192,11 +192,16 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
         analysis.options.length === 0 &&
         analysis.command.original.commands.length > 0
       ) {
+        // we've got subcommands, let's prompt the user to select one
         let currentCommand = analysis.command.original as Command | undefined
         while (currentCommand?.commands && currentCommand.commands.length > 0) {
           const subcommand = await _prompts.select({
             message: 'Select a subcommand',
-            choices: currentCommand.commands.map(child => child.name()),
+            choices: currentCommand.commands.map(child => ({
+              name: child.name(),
+              value: child.name(),
+              description: child.description(),
+            })),
           })
           nextArgs.push(subcommand)
           currentCommand = currentCommand.commands.find(child => child.name() === subcommand)
@@ -260,7 +265,8 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
           if (set.has(promptedValue)) {
             nextArgs.push(fullFlag, promptedValue)
           }
-        } else if (option.original.description.endsWith(' array')) {
+        } else if (option.original.variadic) {
+          // surely there's a better way to tell if this is an array option?
           const values: string[] = []
           do {
             const promptedValue = await _prompts.input({

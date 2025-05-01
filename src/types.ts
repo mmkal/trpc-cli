@@ -130,7 +130,9 @@ export type InquirerPromptOptions = {
 export type InquirerPromptsLike = {
   input: (params: InquirerPromptOptions) => Promise<string>
   confirm: (params: InquirerPromptOptions) => Promise<boolean>
-  select: (params: InquirerPromptOptions & {choices: string[]}) => Promise<string>
+  select: (
+    params: InquirerPromptOptions & {choices: string[] | Array<{name: string; value: string; description?: string}>},
+  ) => Promise<string>
   form?: unknown
 }
 

@@ -8,6 +8,9 @@ const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 const router = trpc.router({
   challenge: trpc.router({
     harshly: trpc.procedure
+      .meta({
+        description: 'Challenge the user - they will have to say whether they are sure or not',
+      })
       .input(
         z.object({
           areYouSure: z.boolean().describe('Are you sure?'),
@@ -15,6 +18,9 @@ const router = trpc.router({
       )
       .query(({input}) => JSON.stringify(input)),
     gently: trpc.procedure
+      .meta({
+        description: 'Give the user a chance to be confident',
+      })
       .input(
         z.object({
           areYouConfident: z.boolean().describe('Are you confident?'),
