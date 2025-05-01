@@ -85,7 +85,8 @@ test('cli help', async () => {
         square-root <number>                  Square root of a number. Useful if you
                                               have a square, know the area, and want
                                               to find the length of the side.
-        help [command]                        display help for command"
+        help [command]                        display help for command
+      "
     `)
 })
 
@@ -264,7 +265,8 @@ test('migrations help', async () => {
       create [options]  Create a new migration
       list [options]    List all migrations
       search            Available subcommands: by-name, by-content
-      help [command]    display help for command"
+      help [command]    display help for command
+    "
   `)
 })
 
@@ -304,7 +306,8 @@ test('migrations search.byName help', async () => {
       create [options]  Create a new migration
       list [options]    List all migrations
       search            Available subcommands: by-name, by-content
-      help [command]    display help for command"
+      help [command]    display help for command
+    "
   `)
 })
 
@@ -372,7 +375,8 @@ test('fs help', async () => {
     Commands:
       copy [options] <Source path> [Destination path]
       diff [options] <Base path> <Head path>
-      help [command]                                   display help for command"
+      help [command]                                   display help for command
+    "
   `)
 })
 

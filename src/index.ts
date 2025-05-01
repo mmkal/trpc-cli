@@ -18,8 +18,8 @@ import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
 import {promptify} from './prompts'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
-import {looksLikeInstanceof} from './util'
+import {Dependencies, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
+import {looksLikeInstanceof, looksLikeStandardSchemaFailureResult} from './util'
 
 export * from './types'
 
@@ -52,7 +52,11 @@ export {AnyRouter, AnyProcedure} from './trpc-compat'
  */
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
-    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[])
+    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], {
+      zod: params.zod,
+      '@valibot/to-json-schema': params['@valibot/to-json-schema'],
+      effect: params.effect,
+    })
     // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
     let type: 'mutation' | 'query' | 'subscription'
     if (isTrpc11Procedure(procedure)) {
@@ -394,7 +398,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const caller = createCallerFactory(router)(params.context)
 
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-          throw transformError(err, command)
+          throw transformError(err, command, params)
         })
         command.__result = result
         if (result != null) logger.info?.(result)
@@ -479,19 +483,20 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     return program
   }
 
-  async function run(runParams?: TrpcCliRunParams): Promise<void> {
+  const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams)) => {
+    if (!looksLikeInstanceof(program, Command)) throw new Error(`program is not a Command instance`)
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
     const argv = [...(runParams?.argv || process.argv)]
 
     const _process = runParams?.process || process
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    let program = buildProgram(runParams)
 
     program.exitOverride(exit => {
       _process.exit(exit.exitCode)
       throw new FailedToExitError('Root command exitOverride', {exitCode: exit.exitCode, cause: exit})
     })
     program.configureOutput({
+      writeOut: str => logger.info?.(str),
       writeErr: str => logger.error?.(str),
     })
 
@@ -525,7 +530,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       throw new FailedToExitError(`Program exit after failure`, {exitCode: 1, cause: err})
     })
     _process.exit(0)
-    throw new FailedToExitError('Program exit after success', {exitCode: 0, cause: program.__ran.at(-1)?.__result})
+    throw new FailedToExitError('Program exit after success', {
+      exitCode: 0,
+      cause: (program as Command).__ran.at(-1)?.__result,
+    })
   }
 
   return {run, buildProgram}
@@ -543,7 +551,7 @@ function kebabCase(propName: string) {
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-function transformError(err: unknown, command: Command) {
+function transformError(err: unknown, command: Command, dependencies: Dependencies) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error(
       'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
@@ -551,6 +559,15 @@ function transformError(err: unknown, command: Command) {
   }
   if (looksLikeInstanceof(err, trpcServer11.TRPCError)) {
     const cause = err.cause
+    if (err.code === 'BAD_REQUEST' && dependencies.zod?.prettifyError && looksLikeStandardSchemaFailureResult(cause)) {
+      // looks like zod 4 which has a built in prettifier (although does it??? what if someone uses zod 4 for *most* of their procedures but arktype or whatever for others? the errors will look like standard-schema errors but we won't know if we should be using zod 4's prettifier)
+      try {
+        const prettyMessage = dependencies.zod.prettifyError(cause as never)
+        return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
+      } finally {
+        // cause.issues = originalIssues
+      }
+    }
     if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(cause, ZodError)) {
       const originalIssues = cause.issues
       try {
@@ -562,6 +579,11 @@ function transformError(err: unknown, command: Command) {
           }
         })
 
+        if (dependencies.zod?.prettifyError) {
+          const prettyMessage = dependencies.zod.prettifyError(cause as never)
+          return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
+        }
+
         const validationError = zodValidationError.fromError(cause, {
           prefixSeparator: '\n  - ',
           issueSeparator: '\n  - ',
@@ -572,6 +594,7 @@ function transformError(err: unknown, command: Command) {
         cause.issues = originalIssues
       }
     }
+
     if (
       err.code === 'BAD_REQUEST' &&
       (err.cause?.constructor?.name === 'TraversalError' || // arktype error

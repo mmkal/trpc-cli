@@ -328,7 +328,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L53)
+#### [createCli](./src/index.ts#L51)
 
 Run a trpc router as a CLI.
 
@@ -484,22 +484,26 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
-error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
+node:internal/modules/run_main:104
+    triggerUncaughtException(
+    ^
 
+Error: Transform failed with 1 error:
+/Users/mmkal/src/trpc-cli/src/index.ts:486:0: ERROR: Unexpected "<<"
+    at failureErrorWithLog (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/esbuild@0.25.1/node_modules/esbuild/lib/main.js:1477:15)
+    at /Users/mmkal/src/trpc-cli/node_modules/.pnpm/esbuild@0.25.1/node_modules/esbuild/lib/main.js:756:50
+    at responseCallbacks.<computed> (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/esbuild@0.25.1/node_modules/esbuild/lib/main.js:623:9)
+    at handleIncomingPacket (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/esbuild@0.25.1/node_modules/esbuild/lib/main.js:678:12)
+    at Socket.readFromStdout (/Users/mmkal/src/trpc-cli/node_modules/.pnpm/esbuild@0.25.1/node_modules/esbuild/lib/main.js:601:7)
+    at Socket.emit (node:events:507:28)
+    at addChunk (node:internal/streams/readable:559:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:510:3)
+    at Readable.push (node:internal/streams/readable:390:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23) {
+  name: 'TransformError'
+}
 
-
-Usage: calculator add [options] <parameter_1> <parameter_2>
-
-Add two numbers. Use this if you and your friend both have apples, and you want
-to know how many apples there are in total.
-
-Arguments:
-  parameter_1  number (required)
-  parameter_2  number (required)
-
-Options:
-  -h, --help   display help for command
-
+Node.js v23.8.0
 ```
 <!-- codegen:end -->
 
@@ -536,6 +540,36 @@ Note that JSON schema representations are not in general perfect 1-1 mappings wi
 ### zod
 
 Zod support is built-in, including the `zod-to-json-schema` conversion helper. You can also "bring your own" zod module (e.g. if you want to use a newer/older version of zod than the one included in `trpc-cli`).
+
+#### zod v4
+
+You can use zod v4 right now, but you'll need to pass it in to `createCli` so that trpc-cli knows how to format errors and parse your router's inputs:
+
+```ts
+import * as zod from 'zod' // zod v4!
+
+const cli = createCli({
+  router: myRouter,
+  zod,
+})
+```
+
+And that's it! Everything else will *just work*. You can start taking advantage of zod's new `meta` feature too to improve parameter names:
+
+```ts
+const myRouter = t.router({
+  createFile: t.procedure
+    .input(
+      z.string().meta({
+        title: 'filepath',
+        description: 'Path to the file to be created',
+      }),
+    )
+    .mutation(async ({input}) => {
+      /* */
+    }),
+})
+```
 
 ### arktype
 
