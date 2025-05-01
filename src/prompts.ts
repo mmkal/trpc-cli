@@ -232,17 +232,3 @@ export const promptify = (program: CommanderProgramLike, prompts: InquirerPrompt
     helpInformation: () => command.helpInformation(),
   } satisfies CommanderProgramLike
 }
-
-if (require.main === module) {
-  const main = async () => {
-    if (Math.random()) {
-      const {router} = await import('../test/fixtures/ignoreme/prompto')
-      const {createCli} = await import('./index')
-      const cli = createCli({router})
-      const program = cli.buildProgram()
-      await promptify(program, await import('@inquirer/prompts')).parseAsync(process.argv)
-      return
-    }
-  }
-  void main()
-}
