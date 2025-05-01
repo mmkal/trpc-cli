@@ -120,8 +120,17 @@ export interface OmeletteInstanceLike {
   tree: (value: any) => this
 }
 
+export type InquirerPromptOptions = {
+  message: string
+  required?: boolean
+  validate?: (input: string) => boolean | string
+  default?: unknown
+}
 export type InquirerPromptsLike = {
-  input: (params: {message: string}) => Promise<string>
+  input: (params: InquirerPromptOptions) => Promise<string>
+  confirm: (params: InquirerPromptOptions) => Promise<boolean>
+  select: (params: InquirerPromptOptions & {choices: string[]}) => Promise<string>
+  form?: unknown
 }
 
 export type TrpcCliRunParams = {

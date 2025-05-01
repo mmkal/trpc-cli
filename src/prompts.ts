@@ -1,6 +1,7 @@
 /* eslint-disable import-x/order */
 import {Argument, Command, CommanderError, Option} from 'commander'
 import {CommanderProgramLike, InquirerPromptsLike} from './types'
+import {choice} from 'effect/Random'
 
 type UpstreamOptionInfo = {
   typeName: 'UpstreamOptionInfo'
@@ -132,8 +133,58 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
   return shadow
 }
 
+const enToIn = (en: typeof import('enquirer')): InquirerPromptsLike => {
+  const promptX = async <P extends Omit<Parameters<typeof en.prompt>[0], 'name'>>(params: P) => {
+    const {x} = await en.prompt<{x: never}>({...params, name: 'x'} as never)
+    return x
+  }
+  return {
+    input: async params => {
+      return promptX({
+        type: 'input',
+        message: params.message,
+        validate: params.validate,
+        initial: params.default,
+      })
+    },
+    confirm: async params => {
+      return promptX({
+        type: 'confirm',
+        message: params.message,
+        validate: params.validate,
+        initial: params.default,
+      })
+    },
+    select: async params => {
+      return promptX({
+        type: 'select',
+        message: params.message,
+        choices: params.choices.slice(), // enquirer does something bizarre with the input array, don't let it tamper with the original!
+        validate: params.validate,
+        initial: params.default,
+      })
+    },
+    form: async params => {
+      return en.prompt({
+        type: 'form',
+        name: 'x',
+        message: params.message,
+        choices: [
+          {name: 'aa', message: 'ay', type: 'confirm'},
+          {name: 'bb', message: 'bee', type: 'input'},
+          {name: 'cc', message: 'cee', type: 'select', choices: ['foo', 'bar', 'baz']},
+        ],
+      })
+    },
+  }
+}
+
 export const promptify = (program: CommanderProgramLike, prompts: InquirerPromptsLike) => {
-  const _prompts = prompts as typeof import('@inquirer/prompts')
+  prompts = enToIn(require('enquirer'))
+
+  // prompts.form({message: 'hello'}).then(f => {
+  //   console.log('f', f)
+  // })
   const command = program as Command
   return {
     parseAsync: async (args: string[]) => {
@@ -151,9 +202,7 @@ export const promptify = (program: CommanderProgramLike, prompts: InquirerPrompt
       })
       const getMessage = (thing: {name: () => string; description: string | undefined}) => {
         let message = `Enter value for ${thing.name()}`
-        if (thing.description) {
-          message += ` (${thing.description})`
-        }
+        if (thing.description) message += ` (${thing.description})`
         return message
       }
 
@@ -163,7 +212,7 @@ export const promptify = (program: CommanderProgramLike, prompts: InquirerPrompt
             'parseArg' in arg.original && typeof arg.original.parseArg === 'function'
               ? (arg.original.parseArg as (value: string) => string | undefined)
               : undefined
-          const promptedValue = await _prompts.input({
+          const promptedValue = await prompts.input({
             message: getMessage(arg.original),
             required: arg.original.required,
             default: arg.value,
@@ -184,22 +233,27 @@ export const promptify = (program: CommanderProgramLike, prompts: InquirerPrompt
           const fullFlag = option.original.long || `--${option.original.name()}`
           const isBoolean = option.original.isBoolean() || option.original.flags.includes('[boolean]')
           if (isBoolean) {
-            const promptedValue = await _prompts.confirm({
+            const promptedValue = await prompts.confirm({
               message: getMessage(option.original),
               default: (option.original.defaultValue as boolean | undefined) ?? false,
             })
             if (promptedValue) nextArgs.push(fullFlag)
           } else if (option.original.argChoices) {
-            const promptedValue = await _prompts.select({
+            const choices = option.original.argChoices.slice()
+            const set = new Set(choices)
+            const promptedValue = await prompts.select({
               message: getMessage(option.original),
-              choices: option.original.argChoices,
+              choices,
               default: option.original.defaultValue,
+              required: option.original.required,
             })
-            nextArgs.push(fullFlag, promptedValue as string)
+            if (set.has(promptedValue)) {
+              nextArgs.push(fullFlag, promptedValue)
+            }
           } else if (option.original.description.endsWith(' array')) {
             const values: string[] = []
             do {
-              const promptedValue = await _prompts.input({
+              const promptedValue = await prompts.input({
                 message: getMessage(option.original),
                 default: option.original.defaultValue?.[values.length] as string,
               })
@@ -212,7 +266,7 @@ export const promptify = (program: CommanderProgramLike, prompts: InquirerPrompt
             const getParsedValue = (input: string) => {
               return option.original.parseArg ? option.original.parseArg(input, undefined as string | undefined) : input
             }
-            const promptedValue = await _prompts.input({
+            const promptedValue = await prompts.input({
               message: getMessage(option.original),
               default: option.value,
               required: option.original.required,
@@ -222,6 +276,7 @@ export const promptify = (program: CommanderProgramLike, prompts: InquirerPrompt
                 return true
               },
             })
+            console.log('promptedValue', {promptedValue})
             nextArgs.push(fullFlag, getParsedValue(promptedValue) ?? promptedValue)
           }
         }
