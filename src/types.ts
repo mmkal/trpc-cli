@@ -120,10 +120,15 @@ export interface OmeletteInstanceLike {
   tree: (value: any) => this
 }
 
+export type InquirerPromptsLike = {
+  input: (params: {message: string}) => Promise<string>
+}
+
 export type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
+  prompts?: InquirerPromptsLike | (() => Promise<InquirerPromptsLike>)
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
   process?: {

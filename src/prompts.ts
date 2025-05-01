@@ -1,6 +1,6 @@
 /* eslint-disable import-x/order */
 import {Argument, Command, CommanderError, Option} from 'commander'
-import {CommanderProgramLike} from './types'
+import {CommanderProgramLike, InquirerPromptsLike} from './types'
 
 type UpstreamOptionInfo = {
   typeName: 'UpstreamOptionInfo'
@@ -132,7 +132,8 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
   return shadow
 }
 
-export const promptify = (program: CommanderProgramLike, prompts: typeof import('@inquirer/prompts')) => {
+export const promptify = (program: CommanderProgramLike, prompts: InquirerPromptsLike) => {
+  const _prompts = prompts as typeof import('@inquirer/prompts')
   const command = program as Command
   return {
     parseAsync: async (args: string[]) => {
@@ -162,7 +163,7 @@ export const promptify = (program: CommanderProgramLike, prompts: typeof import(
             'parseArg' in arg.original && typeof arg.original.parseArg === 'function'
               ? (arg.original.parseArg as (value: string) => string | undefined)
               : undefined
-          const promptedValue = await prompts.input({
+          const promptedValue = await _prompts.input({
             message: getMessage(arg.original),
             required: arg.original.required,
             default: arg.value,
@@ -183,13 +184,13 @@ export const promptify = (program: CommanderProgramLike, prompts: typeof import(
           const fullFlag = option.original.long || `--${option.original.name()}`
           const isBoolean = option.original.isBoolean() || option.original.flags.includes('[boolean]')
           if (isBoolean) {
-            const promptedValue = await prompts.confirm({
+            const promptedValue = await _prompts.confirm({
               message: getMessage(option.original),
               default: (option.original.defaultValue as boolean | undefined) ?? false,
             })
             if (promptedValue) nextArgs.push(fullFlag)
           } else if (option.original.argChoices) {
-            const promptedValue = await prompts.select({
+            const promptedValue = await _prompts.select({
               message: getMessage(option.original),
               choices: option.original.argChoices,
               default: option.original.defaultValue,
@@ -198,20 +199,20 @@ export const promptify = (program: CommanderProgramLike, prompts: typeof import(
           } else if (option.original.description.endsWith(' array')) {
             const values: string[] = []
             do {
-              const promptedValue = await prompts.input({
+              const promptedValue = await _prompts.input({
                 message: getMessage(option.original),
                 default: option.original.defaultValue?.[values.length] as string,
               })
               if (!promptedValue) break
-              values.push(promptedValue)
+              values.push(fullFlag, promptedValue)
             } while (values)
-            nextArgs.push(fullFlag, ...values)
+            nextArgs.push(...values)
           } else {
             // let's handle this as a string - but the `parseArg` function could turn it into a number or boolean or whatever
             const getParsedValue = (input: string) => {
               return option.original.parseArg ? option.original.parseArg(input, undefined as string | undefined) : input
             }
-            const promptedValue = await prompts.input({
+            const promptedValue = await _prompts.input({
               message: getMessage(option.original),
               default: option.value,
               required: option.original.required,

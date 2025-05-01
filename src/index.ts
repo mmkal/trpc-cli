@@ -16,6 +16,7 @@ import {
 } from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
+import {promptify} from './prompts'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
@@ -484,7 +485,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
     const _process = runParams?.process || process
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    const program = buildProgram(runParams)
+    let program = buildProgram(runParams)
+
     program.exitOverride(exit => {
       _process.exit(exit.exitCode)
       throw new FailedToExitError('Root command exitOverride', {exitCode: exit.exitCode, cause: exit})
@@ -507,6 +509,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
         return inspect(err)
       })
+
+    if (runParams?.prompts) {
+      const prompts = typeof runParams.prompts === 'function' ? await runParams.prompts() : runParams.prompts
+      program = promptify(program, prompts) as Command
+    }
 
     await program.parseAsync(argv, opts).catch(err => {
       if (err instanceof FailedToExitError) throw err
