@@ -144,7 +144,7 @@ const enToIn = (en: typeof import('enquirer')): InquirerPromptsLike => {
         type: 'input',
         message: params.message,
         validate: params.validate,
-        initial: params.default,
+        initial: params.default as {},
       })
     },
     confirm: async params => {
@@ -152,7 +152,7 @@ const enToIn = (en: typeof import('enquirer')): InquirerPromptsLike => {
         type: 'confirm',
         message: params.message,
         validate: params.validate,
-        initial: params.default,
+        initial: params.default as {},
       })
     },
     select: async params => {
@@ -161,27 +161,25 @@ const enToIn = (en: typeof import('enquirer')): InquirerPromptsLike => {
         message: params.message,
         choices: params.choices.slice(), // enquirer does something bizarre with the input array, don't let it tamper with the original!
         validate: params.validate,
-        initial: params.default,
+        initial: params.default as {},
       })
     },
-    form: async params => {
-      return en.prompt({
-        type: 'form',
-        name: 'x',
-        message: params.message,
-        choices: [
-          {name: 'aa', message: 'ay', type: 'confirm'},
-          {name: 'bb', message: 'bee', type: 'input'},
-          {name: 'cc', message: 'cee', type: 'select', choices: ['foo', 'bar', 'baz']},
-        ],
-      })
-    },
+    // form: async (params: any) => {
+    //   return en.prompt({
+    //     type: 'form',
+    //     name: 'x',
+    //     message: params.message,
+    //     choices: [
+    //       {name: 'aa', message: 'ay', type: 'confirm'},
+    //       {name: 'bb', message: 'bee', type: 'input'},
+    //       {name: 'cc', message: 'cee', type: 'select', choices: ['foo', 'bar', 'baz']},
+    //     ],
+    //   })
+    // },
   }
 }
 
 export const promptify = (program: CommanderProgramLike, prompts: InquirerPromptsLike) => {
-  prompts = enToIn(require('enquirer'))
-
   // prompts.form({message: 'hello'}).then(f => {
   //   console.log('f', f)
   // })
@@ -189,17 +187,38 @@ export const promptify = (program: CommanderProgramLike, prompts: InquirerPrompt
   return {
     parseAsync: async (args: string[]) => {
       const nextArgs = [...args]
-      const analysis = await new Promise<Analysis>((resolve, reject) => {
-        const shadow = createShadowCommand(command, resolve)
-        shadow.parseAsync(process.argv).catch(e => {
-          if (e instanceof CommanderError && e.exitCode === 0) {
-            // commander tried to exit with code 0, probably rendered help - no analysis to provide
-            resolve({command: {shadow, original: command}, arguments: [], options: []})
-            return
-          }
-          reject(e as Error)
+      const getCommandAnalysis = async (c: Command) => {
+        const analysis = await new Promise<Analysis>((resolve, reject) => {
+          const shadow = createShadowCommand(c, resolve)
+          shadow.parseAsync(process.argv).catch(e => {
+            if (e instanceof CommanderError && e.exitCode === 0) {
+              // commander tried to exit with code 0, probably rendered help - no analysis to provide
+              resolve({command: {shadow, original: c}, arguments: [], options: []})
+              return
+            }
+            reject(e as Error)
+          })
         })
-      })
+
+        if (analysis.arguments.length === 0 && analysis.options.length === 0) {
+          let currentCommand = analysis.command.original as Command | undefined
+          while (currentCommand?.commands && currentCommand.commands.length > 0) {
+            const subcommand = await prompts.select({
+              message: 'Select a subcommand',
+              choices: currentCommand.commands.map(c => c.name()),
+            })
+            nextArgs.push(subcommand)
+            currentCommand = currentCommand.commands.find(c => c.name() === subcommand)
+          }
+
+          if (currentCommand) return getCommandAnalysis(currentCommand)
+        }
+
+        return analysis
+      }
+
+      const analysis = await getCommandAnalysis(command)
+
       const getMessage = (thing: {name: () => string; description: string | undefined}) => {
         let message = `Enter value for ${thing.name()}`
         if (thing.description) message += ` (${thing.description})`
@@ -276,7 +295,6 @@ export const promptify = (program: CommanderProgramLike, prompts: InquirerPrompt
                 return true
               },
             })
-            console.log('promptedValue', {promptedValue})
             nextArgs.push(fullFlag, getParsedValue(promptedValue) ?? promptedValue)
           }
         }

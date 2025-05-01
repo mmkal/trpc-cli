@@ -124,7 +124,8 @@ export type InquirerPromptOptions = {
   message: string
   required?: boolean
   validate?: (input: string) => boolean | string
-  default?: unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  default?: any
 }
 export type InquirerPromptsLike = {
   input: (params: InquirerPromptOptions) => Promise<string>

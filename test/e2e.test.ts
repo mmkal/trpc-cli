@@ -13,6 +13,50 @@ const tsx = async (file: string, args: string[]) => {
   return stripAnsi(all)
 }
 
+const tsxWithInput = async (input: string, file: string, args: string[]) => {
+  const checkValue = (name: string, value: string) => {
+    // make sure it's a simple value, no spaces or weird escapable characters
+    if (!/^[\w./-]*$/.test(value)) {
+      throw new Error(`Invalid input for ${name}: ${value}`)
+    }
+  }
+  checkValue('input', input)
+  checkValue('file', file)
+  args.forEach((a, i) => checkValue(`arg ${i}`, a))
+
+  const {all} = await execa(
+    'sh',
+    ['-c', `echo ${input} | ./node_modules/.bin/tsx test/fixtures/${file} ${args.join(' ')}`],
+    {
+      all: true,
+      reject: false,
+      cwd: path.join(__dirname, '..'),
+    },
+  )
+  return stripAnsi(all)
+}
+
+const tsxWithMultilineInput = async (input: string, file: string, args: string[]) => {
+  const runSubprocess = () =>
+    execa('./node_modules/.bin/tsx', [`test/fixtures/${file}`, ...args], {
+      all: true,
+      reject: false,
+    })
+  let subprocess: ReturnType<typeof runSubprocess> | null = null
+  const [{all: output}] = await Promise.all([
+    (subprocess = runSubprocess()),
+    Promise.resolve().then(async () => {
+      for (const line of input.split('\n')) {
+        await new Promise(resolve => setTimeout(resolve, 150))
+        subprocess!.stdin.write(line + '\n')
+      }
+      return null
+    }),
+  ])
+
+  return stripAnsi(output)
+}
+
 test('cli help', async () => {
   const output = await tsx('calculator', ['--help'])
   expect(output.replaceAll(/(commands:|flags:)/gi, s => s[0].toUpperCase() + s.slice(1).toLowerCase()))
@@ -421,4 +465,37 @@ test('thrown error in procedure includes call stack', async () => {
   const output = await tsx('calculator', ['square-root', '--', '-1'])
   expect(output).toMatch(/Error: Get real/)
   expect(output).toMatch(/at .* \(.*calculator.ts:\d+:\d+\)/)
+})
+
+test('promptable', async () => {
+  // these snapshots look a little weird because inquirer uses `\r` to replace the input line
+  const yOutput = await tsxWithInput('y', 'promptable', ['challenge', 'harshly'])
+  expect(yOutput).toMatchInlineSnapshot(`
+    "? Enter value for are-you-sure (Are you sure?) (y/N)? Enter value for are-you-sure (Are you sure?) (y/N) y✔ Enter value for are-you-sure (Are you sure?) Yes
+    {"areYouSure":true}"
+  `)
+
+  const nOutput = await tsxWithInput('n', 'promptable', ['challenge', 'harshly'])
+  expect(nOutput).toMatchInlineSnapshot(`
+    "? Enter value for are-you-sure (Are you sure?) (y/N)? Enter value for are-you-sure (Are you sure?) (y/N) n✔ Enter value for are-you-sure (Are you sure?) No
+    {"areYouSure":false}"
+  `)
+
+  const emptyOutput = await tsxWithInput('', 'promptable', ['challenge', 'harshly'])
+  expect(emptyOutput).toMatchInlineSnapshot(`
+    "? Enter value for are-you-sure (Are you sure?) (y/N)✔ Enter value for are-you-sure (Are you sure?) No
+    {"areYouSure":false}"
+  `)
+
+  const subcommandOutput = await tsxWithMultilineInput('challenge\nharshly\ny', 'promptable', [])
+
+  expect(subcommandOutput).toMatchInlineSnapshot(`
+    "? Select a subcommand (Use arrow keys)
+    ❯ challenge✔ Select a subcommand challenge
+    ? Select a subcommand (Use arrow keys)
+    ❯ harshly
+      gently✔ Select a subcommand harshly
+    ? Enter value for are-you-sure (Are you sure?) (y/N)? Enter value for are-you-sure (Are you sure?) (y/N) y✔ Enter value for are-you-sure (Are you sure?) Yes
+    {"areYouSure":true}"
+  `)
 })

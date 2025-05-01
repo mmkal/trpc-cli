@@ -11,6 +11,8 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - ✅ Easily add subcommands via nested trpc routers
 - ✅ Rich helptext out of the box
 - ✅ Batteries included - no need to install any other libraries (even trpc!)
+- ✅ Automatic input prompts
+- ✅ Automatic shell autocompletions
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ No config needed. Run on an existing router with `npx trpc-cli src/your-router.ts`
@@ -44,6 +46,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - [More Examples](#more-examples)
    - [Migrator example](#migrator-example)
 - [Programmatic usage](#programmatic-usage)
+- [Input Prompts](#input-prompts)
 - [Completions](#completions)
 - [Out of scope](#out-of-scope)
 - [Contributing](#contributing)
@@ -325,7 +328,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L45)
+#### [createCli](./src/index.ts#L53)
 
 Run a trpc router as a CLI.
 
@@ -481,8 +484,9 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
-Validation error
-  - Expected number, received string at index 1
+error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
+
+
 
 Usage: calculator add [options] <parameter_1> <parameter_2>
 
@@ -766,7 +770,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:db92443db1beeaa3608be050420248a0 -->
+<!-- hash:5dce7e54ccb1bc99c9cc8fcfe7bfafd1 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -798,7 +802,7 @@ const searchProcedure = trpc.procedure
     })
   })
 
-const router = trpc.router({
+export const router = trpc.router({
   up: trpc.procedure
     .meta({
       description:
@@ -875,10 +879,13 @@ const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc11RouterLike
 
-const cli = createCli({router})
+if (require.main === module) {
+  const caller = router.createCaller({})
+  caller['search.byName']({name: 'one'}).then(console.log)
+  // const cli = createCli({router})
 
-void cli.run()
-
+  // void cli.run()
+}
 function getMigrations() {
   return [
     {
@@ -913,18 +920,13 @@ Here's how the CLI will work:
 `node path/to/migrations --help` output:
 
 ```
-Usage: migrations [options] [command]
-
-Options:
-  -h, --help        display help for command
-
-Commands:
-  up [options]      Apply migrations. By default all pending migrations will be
-                    applied.
-  create [options]  Create a new migration
-  list [options]    List all migrations
-  search            Available subcommands: by-name, by-content
-  help [command]    display help for command
+[
+  {
+    name: 'one',
+    content: 'create table one(id int, name text)',
+    status: 'executed'
+  }
+]
 ```
 <!-- codegen:end -->
 
@@ -932,18 +934,13 @@ Commands:
 `node path/to/migrations apply --help` output:
 
 ```
-Usage: migrations [options] [command]
-
-Options:
-  -h, --help        display help for command
-
-Commands:
-  up [options]      Apply migrations. By default all pending migrations will be
-                    applied.
-  create [options]  Create a new migration
-  list [options]    List all migrations
-  search            Available subcommands: by-name, by-content
-  help [command]    display help for command
+[
+  {
+    name: 'one',
+    content: 'create table one(id int, name text)',
+    status: 'executed'
+  }
+]
 ```
 <!-- codegen:end -->
 
@@ -951,18 +948,13 @@ Commands:
 `node path/to/migrations search.byContent --help` output:
 
 ```
-Usage: migrations [options] [command]
-
-Options:
-  -h, --help        display help for command
-
-Commands:
-  up [options]      Apply migrations. By default all pending migrations will be
-                    applied.
-  create [options]  Create a new migration
-  list [options]    List all migrations
-  search            Available subcommands: by-name, by-content
-  help [command]    display help for command
+[
+  {
+    name: 'one',
+    content: 'create table one(id int, name text)',
+    status: 'executed'
+  }
+]
 ```
 <!-- codegen:end -->
 
@@ -995,6 +987,27 @@ const runCli = async (argv: string[]) => {
   })
 }
 ```
+
+## Input Prompts
+
+You can enable prompts for positional arguments and options simply by installing `@inquirer/prompts` or `enquirer`:
+
+```bash
+npm install @inquirer/prompts
+```
+
+The pass it in when running your CLI:
+
+```ts
+import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer'
+import {createCli} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+cli.run({prompts})
+```
+
+The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation.
 
 ## Completions
 
