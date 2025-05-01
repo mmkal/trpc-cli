@@ -3,18 +3,20 @@ import {inspect} from 'util'
 import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
-import type {Result, ParsedProcedure} from './types'
+import type {Dependencies, ParsedProcedure, Result} from './types'
 
 /**
  * Attempts to convert a trpc procedure input to JSON schema.
  * Uses @see jsonSchemaConverters to convert the input to JSON schema.
  */
-function toJsonSchema(input: unknown): Result<JSONSchema7> {
+function toJsonSchema(input: unknown, dependencies: Dependencies): Result<JSONSchema7> {
   try {
+    const jsonSchemaConverters = getJsonSchemaConverters(dependencies)
     const vendor = getVendor(input)
     if (vendor && vendor in jsonSchemaConverters) {
       const converter = jsonSchemaConverters[vendor as keyof typeof jsonSchemaConverters]
-      return {success: true, value: converter(input)}
+      const converted = converter(input)
+      return {success: true, value: converted}
     }
 
     return {success: false, error: `Schema not convertible to JSON schema`}
@@ -30,11 +32,12 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
     value !== null &&
     (('type' in value && (typeof value.type === 'string' || Array.isArray(value.type))) ||
       'const' in value ||
+      'oneOf' in value ||
       'anyOf' in value)
   )
 }
 
-export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure> {
+export function parseProcedureInputs(inputs: unknown[], dependencies: Dependencies): Result<ParsedProcedure> {
   if (inputs.length === 0) {
     return {
       success: true,
@@ -55,10 +58,10 @@ export function parseProcedureInputs(inputs: unknown[]): Result<ParsedProcedure>
   }
 
   if (inputs.length > 1) {
-    return parseMultiInputs(inputs)
+    return parseMultiInputs(inputs, dependencies)
   }
 
-  const mergedSchemaResult = toJsonSchema(inputs[0])
+  const mergedSchemaResult = toJsonSchema(inputs[0], dependencies)
 
   if (!mergedSchemaResult.success) {
     return {
@@ -86,7 +89,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
             array: false,
             description: mergedSchema.description || '',
             name: mergedSchema.title || 'string',
-            required: true,
+            required: !isOptional(mergedSchema),
           },
         ],
         optionsJsonSchema: {},
@@ -143,6 +146,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
 function isOptional(schema: JSONSchema7Definition) {
+  if ((schema as {$zod?: {optional?: boolean}}).$zod?.optional) return true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
   return anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}'
 }
@@ -192,8 +196,8 @@ function acceptedPrimitiveTypes(schema: JSONSchema7Definition): Array<(typeof pr
   return primitiveCandidateTypes.filter(c => acceptedJsonSchemaTypes.has(c))
 }
 
-function parseMultiInputs(inputs: unknown[]): Result<ParsedProcedure> {
-  const parsedIndividually = inputs.map(input => parseProcedureInputs([input]))
+function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result<ParsedProcedure> {
+  const parsedIndividually = inputs.map(input => parseProcedureInputs([input], dependencies))
 
   const failures = parsedIndividually.flatMap(p => (p.success ? [] : [p.error]))
   if (failures.length > 0) {
@@ -226,7 +230,7 @@ function parseMultiInputs(inputs: unknown[]): Result<ParsedProcedure> {
 function isNullable(schema: JSONSchema7) {
   if (Array.isArray(schema.type) && schema.type.includes('null')) return true
   if (schema.type === 'null') return true
-  if (schema.anyOf?.some(sub => isNullable(toRoughJsonSchema7(sub)))) return true
+  if ((schema.anyOf || schema.oneOf)?.some(sub => isNullable(toRoughJsonSchema7(sub)))) return true
   if (schema.const === null) return true
   return false
 }
@@ -418,58 +422,81 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 /** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
-const jsonSchemaConverters = {
-  zod: (input: unknown) => zodToJsonSchema(input as never) as JSONSchema7,
-  arktype: (input: unknown) => prepareArktypeType(input).toJsonSchema(),
-  valibot: (input: unknown) => {
-    const valibotToJsonSchema = getValibotToJsonSchema()
-    if (!valibotToJsonSchema) {
-      throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`)
-    }
-    return valibotToJsonSchema(input, {errorMode: 'ignore'})
-  },
-  effect: (input: unknown) => {
-    const effect = eval(`require('effect')`) as typeof import('effect')
-    if (!effect.Schema.isSchema(input)) {
-      const message = `input was not an effect schema - please use effect version 3.14.2 or higher. See https://github.com/mmkal/trpc-cli/pull/63`
-      throw new Error(message)
-    }
-    return effect.JSONSchema.make(input) as JSONSchema7
-  },
-} satisfies Record<string, (input: unknown) => JSONSchema7>
+const getJsonSchemaConverters = (dependencies: Dependencies) => {
+  return {
+    zod: (input: unknown) => {
+      if (dependencies.zod?.toJSONSchema) {
+        const toJSONSchema = dependencies.zod.toJSONSchema as typeof import('zod4').toJSONSchema
+        // zod4 has toJSONSchema built in.
+        const converted = toJSONSchema(input as never, {
+          // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
+          pipes: 'input',
+          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          override: ctx => {
+            if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
+              ctx.jsonSchema.$zod = {optional: true}
+            }
+          },
+          unrepresentable: 'any',
+        })
+
+        return converted as JSONSchema7
+      }
+      return zodToJsonSchema(input as never) as JSONSchema7
+    },
+    arktype: (input: unknown) => prepareArktypeType(input).toJsonSchema(),
+    valibot: (input: unknown) => {
+      let valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema']
+      if (!valibotToJsonSchemaLib) {
+        try {
+          valibotToJsonSchemaLib = eval(`require('@valibot/to-json-schema')`)
+        } catch (e: unknown) {
+          throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`, {cause: e})
+        }
+      }
+
+      const valibotToJsonSchema = valibotToJsonSchemaLib?.toJsonSchema
+      if (!valibotToJsonSchema) {
+        throw new Error(
+          `no 'toJsonSchema' function found in @valibot/to-json-schema - check you are using a supported version`,
+        )
+      }
+      return valibotToJsonSchema(input, {errorMode: 'ignore'})
+    },
+    effect: (input: unknown) => {
+      const effect = dependencies.effect || (eval(`require('effect')`) as Dependencies['effect'])
+      if (!effect) {
+        throw new Error(`effect dependency could not be found - try installing it and re-running`)
+      }
+      if (!effect.Schema.isSchema(input)) {
+        const message = `input was not an effect schema - please use effect version 3.14.2 or higher. See https://github.com/mmkal/trpc-cli/pull/63`
+        throw new Error(message)
+      }
+      return effect.JSONSchema.make(input)
+    },
+  } satisfies Record<string, (input: unknown) => JSONSchema7>
+}
 
 function getVendor(schema: unknown) {
   // note: don't check for typeof schema === 'object' because arktype schemas are functions (you call them directly instead of `.parse(...)`)
   return (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor ?? null
 }
 
+const jsonSchemaVendorNames = new Set(Object.keys(getJsonSchemaConverters({})))
 function looksJsonSchemaable(value: unknown) {
   const vendor = getVendor(value)
-  return !!vendor && vendor in jsonSchemaConverters
+  return !!vendor && jsonSchemaVendorNames.has(vendor)
 }
 
-function prepareArktypeType(type: any) {
-  /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-constant-condition, @typescript-eslint/no-explicit-any */
-  let innerType = type
+function prepareArktypeType(type: unknown) {
+  let innerType = type as {in?: unknown; toJsonSchema: () => JSONSchema7}
   while (innerType) {
     if (innerType?.in && innerType.in !== innerType) {
-      innerType = innerType.in
+      innerType = innerType.in as typeof innerType
     } else {
       break
     }
   }
   return innerType as {toJsonSchema: () => JSONSchema7}
 }
-
-function getValibotToJsonSchema() {
-  try {
-    return eval(`require('@valibot/to-json-schema')`).toJsonSchema as (
-      input: unknown,
-      options?: {errorMode?: 'throw' | 'ignore' | 'warn'},
-    ) => JSONSchema7
-  } catch {
-    return null
-  }
-}
-
 // #endregion vendor specific stuff
