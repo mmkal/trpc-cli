@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
-import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
+import {Argument, Command as BaseCommand, CommanderError, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
 import {ZodError} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
@@ -24,6 +24,7 @@ export * as trpcServer from '@trpc/server'
 export class Command extends BaseCommand {
   /** @internal track the commands that have been run, so that we can find the `__result` of the last command */
   __ran: Command[] = []
+  __input?: unknown
   /** @internal stash the return value of the underlying procedure on the command so to pass to `FailedToExitError` for use in a pinch */
   __result?: unknown
 }
@@ -33,6 +34,8 @@ export class Command extends BaseCommand {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 
 export {AnyRouter, AnyProcedure} from './trpc-compat'
+
+const promptsEnabled = Math.random() < 10
 
 /**
  * Run a trpc router as a CLI.
@@ -353,6 +356,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       // Set the action for this command
       command.action(async (...args) => {
+        if (runParams?.dummy) return
         program.__ran ||= []
         program.__ran.push(command)
         const options = command.opts()
@@ -470,18 +474,63 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     return program
   }
 
-  async function run(runParams?: TrpcCliRunParams) {
+  async function run(runParams?: TrpcCliRunParams): Promise<void> {
+    const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
+    const argv = [...(runParams?.argv || process.argv)]
+    if (promptsEnabled) {
+      const modifiedRunParams: TrpcCliRunParams | undefined = {
+        ...runParams,
+        logger: {
+          error: _ => {},
+          info: _ => {},
+        },
+        process: {exit: _ => _ as never},
+        dummy: true,
+      }
+      for (let i = 0; i < 100; i++) {
+        const shadowProgram = buildProgram(modifiedRunParams)
+        shadowProgram.configureOutput({
+          writeErr: _ => {},
+          writeOut: _ => {},
+        })
+        const prompts = require('@inquirer/prompts') as typeof import('@inquirer/prompts')
+        try {
+          // console.log('parsing', argv, opts)
+          await shadowProgram.parseAsync(argv, opts)
+          break
+        } catch (shadowError) {
+          console.error({shadowError})
+          if (shadowError instanceof FailedToExitError) {
+            const cause = shadowError.cause
+            if (cause instanceof CommanderError && cause.code === 'commander.missingArgument') {
+              const value = await prompts.input({
+                message:
+                  cause.message
+                    .split(/error: /i)
+                    .pop()
+                    ?.replace(/^missing /, '')
+                    ?.trim() || 'enter argument value',
+              })
+              argv.push(value)
+              continue
+            }
+            throw shadowError
+          }
+          throw new FailedToExitError('Failed to run program', {exitCode: 1, cause: shadowError})
+        }
+      }
+    }
     const _process = runParams?.process || process
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = buildProgram(runParams)
     program.exitOverride(exit => {
+      console.log('program.exitOverride', {exit})
       _process.exit(exit.exitCode)
       throw new FailedToExitError('Root command exitOverride', {exitCode: exit.exitCode, cause: exit})
     })
     program.configureOutput({
       writeErr: str => logger.error?.(str),
     })
-    const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
 
     if (runParams?.completion) {
       const completion =
@@ -497,7 +546,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
         return inspect(err)
       })
-    await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {
+
+    await program.parseAsync(argv, opts).catch(err => {
       if (err instanceof FailedToExitError) throw err
       const logMessage = looksLikeInstanceof(err, Error)
         ? formatError(err) || err.message
