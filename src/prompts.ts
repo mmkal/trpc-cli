@@ -1,7 +1,6 @@
 /* eslint-disable import-x/order */
 import {Argument, Command, CommanderError, Option} from 'commander'
-import {CommanderProgramLike, InquirerPromptsLike} from './types'
-import {choice} from 'effect/Random'
+import {CommanderProgramLike, EnquirerLike, InquirerPromptsLike, Promptable} from './types'
 
 type UpstreamOptionInfo = {
   typeName: 'UpstreamOptionInfo'
@@ -133,7 +132,7 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
   return shadow
 }
 
-const enToIn = (en: typeof import('enquirer')): InquirerPromptsLike => {
+const enquirerToInquirer = (en: EnquirerLike): InquirerPromptsLike => {
   const promptX = async <P extends Omit<Parameters<typeof en.prompt>[0], 'name'>>(params: P) => {
     const {x} = await en.prompt<{x: never}>({...params, name: 'x'} as never)
     return x
@@ -179,129 +178,137 @@ const enToIn = (en: typeof import('enquirer')): InquirerPromptsLike => {
   }
 }
 
-export const promptify = (program: CommanderProgramLike, prompts: InquirerPromptsLike) => {
-  // prompts.form({message: 'hello'}).then(f => {
-  //   console.log('f', f)
-  // })
+export const promptify = (program: CommanderProgramLike, prompts: Promptable) => {
+  const _prompts = 'Form' in prompts ? enquirerToInquirer(prompts) : prompts
   const command = program as Command
-  return {
-    parseAsync: async (args: string[]) => {
-      const nextArgs = [...args]
-      const getCommandAnalysis = async (c: Command) => {
-        const analysis = await new Promise<Analysis>((resolve, reject) => {
-          const shadow = createShadowCommand(c, resolve)
-          shadow.parseAsync(process.argv).catch(e => {
-            if (e instanceof CommanderError && e.exitCode === 0) {
-              // commander tried to exit with code 0, probably rendered help - no analysis to provide
-              resolve({command: {shadow, original: c}, arguments: [], options: []})
-              return
-            }
-            reject(e as Error)
-          })
-        })
-
-        if (analysis.arguments.length === 0 && analysis.options.length === 0) {
-          let currentCommand = analysis.command.original as Command | undefined
-          while (currentCommand?.commands && currentCommand.commands.length > 0) {
-            const subcommand = await prompts.select({
-              message: 'Select a subcommand',
-              choices: currentCommand.commands.map(c => c.name()),
-            })
-            nextArgs.push(subcommand)
-            currentCommand = currentCommand.commands.find(c => c.name() === subcommand)
+  const analyseThenParse = async (args: string[]) => {
+    const nextArgs = [...args]
+    const getCommandAnalysis = async (c: Command, recursion = 0) => {
+      if (recursion > 100) throw new Error('Too many recursive calls, this is probably a bug')
+      const analysis = await new Promise<Analysis>((resolve, reject) => {
+        const shadow = createShadowCommand(c, resolve)
+        shadow.parseAsync(process.argv).catch(e => {
+          if (e instanceof CommanderError && e.exitCode === 0) {
+            // commander tried to exit with code 0, probably rendered help - no analysis to provide
+            resolve({command: {shadow, original: c}, arguments: [], options: []})
+            return
           }
+          reject(e as Error)
+        })
+      })
 
-          if (currentCommand) return getCommandAnalysis(currentCommand)
+      if (
+        analysis.arguments.length === 0 &&
+        analysis.options.length === 0 &&
+        analysis.command.original.commands.length > 0
+      ) {
+        let currentCommand = analysis.command.original as Command | undefined
+        while (currentCommand?.commands && currentCommand.commands.length > 0) {
+          const subcommand = await _prompts.select({
+            message: 'Select a subcommand',
+            choices: currentCommand.commands.map(child => child.name()),
+          })
+          nextArgs.push(subcommand)
+          currentCommand = currentCommand.commands.find(child => child.name() === subcommand)
         }
 
-        return analysis
+        if (currentCommand) return getCommandAnalysis(currentCommand, recursion + 1)
       }
 
-      const analysis = await getCommandAnalysis(command)
+      return analysis
+    }
 
-      const getMessage = (thing: {name: () => string; description: string | undefined}) => {
-        let message = `Enter value for ${thing.name()}`
-        if (thing.description) message += ` (${thing.description})`
-        return message
+    const analysis = await getCommandAnalysis(command)
+
+    const getMessage = (thing: {name: () => string; description: string | undefined}) => {
+      let message = `Enter value for ${thing.name()}`
+      if (thing.description) message += ` (${thing.description})`
+      return message
+    }
+
+    for (const arg of analysis.arguments) {
+      if (!arg.specified) {
+        const parseArg =
+          'parseArg' in arg.original && typeof arg.original.parseArg === 'function'
+            ? (arg.original.parseArg as (value: string) => string | undefined)
+            : undefined
+        const promptedValue = await _prompts.input({
+          message: getMessage(arg.original),
+          required: arg.original.required,
+          default: arg.value,
+          validate: input => {
+            try {
+              parseArg?.(input)
+              return true
+            } catch (e) {
+              return `${(e as Error)?.message || (e as string)}`
+            }
+          },
+        })
+        nextArgs.push(promptedValue)
       }
-
-      for (const arg of analysis.arguments) {
-        if (!arg.specified) {
-          const parseArg =
-            'parseArg' in arg.original && typeof arg.original.parseArg === 'function'
-              ? (arg.original.parseArg as (value: string) => string | undefined)
-              : undefined
-          const promptedValue = await prompts.input({
-            message: getMessage(arg.original),
-            required: arg.original.required,
-            default: arg.value,
+    }
+    for (const option of analysis.options) {
+      if (!option.specified) {
+        const fullFlag = option.original.long || `--${option.original.name()}`
+        const isBoolean = option.original.isBoolean() || option.original.flags.includes('[boolean]')
+        if (isBoolean) {
+          const promptedValue = await _prompts.confirm({
+            message: getMessage(option.original),
+            default: (option.original.defaultValue as boolean | undefined) ?? false,
+          })
+          if (promptedValue) nextArgs.push(fullFlag)
+        } else if (option.original.argChoices) {
+          const choices = option.original.argChoices.slice()
+          const set = new Set(choices)
+          const promptedValue = await _prompts.select({
+            message: getMessage(option.original),
+            choices,
+            default: option.original.defaultValue,
+            required: option.original.required,
+          })
+          if (set.has(promptedValue)) {
+            nextArgs.push(fullFlag, promptedValue)
+          }
+        } else if (option.original.description.endsWith(' array')) {
+          const values: string[] = []
+          do {
+            const promptedValue = await _prompts.input({
+              message: getMessage(option.original),
+              default: option.original.defaultValue?.[values.length] as string,
+            })
+            if (!promptedValue) break
+            values.push(fullFlag, promptedValue)
+          } while (values)
+          nextArgs.push(...values)
+        } else {
+          // let's handle this as a string - but the `parseArg` function could turn it into a number or boolean or whatever
+          const getParsedValue = (input: string) => {
+            return option.original.parseArg ? option.original.parseArg(input, undefined as string | undefined) : input
+          }
+          const promptedValue = await _prompts.input({
+            message: getMessage(option.original),
+            default: option.value,
+            required: option.original.required,
             validate: input => {
-              try {
-                parseArg?.(input)
-                return true
-              } catch (e) {
-                return `${(e as Error)?.message || (e as string)}`
-              }
+              const parsed = getParsedValue(input)
+              if (parsed == null && input != null) return 'Invalid value'
+              return true
             },
           })
-          nextArgs.push(promptedValue)
+          nextArgs.push(fullFlag, getParsedValue(promptedValue) ?? promptedValue)
         }
       }
-      for (const option of analysis.options) {
-        if (!option.specified) {
-          const fullFlag = option.original.long || `--${option.original.name()}`
-          const isBoolean = option.original.isBoolean() || option.original.flags.includes('[boolean]')
-          if (isBoolean) {
-            const promptedValue = await prompts.confirm({
-              message: getMessage(option.original),
-              default: (option.original.defaultValue as boolean | undefined) ?? false,
-            })
-            if (promptedValue) nextArgs.push(fullFlag)
-          } else if (option.original.argChoices) {
-            const choices = option.original.argChoices.slice()
-            const set = new Set(choices)
-            const promptedValue = await prompts.select({
-              message: getMessage(option.original),
-              choices,
-              default: option.original.defaultValue,
-              required: option.original.required,
-            })
-            if (set.has(promptedValue)) {
-              nextArgs.push(fullFlag, promptedValue)
-            }
-          } else if (option.original.description.endsWith(' array')) {
-            const values: string[] = []
-            do {
-              const promptedValue = await prompts.input({
-                message: getMessage(option.original),
-                default: option.original.defaultValue?.[values.length] as string,
-              })
-              if (!promptedValue) break
-              values.push(fullFlag, promptedValue)
-            } while (values)
-            nextArgs.push(...values)
-          } else {
-            // let's handle this as a string - but the `parseArg` function could turn it into a number or boolean or whatever
-            const getParsedValue = (input: string) => {
-              return option.original.parseArg ? option.original.parseArg(input, undefined as string | undefined) : input
-            }
-            const promptedValue = await prompts.input({
-              message: getMessage(option.original),
-              default: option.value,
-              required: option.original.required,
-              validate: input => {
-                const parsed = getParsedValue(input)
-                if (parsed == null && input != null) return 'Invalid value'
-                return true
-              },
-            })
-            nextArgs.push(fullFlag, getParsedValue(promptedValue) ?? promptedValue)
-          }
-        }
-      }
+    }
 
-      return command.parseAsync(nextArgs)
-    },
+    return command.parseAsync(nextArgs)
+  }
+  return {
+    parseAsync: (args: string[]) =>
+      analyseThenParse(args).catch(e => {
+        if (e?.constructor?.name === 'ExitPromptError') return // https://github.com/SBoudrias/Inquirer.js?tab=readme-ov-file#handling-ctrlc-gracefully
+        throw e
+      }),
     helpInformation: () => command.helpInformation(),
   } satisfies CommanderProgramLike
 }

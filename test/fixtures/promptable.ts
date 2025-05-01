@@ -22,6 +22,10 @@ const router = trpc.router({
       )
       .query(({input}) => JSON.stringify(input)),
   }),
+  ingratiate: trpc.router({
+    modestly: trpc.procedure.query(() => 'nice to see you'),
+    extravagantly: trpc.procedure.query(() => 'you are a sight for sore eyes'),
+  }),
 })
 
 void createCli({router}).run({prompts})

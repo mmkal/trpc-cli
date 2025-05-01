@@ -54,7 +54,7 @@ const tsxWithMultilineInput = async (input: string, file: string, args: string[]
     }),
   ])
 
-  return stripAnsi(output)
+  return stripAnsi(output.replaceAll(/(\[36m)(\w)/g, '$1\n👉👉 $2')) // [36m is magic ansi thing that appears before user input for whatever reason
 }
 
 test('cli help', async () => {
@@ -491,11 +491,15 @@ test('promptable', async () => {
 
   expect(subcommandOutput).toMatchInlineSnapshot(`
     "? Select a subcommand (Use arrow keys)
-    ❯ challenge✔ Select a subcommand challenge
+    ❯ challenge
+      ingratiate✔ Select a subcommand 
+    👉👉 challenge
     ? Select a subcommand (Use arrow keys)
     ❯ harshly
-      gently✔ Select a subcommand harshly
-    ? Enter value for are-you-sure (Are you sure?) (y/N)? Enter value for are-you-sure (Are you sure?) (y/N) y✔ Enter value for are-you-sure (Are you sure?) Yes
+      gently✔ Select a subcommand 
+    👉👉 harshly
+    ? Enter value for are-you-sure (Are you sure?) (y/N)? Enter value for are-you-sure (Are you sure?) (y/N) y✔ Enter value for are-you-sure (Are you sure?) 
+    👉👉 Yes
     {"areYouSure":true}"
   `)
 })

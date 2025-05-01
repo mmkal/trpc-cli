@@ -134,11 +134,24 @@ export type InquirerPromptsLike = {
   form?: unknown
 }
 
+export type EnquirerLike = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Form: new (...args: any) => any
+  prompt: <T>(params: {
+    name: string
+    message: string
+    validate?: (input: string) => boolean | string
+    initial?: unknown
+  }) => Promise<T>
+}
+
+export type Promptable = InquirerPromptsLike | EnquirerLike
+
 export type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
-  prompts?: InquirerPromptsLike | (() => Promise<InquirerPromptsLike>)
+  prompts?: Promptable | (() => Promise<Promptable>)
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
   process?: {

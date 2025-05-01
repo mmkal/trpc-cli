@@ -35,10 +35,14 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
-    "omelette": ">=0.4.17"
+    "omelette": "*",
+    "@inquirer/prompts": "*"
   },
   "peerDependenciesMeta": {
     "omelette": {
+      "optional": true
+    },
+    "@inquirer/prompts": {
       "optional": true
     }
   },
