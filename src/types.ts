@@ -138,7 +138,7 @@ export type CommanderProgramLike = {
 }
 
 export interface TrpcCli {
-  run: (params?: TrpcCliRunParams) => Promise<void>
+  run: (params?: TrpcCliRunParams, program?: CommanderProgramLike) => Promise<void>
   buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
 }
 
