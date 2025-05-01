@@ -485,15 +485,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     return program
   }
 
-  async function run(runParams?: TrpcCliRunParams) {
+  const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams)) => {
+    if (!looksLikeInstanceof(program, Command)) throw new Error(`program is not a Command instance`)
     const _process = runParams?.process || process
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    const program = buildProgram(runParams)
     program.exitOverride(exit => {
       _process.exit(exit.exitCode)
       throw new FailedToExitError('Root command exitOverride', {exitCode: exit.exitCode, cause: exit})
     })
     program.configureOutput({
+      writeOut: str => logger.info?.(str),
       writeErr: str => logger.error?.(str),
     })
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
