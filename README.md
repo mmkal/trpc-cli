@@ -1061,7 +1061,6 @@ You can then use tab-completion to autocomplete commands and flags.
 
 ## Out of scope
 
-- No stdin reading - I'd recommend using [`@inquirer/prompts`](https://npmjs.com/package/@inquirer/prompts) which is type safe and easy to use
 - No stdout prettiness other than help text - use [`tasuku`](https://npmjs.com/package/tasuku) or [`listr2`](https://npmjs.com/package/listr2)
 
 ## Contributing
