@@ -289,7 +289,14 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
   const command = program as Command
   type ParseOptions = {from: 'user' | 'node' | 'electron'}
   const analyseThenParse = async (argv: string[], parseOptions?: ParseOptions) => {
-    if (parseOptions?.from === 'electron') console.warn('electron mode is untested')
+    // eslint-disable-next-line no-console
+    if (parseOptions?.from === 'electron') {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `Warning: using prompts in electron mode is untested. The first two args of $0 are not available in electron mode. Assuming that the first two args of ${JSON.stringify(argv)} are electron-related and not intended for the CLI.`,
+      )
+    }
+
     if (parseOptions?.from !== 'user') {
       argv = argv.slice(2)
       parseOptions = {from: 'user'}

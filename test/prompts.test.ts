@@ -1,4 +1,4 @@
-import {Command, Option} from 'commander'
+import {Command} from 'commander'
 import {expect, test, vi} from 'vitest'
 import {AnyRouter, createCli, TrpcCliParams, TrpcCliRunParams, trpcServer, z} from '../src'
 

@@ -33,13 +33,14 @@ test('default command', async () => {
 
   const runFoo = await run(['foo', '--bar', '1'])
 
-  //   expect(runFoo.exit).toHaveBeenCalledWith(0)
-  //   expect(runFoo.log).toHaveBeenCalledWith('{"bar":1}')
-  //   expect(runFoo.result).toBeInstanceOf(FailedToExitError)
-  //   expect(runFoo.result.exitCode).toBe(0)
-  //   expect(runFoo.result.cause).toBe('{"bar":1}')
+  expect(runFoo.exit).toHaveBeenCalledWith(0)
+  expect(runFoo.log).toHaveBeenCalledWith('{"bar":1}')
+  expect(runFoo.result).toBeInstanceOf(FailedToExitError)
+  expect(runFoo.result.exitCode).toBe(0)
+  expect(runFoo.result.cause).toBe('{"bar":1}')
 
   const runDefault = await run(['--bar', '1'])
+
   expect(runDefault.exit).toHaveBeenCalledWith(0)
   expect(runDefault.log).toHaveBeenCalledWith('{"bar":1}')
   expect(runDefault.result).toBeInstanceOf(FailedToExitError)

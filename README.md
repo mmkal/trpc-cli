@@ -421,6 +421,8 @@ Run `node path/to/cli --help` for formatted help text for the `sum` and `divide`
 ```
 Usage: calculator [options] [command]
 
+Available subcommands: add, subtract, multiply, divide, square-root
+
 Options:
   -h, --help                            display help for command
 
@@ -444,6 +446,7 @@ Commands:
                                         have a square, know the area, and want
                                         to find the length of the side.
   help [command]                        display help for command
+
 ```
 <!-- codegen:end -->
 
@@ -949,6 +952,8 @@ Here's how the CLI will work:
 ```
 Usage: migrations [options] [command]
 
+Available subcommands: up, create, list, search
+
 Options:
   -h, --help        display help for command
 
@@ -969,6 +974,8 @@ Commands:
 ```
 Usage: migrations [options] [command]
 
+Available subcommands: up, create, list, search
+
 Options:
   -h, --help        display help for command
 
@@ -988,6 +995,8 @@ Commands:
 
 ```
 Usage: migrations [options] [command]
+
+Available subcommands: up, create, list, search
 
 Options:
   -h, --help        display help for command
