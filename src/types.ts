@@ -135,6 +135,14 @@ export type InquirerPromptsLike = {
   confirm: (params: InquirerPromptOptions) => Promise<boolean>
 }
 
+/** looks like the `prompts` package */
+export type PromptsLike = {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  prompt: Function
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  inject: Function
+}
+
 /** looks like the `enquirer` package */
 export type EnquirerLike = {
   prompt: <T>(params: {
