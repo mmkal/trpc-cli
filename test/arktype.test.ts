@@ -96,7 +96,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"{"input":1}"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: must be a number (was a string)
+      Caused by: CommanderError: error: command-argument value 'a' is invalid for argument 'number'. Invalid number: a
   `)
 })
 
@@ -256,7 +256,7 @@ test('tuple input', async () => {
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: CliValidationError: value at [1] must be a number (was a string)
+        Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
     `,
   )
 })
@@ -286,7 +286,7 @@ test('tuple input with flags', async () => {
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: CliValidationError: value at [1] must be a number (was a string)
+        Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
     `,
   )
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(

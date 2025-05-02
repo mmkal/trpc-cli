@@ -81,8 +81,8 @@ test('options with various modifiers', async () => {
       --array-with-default [values...]              Type: string array (default: ["hello"])
       --object-with-default [json]                  Object (json formatted); Required: ["foo"] (default: {"foo":"bar"})
       --array-of-objects-with-default [values...]   Type: object; Object (json formatted); Required: ["foo"] array (default: [{"foo":"bar"}])
-      --array-of-enums-with-default [values...]     Type: string; Enum: ["foo","bar"] array (default: ["foo"])
-      --array-of-unions-with-default [values...]    Type: string; Enum: ["foo","bar"] array (default: ["foo"])
+      --array-of-enums-with-default [values...]     Type: string array (choices: "foo", "bar", default: ["foo"])
+      --array-of-unions-with-default [values...]    Type: string array (choices: "foo", "bar", default: ["foo"])
       --array-of-numbers-with-default [values...]   Type: number array (default: [42])
       --array-of-booleans-with-default [values...]  Type: boolean array (default: [true])
       --number-with-min-and-max <number>            Minimum: 0; Maximum: 10

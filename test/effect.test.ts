@@ -26,7 +26,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '123'])).toMatchInlineSnapshot(`"123"`)
   await expect(run(router, ['foo', 'abc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Expected number, actual "abc"
+      Caused by: CommanderError: error: command-argument value 'abc' is invalid for argument 'number'. Invalid number: abc
   `)
 })
 

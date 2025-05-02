@@ -13,11 +13,58 @@ const tsx = async (file: string, args: string[]) => {
   return stripAnsi(all)
 }
 
+const tsxWithInput = async (input: string, file: string, args: string[]) => {
+  const checkValue = (name: string, value: string) => {
+    // make sure it's a simple value, no spaces or weird escapable characters
+    if (!/^[\w./-]*$/.test(value)) {
+      throw new Error(`Invalid input for ${name}: ${value}`)
+    }
+  }
+  checkValue('input', input)
+  checkValue('file', file)
+  args.forEach((a, i) => checkValue(`arg ${i}`, a))
+
+  const {all} = await execa(
+    'sh',
+    ['-c', `echo ${input} | ./node_modules/.bin/tsx test/fixtures/${file} ${args.join(' ')}`],
+    {
+      all: true,
+      reject: false,
+      cwd: path.join(__dirname, '..'),
+    },
+  )
+  return stripAnsi(all)
+}
+
+const tsxWithMultilineInput = async (input: string, file: string, args: string[]) => {
+  if (process.env.CI) console.warn(`So far this hasn't worked in CI, you'll probably get timeouts'`)
+  const runSubprocess = () =>
+    execa('./node_modules/.bin/tsx', [`test/fixtures/${file}`, ...args], {
+      all: true,
+      reject: false,
+    })
+  let subprocess: ReturnType<typeof runSubprocess> | null = null
+  const [{all: output}] = await Promise.all([
+    (subprocess = runSubprocess()),
+    Promise.resolve().then(async () => {
+      for (const line of input.split('\n')) {
+        await new Promise(resolve => setTimeout(resolve, 150))
+        subprocess!.stdin.write(line + '\n')
+      }
+      return null
+    }),
+  ])
+
+  return stripAnsi(output.replaceAll(/(\[36m)(\w)/g, '$1\n $2')) // [36m is magic ansi thing that appears before user input for whatever reason
+}
+
 test('cli help', async () => {
   const output = await tsx('calculator', ['--help'])
   expect(output.replaceAll(/(commands:|flags:)/gi, s => s[0].toUpperCase() + s.slice(1).toLowerCase()))
     .toMatchInlineSnapshot(`
       "Usage: calculator [options] [command]
+
+      Available subCommands: add, subtract, multiply, divide, square-root
 
       Options:
         -h, --help                            display help for command
@@ -94,8 +141,9 @@ test('cli add', async () => {
 test('cli add failure', async () => {
   const output = await tsx('calculator', ['add', '1', 'notanumber'])
   expect(output).toMatchInlineSnapshot(`
-    "Validation error
-      - Expected number, received string at index 1
+    "error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
+
+
 
     Usage: calculator add [options] <parameter_1> <parameter_2>
 
@@ -148,6 +196,8 @@ test('cli non-existent command', async () => {
 
     Usage: calculator [options] [command]
 
+    Available subcommands: add, subtract, multiply, divide, square-root
+
     Options:
       -h, --help                            display help for command
 
@@ -180,6 +230,8 @@ test('cli no command', async () => {
   expect(output).toMatchInlineSnapshot(`
     "Usage: calculator [options] [command]
 
+    Available subcommands: add, subtract, multiply, divide, square-root
+
     Options:
       -h, --help                            display help for command
 
@@ -211,6 +263,8 @@ test('migrations help', async () => {
   const output = await tsx('migrations', ['--help'])
   expect(output).toMatchInlineSnapshot(`
     "Usage: migrations [options] [command]
+
+    Available subcommands: up, create, list, search
 
     Options:
       -h, --help        display help for command
@@ -253,6 +307,8 @@ test('migrations search.byName help', async () => {
   expect(output).toMatchInlineSnapshot(`
     "Usage: migrations [options] [command]
 
+    Available subcommands: up, create, list, search
+
     Options:
       -h, --help        display help for command
 
@@ -286,6 +342,8 @@ test('migrations search.byContent', async () => {
 
 
     Usage: migrations [options] [command]
+
+    Available subcommands: up, create, list, search
 
     Options:
       -h, --help        display help for command
@@ -324,6 +382,8 @@ test('fs help', async () => {
   const output = await tsx('fs', ['--help'])
   expect(output).toMatchInlineSnapshot(`
     "Usage: fs [options] [command]
+
+    Available subcommands: copy, diff
 
     Options:
       -h, --help                                       display help for command
@@ -425,4 +485,51 @@ test('thrown error in procedure includes call stack', async () => {
   const output = await tsx('calculator', ['square-root', '--', '-1'])
   expect(output).toMatch(/Error: Get real/)
   expect(output).toMatch(/at .* \(.*calculator.ts:\d+:\d+\)/)
+})
+
+const testLocalOnly = process.env.CI ? test.skip : test
+
+test('promptable', async () => {
+  // these snapshots look a little weird because inquirer uses `\r` to
+  // replace the input line
+  const yOutput = await tsxWithInput('y', 'promptable', ['challenge', 'harshly'])
+  expect(yOutput).toMatchInlineSnapshot(`
+    "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? Yes
+    {"areYouSure":true}"
+  `)
+
+  const nOutput = await tsxWithInput('n', 'promptable', ['challenge', 'harshly'])
+  expect(nOutput).toMatchInlineSnapshot(`
+    "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) n✔ [--are-you-sure] Are you sure? No
+    {"areYouSure":false}"
+  `)
+
+  const emptyOutput = await tsxWithInput('', 'promptable', ['challenge', 'harshly'])
+  expect(emptyOutput).toMatchInlineSnapshot(`
+    "? [--are-you-sure] Are you sure? (y/N)✔ [--are-you-sure] Are you sure? No
+    {"areYouSure":false}"
+  `)
+})
+
+// something about github actions ci setup doesn't like this
+testLocalOnly('promptable multiline', async () => {
+  const subcommandOutput = await tsxWithMultilineInput('challenge\nharshly\ny', 'promptable', [])
+
+  expect(subcommandOutput).toMatchInlineSnapshot(`
+    "? Select a subcommand (Use arrow keys)
+    ❯ challenge
+      ingratiate
+
+     Available subcommands: harshly, gently✔ Select a subcommand 
+     challenge
+    ? Select a subcommand (Use arrow keys)
+    ❯ harshly
+      gently
+
+     Challenge the user - they will have to say whether they are sure or not✔ Select a subcommand 
+     harshly
+    ? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? 
+     Yes
+    {"areYouSure":true}"
+  `)
 })

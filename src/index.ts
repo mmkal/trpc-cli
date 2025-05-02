@@ -16,6 +16,7 @@ import {
 } from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
+import {promptify} from './prompts'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {Dependencies, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof, looksLikeStandardSchemaFailureResult} from './util'
@@ -30,6 +31,7 @@ export * as trpcServer from '@trpc/server'
 export class Command extends BaseCommand {
   /** @internal track the commands that have been run, so that we can find the `__result` of the last command */
   __ran: Command[] = []
+  __input?: unknown
   /** @internal stash the return value of the underlying procedure on the command so to pass to `FailedToExitError` for use in a pinch */
   __result?: unknown
 }
@@ -169,6 +171,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           param.required ? '(required)' : '',
         ]
         const argument = new Argument(param.name, descriptionParts.filter(Boolean).join(' '))
+        if (param.type === 'number') {
+          argument.argParser(value => {
+            const number = numberParser(value, {fallback: null})
+            if (number == null) throw new InvalidArgumentError(`Invalid number: ${value}`)
+            return value
+          })
+        }
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
@@ -201,17 +210,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             `Negate \`${longOption}\` option. ${description || ''}`.trim(),
           )
           command.addOption(negation)
-        }
-
-        const numberParser = (val: string, {fallback = val as unknown} = {}) => {
-          const number = Number(val)
-          return Number.isNaN(number) ? fallback : number
-        }
-
-        const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
-          if (val === 'true') return true
-          if (val === 'false') return false
-          return fallback
         }
 
         const rootTypes = getSchemaTypes(propertyValue).sort()
@@ -315,15 +313,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option = new Option(flags, description)
         } else if (propertyType === 'number' || propertyType === 'integer') {
           option = new Option(`${flags} ${bracketise('number')}`, description)
-          option.argParser(value => numberParser(value))
+          option.argParser(value => numberParser(value, {fallback: null}))
         } else if (propertyType === 'array') {
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
           else if (isValueRequired) option.default([])
-          const itemTypes =
-            'items' in propertyValue && propertyValue.items
-              ? getSchemaTypes(propertyValue.items as JsonSchema7Type)
-              : []
+          const itemsProp = 'items' in propertyValue ? (propertyValue.items as JsonSchema7Type) : null
+          const itemTypes = itemsProp ? getSchemaTypes(itemsProp) : []
+
+          const itemEnumTypes = itemsProp && getEnumChoices(itemsProp)
+          if (itemEnumTypes?.type === 'string_enum') {
+            option.choices(itemEnumTypes.choices)
+          }
 
           const itemParser = getValueParser(itemTypes)
           if (itemParser.parser) {
@@ -440,14 +441,19 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       // Check if this command should be the default for its parent
       const meta = getMeta(commandConfig.procedure)
       if (meta.default === true) {
-        // this is the default command for the parent, so just configure the parent command to do the same action
-        configureCommand(parentCommand, procedurePath, commandConfig)
+        // the parent will pass on its args straight to the child, which will validate them. the parent just blindly accepts anything.
+        parentCommand.allowExcessArguments()
+        parentCommand.allowUnknownOption()
+        parentCommand.addHelpText('after', leafCommand.helpInformation())
+        parentCommand.action(async () => {
+          await leafCommand.parseAsync([...parentCommand.args], {from: 'user'})
+        })
 
         // ancestors need to support positional options to pass through the positional args
-        for (let ancestor = parentCommand.parent, i = 0; ancestor && i < 10; ancestor = ancestor.parent, i++) {
-          ancestor.enablePositionalOptions()
-        }
-        parentCommand.passThroughOptions()
+        // for (let ancestor = parentCommand.parent, i = 0; ancestor && i < 10; ancestor = ancestor.parent, i++) {
+        //   ancestor.enablePositionalOptions()
+        // }
+        // parentCommand.passThroughOptions()
 
         defaultCommands[parentPath] = {
           procedurePath: procedurePath,
@@ -460,7 +466,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     // After all commands are added, generate descriptions for parent commands
     Object.entries(commandTree).forEach(([path, command]) => {
       // Skip the root command and leaf commands (which already have descriptions)
-      if (path === '' || command.commands.length === 0) return
+      // if (path === '' || command.commands.length === 0) return
+      if (command.commands.length === 0) return
 
       // Get the names of all direct subcommands
       const subcommandNames = command.commands.map(cmd => cmd.name())
@@ -487,8 +494,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
   const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams)) => {
     if (!looksLikeInstanceof(program, Command)) throw new Error(`program is not a Command instance`)
+    const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
+    const argv = [...(runParams?.argv || process.argv)]
+
     const _process = runParams?.process || process
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
+
     program.exitOverride(exit => {
       _process.exit(exit.exitCode)
       throw new FailedToExitError('Root command exitOverride', {exitCode: exit.exitCode, cause: exit})
@@ -497,7 +508,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       writeOut: str => logger.info?.(str),
       writeErr: str => logger.error?.(str),
     })
-    const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
 
     if (runParams?.completion) {
       const completion =
@@ -513,7 +523,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
         return inspect(err)
       })
-    await program.parseAsync(runParams?.argv || process.argv, opts).catch(err => {
+
+    if (runParams?.prompts) {
+      program = promptify(program, runParams.prompts) as Command
+    }
+
+    await program.parseAsync(argv, opts).catch(err => {
       if (err instanceof FailedToExitError) throw err
       const logMessage = looksLikeInstanceof(err, Error)
         ? formatError(err) || err.message
@@ -523,7 +538,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       throw new FailedToExitError(`Program exit after failure`, {exitCode: 1, cause: err})
     })
     _process.exit(0)
-    throw new FailedToExitError('Program exit after success', {exitCode: 0, cause: program.__ran.at(-1)?.__result})
+    throw new FailedToExitError('Program exit after success', {
+      exitCode: 0,
+      cause: (program as Command).__ran.at(-1)?.__result,
+    })
   }
 
   return {run, buildProgram}
@@ -600,3 +618,14 @@ function transformError(err: unknown, command: Command, dependencies: Dependenci
 }
 
 export {FailedToExitError, CliValidationError} from './errors'
+
+const numberParser = (val: string, {fallback = val as unknown} = {}) => {
+  const number = Number(val)
+  return Number.isNaN(number) ? fallback : number
+}
+
+const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
+  if (val === 'true') return true
+  if (val === 'false') return false
+  return fallback
+}
