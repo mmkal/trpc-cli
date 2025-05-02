@@ -476,19 +476,19 @@ test('promptable', async () => {
   // these snapshots look a little weird because inquirer uses `\r` to replace the input line
   const yOutput = await tsxWithInput('y', 'promptable', ['challenge', 'harshly'])
   expect(yOutput).toMatchInlineSnapshot(`
-    "? Enter value for are-you-sure (Are you sure?) (y/N)? Enter value for are-you-sure (Are you sure?) (y/N) y✔ Enter value for are-you-sure (Are you sure?) Yes
+    "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? Yes
     {"areYouSure":true}"
   `)
 
   const nOutput = await tsxWithInput('n', 'promptable', ['challenge', 'harshly'])
   expect(nOutput).toMatchInlineSnapshot(`
-    "? Enter value for are-you-sure (Are you sure?) (y/N)? Enter value for are-you-sure (Are you sure?) (y/N) n✔ Enter value for are-you-sure (Are you sure?) No
+    "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) n✔ [--are-you-sure] Are you sure? No
     {"areYouSure":false}"
   `)
 
   const emptyOutput = await tsxWithInput('', 'promptable', ['challenge', 'harshly'])
   expect(emptyOutput).toMatchInlineSnapshot(`
-    "? Enter value for are-you-sure (Are you sure?) (y/N)✔ Enter value for are-you-sure (Are you sure?) No
+    "? [--are-you-sure] Are you sure? (y/N)✔ [--are-you-sure] Are you sure? No
     {"areYouSure":false}"
   `)
 
@@ -507,7 +507,7 @@ test('promptable', async () => {
 
      Challenge the user - they will have to say whether they are sure or not✔ Select a subcommand 
      harshly
-    ? Enter value for are-you-sure (Are you sure?) (y/N)? Enter value for are-you-sure (Are you sure?) (y/N) y✔ Enter value for are-you-sure (Are you sure?) 
+    ? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? 
      Yes
     {"areYouSure":true}"
   `)

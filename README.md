@@ -1056,6 +1056,8 @@ The user will then be asked to input any missing arguments or options. Booleans,
 
 ## Completions
 
+> 🚧 Note: This feature is new! Please try it out and [file an issues](https://github.com/mmkal/trpc-cli/issues) if you have problems. 🚧
+
 Completions are supported via [omelette](https://npmjs.com/package/omelette), which is an optional peer dependency. How to get them working:
 
 ```bash
