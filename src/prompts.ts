@@ -278,10 +278,9 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
 
     const analysis = await getCommandAnalysis(command)
 
-    const getMessage = (thing: {name: () => string; description: string | undefined}) => {
-      let message = `Enter value for ${thing.name()}`
-      if (thing.description) message += ` (${thing.description})`
-      return message
+    const getMessage = (thing: {name: () => string; long?: string; description: string}) => {
+      if (thing.description) return `[${thing.long || thing.name()}] ${thing.description}`
+      return `Enter value for ${thing.name()}`
     }
 
     for (const arg of analysis.arguments) {
