@@ -132,44 +132,107 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
   return shadow
 }
 
-const enquirerToInquirer = (en: EnquirerLike): InquirerPromptsLike => {
-  const promptX = async <P extends Omit<Parameters<typeof en.prompt>[0], 'name'>>(params: P) => {
-    const {x} = await en.prompt<{x: never}>({...params, name: 'x'} as never)
-    return x
-  }
+interface Prompter {
+  input: (params: {
+    message: string
+    validate?: (input: string) => boolean | string
+    required?: boolean
+    default?: string
+  }) => Promise<string>
+  select: (params: {
+    message: string
+    choices: string[] | {name: string; value: string; description?: string}[]
+    required?: boolean
+    default?: string
+    validate?: (input: string) => boolean | string
+  }) => Promise<string>
+  confirm: (params: {
+    message: string
+    default?: boolean
+    validate?: (input: string) => boolean | string
+  }) => Promise<boolean>
+  checkbox: (params: {
+    message: string
+    choices: {name: string; value: string}[]
+    // validate?: (input: readonly {name?: string; value: string}[]) => boolean | string
+    required?: boolean
+    default?: string[]
+  }) => Promise<string[]>
+}
+
+const inquirerPrompter = (prompts: InquirerPromptsLike): Prompter => {
+  return prompts as typeof import('@inquirer/prompts')
+}
+
+const enquirerPrompter = (prompts: EnquirerLike): Prompter => {
+  const enquirer = prompts as typeof import('enquirer')
+  const getX = <T>(value: unknown) => (value as {x: T}).x
   return {
     input: async params => {
-      return promptX({
-        type: 'input',
-        message: params.message,
-        validate: params.validate,
-        initial: params.default as {},
-      })
+      return enquirer
+        .prompt({
+          type: 'input',
+          name: 'x',
+          message: params.message,
+          validate: params.validate,
+          initial: params.default as {},
+        })
+        .then(getX) as Promise<string>
     },
     confirm: async params => {
-      return promptX({
-        type: 'confirm',
-        message: params.message,
-        validate: params.validate,
-        initial: params.default as {},
-      })
+      return enquirer
+        .prompt({
+          type: 'confirm',
+          name: 'x',
+          message: params.message,
+          validate: params.validate,
+          initial: params.default as {},
+        })
+        .then(getX) as Promise<boolean>
     },
     select: async params => {
-      return promptX({
-        type: 'select',
-        message: params.message,
-        choices: params.choices.slice(), // enquirer does something bizarre with the input array, don't let it tamper with the original!
-        validate: params.validate,
-        initial: params.default as {},
-      })
+      return enquirer
+        .prompt({
+          type: 'select',
+          name: 'x',
+          message: params.message,
+          // @ts-expect-error not sure why this is an error, in the IDE it infers the type correctly
+          choices: params.choices.slice() as string[],
+          validate: params.validate,
+          initial: params.default as {},
+        })
+        .then(getX) as Promise<string>
     },
-    // consider adding a "form" method - would be nice to see all the prompts at once
-    // form: async (params: any) => {},
+    checkbox: async params => {
+      return enquirer
+        .prompt({
+          type: 'multiselect',
+          name: 'x',
+          message: params.message,
+          // @ts-expect-error not sure why this is an error, in the IDE it infers the type correctly
+          choices: params.choices.slice().map(c => ({
+            name: c.name,
+            value: c.value,
+            enabled: true,
+          })),
+          // validate: params.validate ? v => params.validate!([{value: v}]) : undefined,
+          initial: params.default as {},
+        })
+        .then(getX) as Promise<string[]>
+    },
   }
 }
 
 export const promptify = (program: CommanderProgramLike, prompts: Promptable) => {
-  const _prompts = 'Form' in prompts ? enquirerToInquirer(prompts) : prompts
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+  let __prompts = prompts as any
+  if (__prompts?.default) __prompts = __prompts.default as never
+  const ___prompts =
+    __prompts?.name === 'Enquirer'
+      ? enquirerPrompter(__prompts as EnquirerLike)
+      : inquirerPrompter(__prompts as InquirerPromptsLike)
+  const _prompts = ___prompts as InquirerPromptsLike as typeof import('@inquirer/prompts')
+
   const command = program as Command
   const analyseThenParse = async (args: string[]) => {
     const nextArgs = [...args]
@@ -254,37 +317,26 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
           })
           if (promptedValue) nextArgs.push(fullFlag)
         } else if (option.original.variadic && option.original.argChoices) {
-          const values: string[] = []
-          do {
-            const choices = option.original.argChoices.slice()
-            const set = new Set(choices)
-            const activeChoices = choices
-              .map(choice => ({
-                name: choice,
-                value: choice,
-              }))
-              .filter(choice => !values.includes(choice.value))
-
-            if (activeChoices.length === 0) break
-            const promptedValue = await _prompts.select({
-              message: getMessage(option.original),
-              choices: activeChoices.concat([{name: 'Done', value: ''}]),
-              default: option.original.defaultValue,
-              required: option.original.required,
-            })
-
-            if (!promptedValue) break
-            if (set.has(promptedValue)) values.push(fullFlag, promptedValue)
-          } while (values)
-          nextArgs.push(...values)
+          const choices = option.original.argChoices.slice()
+          const results = await _prompts.checkbox({
+            message: getMessage(option.original),
+            choices: choices.map(choice => ({
+              value: choice,
+              name: choice,
+              checked: true,
+            })),
+          })
+          results.forEach(result => {
+            if (typeof result === 'string') nextArgs.push(fullFlag, result)
+          })
         } else if (option.original.argChoices) {
           const choices = option.original.argChoices.slice()
           const set = new Set(choices)
-          const promptedValue = await _prompts.select({
+          const promptedValue = await _prompts.select<string>({
             message: getMessage(option.original),
             choices,
             default: option.original.defaultValue,
-            required: option.original.required,
+            // required: option.original.required,
           })
           if (set.has(promptedValue)) {
             nextArgs.push(fullFlag, promptedValue)

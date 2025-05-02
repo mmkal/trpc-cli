@@ -128,19 +128,17 @@ export type InquirerPromptOptions = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   default?: any
 }
+
+/** looks like the `@inquirer/prompts` package */
 export type InquirerPromptsLike = {
   input: (params: InquirerPromptOptions) => Promise<string>
   confirm: (params: InquirerPromptOptions) => Promise<boolean>
-  select: (
-    params: InquirerPromptOptions & {choices: string[] | Array<{name: string; value: string; description?: string}>},
-  ) => Promise<string>
-  form?: unknown
 }
 
+/** looks like the `enquirer` package */
 export type EnquirerLike = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Form: new (...args: any) => any
   prompt: <T>(params: {
+    type: 'input'
     name: string
     message: string
     validate?: (input: string) => boolean | string
