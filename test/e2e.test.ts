@@ -472,13 +472,19 @@ test('thrown error in procedure includes call stack', async () => {
   expect(output).toMatch(/at .* \(.*calculator.ts:\d+:\d+\)/)
 })
 
-test('promptable', async () => {
-  // these snapshots look a little weird because inquirer uses `\r` to replace the input line
+const testLocalOnly = process.env.CI ? test : test
+
+testLocalOnly('promptable', async () => {
+  console.log('promptable', 1)
+  // these snapshots look a little weird because inquirer uses `\r` to
+  // replace the input line
   const yOutput = await tsxWithInput('y', 'promptable', ['challenge', 'harshly'])
+  console.log('promptable', 2)
   expect(yOutput).toMatchInlineSnapshot(`
     "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? Yes
     {"areYouSure":true}"
   `)
+  console.log('promptable', 3)
 
   const nOutput = await tsxWithInput('n', 'promptable', ['challenge', 'harshly'])
   expect(nOutput).toMatchInlineSnapshot(`
@@ -492,7 +498,9 @@ test('promptable', async () => {
     {"areYouSure":false}"
   `)
 
+  console.log('promptable', 4)
   const subcommandOutput = await tsxWithMultilineInput('challenge\nharshly\ny', 'promptable', [])
+  console.log('promptable', 5)
 
   expect(subcommandOutput).toMatchInlineSnapshot(`
     "? Select a subcommand (Use arrow keys)
