@@ -64,6 +64,8 @@ test('cli help', async () => {
     .toMatchInlineSnapshot(`
       "Usage: calculator [options] [command]
 
+      Available subCommands: add, subtract, multiply, divide, square-root
+
       Options:
         -h, --help                            display help for command
 
@@ -194,6 +196,8 @@ test('cli non-existent command', async () => {
 
     Usage: calculator [options] [command]
 
+    Available subcommands: add, subtract, multiply, divide, square-root
+
     Options:
       -h, --help                            display help for command
 
@@ -226,6 +230,8 @@ test('cli no command', async () => {
   expect(output).toMatchInlineSnapshot(`
     "Usage: calculator [options] [command]
 
+    Available subcommands: add, subtract, multiply, divide, square-root
+
     Options:
       -h, --help                            display help for command
 
@@ -257,6 +263,8 @@ test('migrations help', async () => {
   const output = await tsx('migrations', ['--help'])
   expect(output).toMatchInlineSnapshot(`
     "Usage: migrations [options] [command]
+
+    Available subcommands: up, create, list, search
 
     Options:
       -h, --help        display help for command
@@ -299,6 +307,8 @@ test('migrations search.byName help', async () => {
   expect(output).toMatchInlineSnapshot(`
     "Usage: migrations [options] [command]
 
+    Available subcommands: up, create, list, search
+
     Options:
       -h, --help        display help for command
 
@@ -332,6 +342,8 @@ test('migrations search.byContent', async () => {
 
 
     Usage: migrations [options] [command]
+
+    Available subcommands: up, create, list, search
 
     Options:
       -h, --help        display help for command
@@ -370,6 +382,8 @@ test('fs help', async () => {
   const output = await tsx('fs', ['--help'])
   expect(output).toMatchInlineSnapshot(`
     "Usage: fs [options] [command]
+
+    Available subcommands: copy, diff
 
     Options:
       -h, --help                                       display help for command

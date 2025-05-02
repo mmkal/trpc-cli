@@ -27,6 +27,7 @@ const runWith = async <R extends AnyRouter>(
 }
 
 test('custom prompter', async () => {
+  const log = vi.fn()
   const t = trpcServer.initTRPC.create()
 
   const router = t.router({
@@ -56,7 +57,17 @@ test('custom prompter', async () => {
       // example of how you can customize prompts however you want - this one doesn't "prompt" at all, it uses silly rules to decide on values.
       return {
         setup: async ctx => {
-          console.log('setup', ctx.inputs)
+          // here you could use ctx to render one big form if you like, then stub out the other methods.
+          // the arguments and options that the user provided are in `ctx.inputs`.
+          // see the log snapshot below to see what it looks like.
+          log({
+            command: ctx.command.name(),
+            argv: ctx.inputs.argv,
+            inputs: {
+              arguments: ctx.inputs.arguments.map(a => ({name: a.name, value: a.value, specified: a.specified})),
+              options: ctx.inputs.options.map(o => ({name: o.name, value: o.value, specified: o.specified})),
+            },
+          })
         },
         input: async (params, ctx) => {
           const commanderOptions = (command as Command).options.filter(o => o.name() === ctx.option?.name())
@@ -95,4 +106,50 @@ test('custom prompter', async () => {
       }"
     `,
   )
+
+  expect(log.mock.calls[0][0]).toMatchInlineSnapshot(`
+    {
+      "argv": [
+        "create",
+        "--package-manager",
+        "yarn",
+      ],
+      "command": "create",
+      "inputs": {
+        "arguments": [],
+        "options": [
+          {
+            "name": "project-name",
+            "specified": false,
+            "value": undefined,
+          },
+          {
+            "name": "language",
+            "specified": false,
+            "value": undefined,
+          },
+          {
+            "name": "packages",
+            "specified": false,
+            "value": undefined,
+          },
+          {
+            "name": "git-init",
+            "specified": false,
+            "value": undefined,
+          },
+          {
+            "name": "package-manager",
+            "specified": true,
+            "value": "yarn",
+          },
+          {
+            "name": "install",
+            "specified": false,
+            "value": undefined,
+          },
+        ],
+      },
+    }
+  `)
 })

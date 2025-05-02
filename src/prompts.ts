@@ -45,6 +45,11 @@ const parseUpstreamArgumentInfo = (value: unknown): UpstreamArgumentInfo | null 
   }
 }
 
+const getDefaultSubcommand = (command: Command) => {
+  const defaultChild = command.description().match(/\[default_child:(.*?)]/)?.[1]
+  return defaultChild ? command.commands.find(c => c.name() === defaultChild) : undefined
+}
+
 export const createShadowCommand = (command: Command, onAnalyze: (params: Analysis) => void): Command => {
   const shadow = new Command(command.name())
   shadow.exitOverride()
@@ -55,7 +60,13 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
   const argumentsMap = new Map<number, Shadowed<Argument>>()
   const optionsMap = new Map<number, Shadowed<Option>>()
 
-  command.options.forEach(original => {
+  const commandToLookForArgumentsAndOptionsIn = getDefaultSubcommand(command) || command
+
+  if (commandToLookForArgumentsAndOptionsIn !== command) {
+    console.warn('looking for arguments and options in', commandToLookForArgumentsAndOptionsIn?.name())
+  }
+  // console.log(command.name() || 'root_command', command.description())
+  commandToLookForArgumentsAndOptionsIn.options.forEach(original => {
     const id = Date.now() + Math.random()
     const shadowOption = new Option(
       original.flags.replace('<', '[').replace('>', ']'),
@@ -68,7 +79,7 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
     optionsMap.set(id, {shadow: shadowOption, original: original})
   })
 
-  command.registeredArguments.forEach(original => {
+  commandToLookForArgumentsAndOptionsIn.registeredArguments.forEach(original => {
     const shadowArgument = new Argument(original.name(), original.description)
     const id = Date.now() + Math.random()
 
@@ -80,6 +91,9 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
     shadow.addArgument(shadowArgument)
     argumentsMap.set(id, {shadow: shadowArgument, original: original})
   })
+
+  // if (command._allowUnknownOption) shadow.allowUnknownOption()
+  // if (command._allowExcessArguments) shadow.allowExcessArguments()
 
   const analysis: Analysis = {
     command: {shadow, original: command},
@@ -274,22 +288,53 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
   const command = program as Command
   type ParseOptions = {from: 'user' | 'node' | 'electron'}
   const analyseThenParse = async (argv: string[], parseOptions?: ParseOptions) => {
+    if (parseOptions?.from === 'electron') console.warn('electron mode is untested')
+    if (parseOptions?.from !== 'user') {
+      argv = argv.slice(2)
+      parseOptions = {from: 'user'}
+    }
+
     const nextArgv = [...argv]
     const getCommandAnalysis = async (c: Command, recursion = 0) => {
       if (recursion > 100) throw new Error('Too many recursive calls, this is probably a bug')
       const analysis = await new Promise<Analysis>((resolve, reject) => {
         const shadow = createShadowCommand(c, resolve)
-        shadow.parseAsync(argv.slice(recursion), parseOptions).catch(e => {
-          if (e instanceof CommanderError && e.exitCode === 0) {
-            // commander tried to exit with code 0, probably rendered help - no analysis to provide
-            resolve({command: {shadow, original: c}, arguments: [], options: []})
-            return
-          }
-          reject(e as Error)
-        })
+        if (Math.random()) {
+          const child = shadow.commands.find(ch => ch.name() === argv[0])
+
+          const parse = child
+            ? () => child.parseAsync(argv.slice(1), parseOptions)
+            : () => shadow.parseAsync(argv, parseOptions)
+
+          parse().catch((e: unknown) => {
+            if (e instanceof CommanderError && e.exitCode === 0) {
+              // commander tried to exit with code 0, probably rendered help - no analysis to provide
+              resolve({command: {shadow, original: c}, arguments: [], options: []})
+              return
+            }
+            reject(e as Error)
+          })
+
+          return
+        }
+        const c2 = getDefaultSubcommand(c) || c
+        shadow
+          .parseAsync(
+            argv.filter((a, i) => i > 0 || a !== c2.name()),
+            parseOptions,
+          )
+          .catch(e => {
+            if (e instanceof CommanderError && e.exitCode === 0) {
+              // commander tried to exit with code 0, probably rendered help - no analysis to provide
+              resolve({command: {shadow, original: c}, arguments: [], options: []})
+              return
+            }
+            reject(e as Error)
+          })
       })
 
       if (
+        true &&
         analysis.arguments.length === 0 &&
         analysis.options.length === 0 &&
         analysis.command.original.commands.length > 0

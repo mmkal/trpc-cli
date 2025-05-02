@@ -146,6 +146,8 @@ test('modify commander program manually', async () => {
   expect(mockLog.mock.calls.join('\n')).toMatchInlineSnapshot(`
     "Usage: program Here is how to use: \`calculator add 1 1\`
 
+    Available subcommands: add, square-root
+
     Options:
       -h, --help                       display help for command
 

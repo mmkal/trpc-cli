@@ -444,6 +444,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         // the parent will pass on its args straight to the child, which will validate them. the parent just blindly accepts anything.
         parentCommand.allowExcessArguments()
         parentCommand.allowUnknownOption()
+        // todo: find a better way to tell plugins (term used loosely here) that this command has a default child
+        parentCommand.description(parentCommand.description() + `[default_child:${leafCommand.name()}]`)
         parentCommand.action(async () => {
           await leafCommand.parseAsync([...parentCommand.args], {from: 'user'})
         })
@@ -465,7 +467,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     // After all commands are added, generate descriptions for parent commands
     Object.entries(commandTree).forEach(([path, command]) => {
       // Skip the root command and leaf commands (which already have descriptions)
-      if (path === '' || command.commands.length === 0) return
+      // if (path === '' || command.commands.length === 0) return
+      if (command.commands.length === 0) return
 
       // Get the names of all direct subcommands
       const subcommandNames = command.commands.map(cmd => cmd.name())
