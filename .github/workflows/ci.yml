@@ -10,8 +10,8 @@ jobs:
       - run: corepack enable
       - run: pnpm install
       - run: pnpm build
-      - run: pnpm lint
       - run: pnpm test
+      - run: pnpm lint
   test_trpc_vnext:
     runs-on: ubuntu-latest
     steps:

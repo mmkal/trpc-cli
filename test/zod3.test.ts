@@ -100,8 +100,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string
+      Caused by: CommanderError: error: command-argument value 'a' is invalid for argument 'number'. Invalid number: a
   `)
 })
 
@@ -234,8 +233,7 @@ test('tuple input', async () => {
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
+      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
   `)
 })
 
@@ -261,8 +259,7 @@ test('tuple input with flags', async () => {
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
+      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -285,15 +282,15 @@ test('custom default procedure', async () => {
   const router = t.router({
     install: t.procedure
       .meta({default: true})
-      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .input(z.object({cwd: z.string()})) // let's pretend cwd is a required option
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const yarnOutput = await run(router, ['--frozen-lockfile'])
-  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+  const yarnOutput = await run(router, ['--cwd', '/foo/bar'])
+  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"cwd":"/foo/bar"}"`)
 
-  const yarnInstallOutput = await run(router, ['install', '--frozen-lockfile'])
-  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+  const yarnInstallOutput = await run(router, ['install', '--cwd', '/foo/bar'])
+  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"cwd":"/foo/bar"}"`)
 })
 
 test('command alias', async () => {

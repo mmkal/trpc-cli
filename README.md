@@ -11,6 +11,8 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - ✅ Easily add subcommands via nested trpc routers
 - ✅ Rich helptext out of the box
 - ✅ Batteries included - no need to install any other libraries (even trpc!)
+- ✅ Automatic input prompts
+- ✅ Automatic shell autocompletions
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ No config needed. Run on an existing router with `npx trpc-cli src/your-router.ts`
@@ -44,6 +46,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - [More Examples](#more-examples)
    - [Migrator example](#migrator-example)
 - [Programmatic usage](#programmatic-usage)
+- [Input Prompts](#input-prompts)
 - [Completions](#completions)
 - [Out of scope](#out-of-scope)
 - [Contributing](#contributing)
@@ -325,7 +328,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L51)
+#### [createCli](./src/index.ts#L53)
 
 Run a trpc router as a CLI.
 
@@ -418,6 +421,8 @@ Run `node path/to/cli --help` for formatted help text for the `sum` and `divide`
 ```
 Usage: calculator [options] [command]
 
+Available subcommands: add, subtract, multiply, divide, square-root
+
 Options:
   -h, --help                            display help for command
 
@@ -441,6 +446,7 @@ Commands:
                                         have a square, know the area, and want
                                         to find the length of the side.
   help [command]                        display help for command
+
 ```
 <!-- codegen:end -->
 
@@ -481,8 +487,9 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
-Validation error
-  - Expected number, received string at index 1
+error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
+
+
 
 Usage: calculator add [options] <parameter_1> <parameter_2>
 
@@ -796,7 +803,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:db92443db1beeaa3608be050420248a0 -->
+<!-- hash:72921e331afb12cbf349fa2e980c9f26 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -828,7 +835,7 @@ const searchProcedure = trpc.procedure
     })
   })
 
-const router = trpc.router({
+export const router = trpc.router({
   up: trpc.procedure
     .meta({
       description:
@@ -905,10 +912,10 @@ const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc11RouterLike
 
-const cli = createCli({router})
-
-void cli.run()
-
+if (require.main === module) {
+  const cli = createCli({router})
+  void cli.run()
+}
 function getMigrations() {
   return [
     {
@@ -945,6 +952,8 @@ Here's how the CLI will work:
 ```
 Usage: migrations [options] [command]
 
+Available subcommands: up, create, list, search
+
 Options:
   -h, --help        display help for command
 
@@ -955,6 +964,7 @@ Commands:
   list [options]    List all migrations
   search            Available subcommands: by-name, by-content
   help [command]    display help for command
+
 ```
 <!-- codegen:end -->
 
@@ -964,6 +974,8 @@ Commands:
 ```
 Usage: migrations [options] [command]
 
+Available subcommands: up, create, list, search
+
 Options:
   -h, --help        display help for command
 
@@ -974,6 +986,7 @@ Commands:
   list [options]    List all migrations
   search            Available subcommands: by-name, by-content
   help [command]    display help for command
+
 ```
 <!-- codegen:end -->
 
@@ -983,6 +996,8 @@ Commands:
 ```
 Usage: migrations [options] [command]
 
+Available subcommands: up, create, list, search
+
 Options:
   -h, --help        display help for command
 
@@ -993,6 +1008,7 @@ Commands:
   list [options]    List all migrations
   search            Available subcommands: by-name, by-content
   help [command]    display help for command
+
 ```
 <!-- codegen:end -->
 
@@ -1026,7 +1042,34 @@ const runCli = async (argv: string[]) => {
 }
 ```
 
+## Input Prompts
+
+You can enable prompts for positional arguments and options simply by installing `enquirer`, `prompts` or `@inquirer/prompts`:
+
+![](./docs/prompts-demo.gif)
+
+```bash
+npm install @inquirer/prompts
+```
+
+The pass it in when running your CLI:
+
+```ts
+import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer', or import * as prompts from 'prompts'
+import {createCli} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+cli.run({prompts})
+```
+
+The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation.
+
+You can also pass in a custom "Prompter". This in theory enables you to prompt in *any way* you'd like. You will be passed a `Command` instance, and then must define `input`, `select`, `confirm` and `checkbox` prompts. You can also define `setup` and `teardown` functions which run before and after the individual prompts for arguments and options. This could be used to render an all-in-one form filling in inputs. See [the tests for an example](./test/prompts.test.ts).
+
 ## Completions
+
+> 🚧 Note: This feature is new! Please try it out and [file an issues](https://github.com/mmkal/trpc-cli/issues) if you have problems. 🚧
 
 Completions are supported via [omelette](https://npmjs.com/package/omelette), which is an optional peer dependency. How to get them working:
 
@@ -1078,7 +1121,6 @@ You can then use tab-completion to autocomplete commands and flags.
 
 ## Out of scope
 
-- No stdin reading - I'd recommend using [`@inquirer/prompts`](https://npmjs.com/package/@inquirer/prompts) which is type safe and easy to use
 - No stdout prettiness other than help text - use [`tasuku`](https://npmjs.com/package/tasuku) or [`listr2`](https://npmjs.com/package/listr2)
 
 ## Contributing

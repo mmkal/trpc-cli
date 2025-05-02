@@ -37,10 +37,14 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
-    "omelette": ">=0.4.17"
+    "@inquirer/prompts": "*",
+    "omelette": "*"
   },
   "peerDependenciesMeta": {
     "omelette": {
+      "optional": true
+    },
+    "@inquirer/prompts": {
       "optional": true
     }
   },
@@ -54,11 +58,14 @@
     "zod-validation-error": "^3.3.0"
   },
   "devDependencies": {
+    "@inquirer/prompts": "7.5.0",
     "@types/json-schema": "7.0.15",
     "@types/node": "20.17.27",
+    "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.0.0",
     "arktype": "2.1.9",
     "effect": "3.14.2",
+    "enquirer": "2.4.1",
     "eslint": "8",
     "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb",
     "execa": "9.3.1",
@@ -66,6 +73,7 @@
     "fs-syncer": "0.5.3",
     "np": "10.2.0",
     "pkg-pr-new": "^0.0.41",
+    "prompts": "2.4.2",
     "strip-ansi": "7.1.0",
     "trpcserver10": "npm:@trpc/server@^10.45.2",
     "trpcserver11": "npm:@trpc/server@^11.1.1",

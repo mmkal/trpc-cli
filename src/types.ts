@@ -121,10 +121,51 @@ export interface OmeletteInstanceLike {
   tree: (value: any) => this
 }
 
+export type InquirerPromptOptions = {
+  message: string
+  required?: boolean
+  validate?: (input: string) => boolean | string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  default?: any
+}
+
+/** looks like the `@inquirer/prompts` package */
+export type InquirerPromptsLike = {
+  input: (params: InquirerPromptOptions) => Promise<string>
+  confirm: (params: InquirerPromptOptions) => Promise<boolean>
+}
+
+/** looks like the `prompts` package */
+export type PromptsLike = {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  prompt: Function
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+  inject: Function
+}
+
+/** looks like the `enquirer` package */
+export type EnquirerLike = {
+  prompt: <T>(params: {
+    type: 'input'
+    name: string
+    message: string
+    validate?: (input: string) => boolean | string
+    initial?: unknown
+  }) => Promise<T>
+}
+
+export type Promptable =
+  | InquirerPromptsLike
+  | EnquirerLike
+  | PromptsLike
+  | Prompter
+  | ((command: CommanderProgramLike) => Prompter)
+
 export type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
+  prompts?: Promptable
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
   process?: {
@@ -133,6 +174,7 @@ export type TrpcCliRunParams = {
 }
 
 export type CommanderProgramLike = {
+  name: () => string
   parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
   helpInformation: () => string
 }
@@ -162,4 +204,67 @@ export type Dependencies = {
     Schema: {isSchema: (input: unknown) => input is 'JSONSchemaMakeable'}
     JSONSchema: {make: (input: 'JSONSchemaMakeable') => JSONSchema7}
   }
+}
+
+export type PromptContext = {
+  // eslint-disable-next-line no-undef
+  input?: NodeJS.ReadableStream
+  // eslint-disable-next-line no-undef
+  output?: NodeJS.WritableStream
+  clearPromptOnDone?: boolean
+  signal?: AbortSignal
+  /** The command that is being prompted for. Cast this to a `commander.Command` to access the command's name, description, options etc. */
+  command: {name: () => string}
+  /** The original inputs the user provided - if they passed some but not all arguments/options, this will contain the values they did pass. */
+  inputs: {
+    argv: string[]
+    arguments: Array<{name: string; specified: boolean; value: unknown}>
+    options: Array<{name: string; specified: boolean; value: unknown}>
+  }
+  /** If set, this is the argument that is being prompted for. Cast to a `commander.Argument`. */
+  argument?: {name: () => string}
+  /** If set, this is the option that is being prompted for. Cast to a `commander.Option`. */
+  option?: {name: () => string}
+}
+
+export interface Prompter {
+  setup?: (context: PromptContext) => Promise<void>
+  teardown?: (context: PromptContext) => Promise<void>
+  input: (
+    params: {
+      message: string
+      validate?: (input: string) => boolean | string
+      required?: boolean
+      default?: string
+    },
+    context: PromptContext,
+  ) => Promise<string>
+  select: (
+    params: {
+      message: string
+      choices: string[] | {name: string; value: string; description?: string}[]
+      required?: boolean
+      default?: string
+      validate?: (input: string) => boolean | string
+    },
+    context: PromptContext,
+  ) => Promise<string>
+  confirm: (
+    params: {
+      message: string
+      default?: boolean
+      validate?: (input: string) => boolean | string
+    },
+    context: PromptContext,
+  ) => Promise<boolean>
+  checkbox: (
+    params: {
+      message: string
+      choices: {name: string; value: string; checked?: boolean}[]
+      // validate?: (input: readonly {name?: string; value: string}[]) => boolean | string
+      required?: boolean
+      default?: string[]
+    },
+    context: PromptContext,
+  ) => Promise<string[]>
 }
