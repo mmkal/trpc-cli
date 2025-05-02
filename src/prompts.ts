@@ -46,7 +46,8 @@ const parseUpstreamArgumentInfo = (value: unknown): UpstreamArgumentInfo | null 
 }
 
 const getDefaultSubcommand = (command: Command) => {
-  const defaultChild = command.description().match(/\[default_child:(.*?)]/)?.[1]
+  // it'd be good if there was a better way to get the "default" subcommand
+  const defaultChild = command.description().match(/Available subcommands:.* (\S+) \(default\)/)?.[1]
   return defaultChild ? command.commands.find(c => c.name() === defaultChild) : undefined
 }
 
@@ -63,9 +64,9 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
   const commandToLookForArgumentsAndOptionsIn = getDefaultSubcommand(command) || command
 
   if (commandToLookForArgumentsAndOptionsIn !== command) {
-    console.warn('looking for arguments and options in', commandToLookForArgumentsAndOptionsIn?.name())
+    // console.warn('looking for arguments and options in', commandToLookForArgumentsAndOptionsIn?.name())
   }
-  // console.log(command.name() || 'root_command', command.description())
+
   commandToLookForArgumentsAndOptionsIn.options.forEach(original => {
     const id = Date.now() + Math.random()
     const shadowOption = new Option(
@@ -308,6 +309,7 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
 
           parse().catch((e: unknown) => {
             if (e instanceof CommanderError && e.exitCode === 0) {
+              // console.log('commander tried to exit with code 0, probably rendered help - no analysis to provide', e)
               // commander tried to exit with code 0, probably rendered help - no analysis to provide
               resolve({command: {shadow, original: c}, arguments: [], options: []})
               return
@@ -334,15 +336,16 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
       })
 
       if (
-        true &&
+        // false &&
         analysis.arguments.length === 0 &&
         analysis.options.length === 0 &&
-        analysis.command.original.commands.length > 0
+        analysis.command.original.commands.length > 0 &&
+        !argv.some(a => a.startsWith('-'))
       ) {
         // we've got subcommands, let's prompt the user to select one
         let currentCommand = analysis.command as Shadowed<Command> | undefined
         while (currentCommand?.original.commands && currentCommand.original.commands.length > 0) {
-          const subcommand = await prompter.select(
+          const subcommandName = await prompter.select(
             {
               message: 'Select a subcommand',
               choices: currentCommand.original.commands.map(child => ({
@@ -353,10 +356,10 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
             },
             {command: currentCommand.original, inputs: {argv, arguments: [], options: []}},
           )
-          nextArgv.push(subcommand)
-          const originalChild = currentCommand.original.commands.find(child => child.name() === subcommand)
-          const shadowChild = currentCommand.shadow.commands.find(child => child.name() === subcommand)
-          if (!originalChild || !shadowChild) throw new Error(`Subcommand ${subcommand} not found`)
+          nextArgv.push(subcommandName)
+          const originalChild = currentCommand.original.commands.find(child => child.name() === subcommandName)
+          const shadowChild = currentCommand.shadow.commands.find(child => child.name() === subcommandName)
+          if (!originalChild || !shadowChild) throw new Error(`Subcommand ${subcommandName} not found`)
           currentCommand = {original: originalChild, shadow: shadowChild}
         }
 

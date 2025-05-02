@@ -444,8 +444,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         // the parent will pass on its args straight to the child, which will validate them. the parent just blindly accepts anything.
         parentCommand.allowExcessArguments()
         parentCommand.allowUnknownOption()
-        // todo: find a better way to tell plugins (term used loosely here) that this command has a default child
-        parentCommand.description(parentCommand.description() + `[default_child:${leafCommand.name()}]`)
+        parentCommand.addHelpText('after', leafCommand.helpInformation())
         parentCommand.action(async () => {
           await leafCommand.parseAsync([...parentCommand.args], {from: 'user'})
         })
