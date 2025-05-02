@@ -1035,7 +1035,9 @@ const runCli = async (argv: string[]) => {
 
 ## Input Prompts
 
-You can enable prompts for positional arguments and options simply by installing `@inquirer/prompts` or `enquirer`:
+You can enable prompts for positional arguments and options simply by installing `enquirer`, `prompts` or `@inquirer/prompts`:
+
+![](./docs/prompts-demo.gif)
 
 ```bash
 npm install @inquirer/prompts
@@ -1044,7 +1046,7 @@ npm install @inquirer/prompts
 The pass it in when running your CLI:
 
 ```ts
-import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer'
+import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer', or import * as prompts from 'prompts'
 import {createCli} from 'trpc-cli'
 
 const cli = createCli({router: myRouter})
