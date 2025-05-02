@@ -1,4 +1,4 @@
-import {z} from 'zod'
+import {z} from 'trpc-cli.zod3'
 import {createCli, type TrpcCliMeta, trpcServer} from '../../src'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()

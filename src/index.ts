@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
+import {JsonSchema7Type} from 'trpc-cli.zod-to-json-schema'
+import * as zodValidationError from 'trpc-cli.zod-validation-error'
+import {ZodError} from 'trpc-cli.zod3'
 import {inspect} from 'util'
-import {ZodError} from 'zod'
-import {JsonSchema7Type} from 'zod-to-json-schema'
-import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
 import {
@@ -23,8 +23,8 @@ import {looksLikeInstanceof, looksLikeStandardSchemaFailureResult} from './util'
 
 export * from './types'
 
-export {z} from 'zod'
-export * as zod from 'zod'
+export {z} from 'trpc-cli.zod3'
+export * as zod from 'trpc-cli.zod3'
 
 export * as trpcServer from '@trpc/server'
 

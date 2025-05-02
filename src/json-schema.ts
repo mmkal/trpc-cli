@@ -1,4 +1,4 @@
-import type {JsonSchema7ObjectType, JsonSchema7Type} from 'zod-to-json-schema'
+import type {JsonSchema7ObjectType, JsonSchema7Type} from 'trpc-cli.zod-to-json-schema'
 
 const capitaliseFromCamelCase = (camel: string) => {
   const parts = camel.split(/(?=[A-Z])/)

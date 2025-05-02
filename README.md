@@ -90,7 +90,7 @@ And that's it! Your tRPC router is now a CLI program with help text and input va
 
 [Docs here](https://trpc.io/docs/server/routers) if you're not familiar with tRPC.
 
-You can also create a tRPC router in the usual way using imports from `@trpc/server` and `zod` - the builtin exports are purely a convenience for simple use-case:
+You can also create a tRPC router in the usual way using imports from `@trpc/server` and `zod` - the builtin exports are purely a convenience for simple use-cases:
 
 ```ts
 import {initTRPC} from '@trpc/server'
@@ -424,7 +424,7 @@ Usage: calculator [options] [command]
 Available subcommands: add, subtract, multiply, divide, square-root
 
 Options:
-  -h, --help                            display help for command
+  -h, --help             display help for command
 
 Commands:
   add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
@@ -456,17 +456,17 @@ You can also show help text for the corresponding procedures (which become "comm
 `node path/to/calculator add --help` output:
 
 ```
-Usage: calculator add [options] <parameter_1> <parameter_2>
+Usage: calculator add [options]
 
 Add two numbers. Use this if you and your friend both have apples, and you want
 to know how many apples there are in total.
 
-Arguments:
-  parameter_1  number (required)
-  parameter_2  number (required)
-
 Options:
-  -h, --help   display help for command
+  --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                  converted to CLI arguments: Failed to convert input to JSON
+                  Schema: Cannot read properties of undefined (reading
+                  'ZodString'))
+  -h, --help      display help for command
 
 ```
 <!-- codegen:end -->
@@ -491,17 +491,19 @@ error: command-argument value 'notanumber' is invalid for argument 'parameter_2'
 
 
 
-Usage: calculator add [options] <parameter_1> <parameter_2>
+
+
+Usage: calculator add [options]
 
 Add two numbers. Use this if you and your friend both have apples, and you want
 to know how many apples there are in total.
 
-Arguments:
-  parameter_1  number (required)
-  parameter_2  number (required)
-
 Options:
-  -h, --help   display help for command
+  --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                  converted to CLI arguments: Failed to convert input to JSON
+                  Schema: Cannot read properties of undefined (reading
+                  'ZodString'))
+  -h, --help      display help for command
 
 ```
 <!-- codegen:end -->

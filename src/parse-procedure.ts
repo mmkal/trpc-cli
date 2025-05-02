@@ -1,6 +1,6 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
+import zodToJsonSchema from 'trpc-cli.zod-to-json-schema'
 import {inspect} from 'util'
-import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Dependencies, ParsedProcedure, Result} from './types'

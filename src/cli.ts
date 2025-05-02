@@ -2,7 +2,7 @@
 import {createCli} from '.'
 import {initTRPC} from '@trpc/server'
 import * as path from 'path'
-import {z} from 'zod'
+import {z} from 'trpc-cli.zod3'
 import {Trpc11RouterLike} from './trpc-compat'
 import {TrpcCliMeta} from './types'
 
