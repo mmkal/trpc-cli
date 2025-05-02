@@ -1065,7 +1065,7 @@ cli.run({prompts})
 
 The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation.
 
-You can also pass in a custom "Prompter". This in theory enables you to prompt in *any way* you'd like. You will be passed a `Command` instance, and then must define `input`, `select`, `confirm` and `checkbox` prompts. You can also define `setup` and `teardown` functions which run before and after the individual prompts for arguments and options. This could be used to render an all-in-one form filling in inputs.
+You can also pass in a custom "Prompter". This in theory enables you to prompt in *any way* you'd like. You will be passed a `Command` instance, and then must define `input`, `select`, `confirm` and `checkbox` prompts. You can also define `setup` and `teardown` functions which run before and after the individual prompts for arguments and options. This could be used to render an all-in-one form filling in inputs. See [the tests for an example](./test/prompts.test.ts).
 
 ## Completions
 

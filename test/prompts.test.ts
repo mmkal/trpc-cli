@@ -2,30 +2,6 @@ import {Command} from 'commander'
 import {expect, test, vi} from 'vitest'
 import {AnyRouter, createCli, TrpcCliParams, TrpcCliRunParams, trpcServer, z} from '../src'
 
-const runWith = async <R extends AnyRouter>(
-  params: TrpcCliParams<R>,
-  argv: string[],
-  runParams: Omit<TrpcCliRunParams, 'argv'> = {},
-): Promise<string> => {
-  const cli = createCli(params)
-  const logs = [] as unknown[][]
-  const addLogs = (...args: unknown[]) => logs.push(args)
-  const result: string = await cli
-    .run({
-      logger: {info: addLogs, error: addLogs},
-      process: {exit: _ => 0 as never},
-      ...runParams,
-      argv,
-    })
-    .catch(e => {
-      if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
-      if (e.exitCode === 0) return e.cause
-      throw e
-    })
-
-  return result
-}
-
 test('custom prompter', async () => {
   const log = vi.fn()
   const t = trpcServer.initTRPC.create()
@@ -153,3 +129,27 @@ test('custom prompter', async () => {
     }
   `)
 })
+
+async function runWith<R extends AnyRouter>(
+  params: TrpcCliParams<R>,
+  argv: string[],
+  runParams: Omit<TrpcCliRunParams, 'argv'> = {},
+): Promise<string> {
+  const cli = createCli(params)
+  const logs = [] as unknown[][]
+  const addLogs = (...args: unknown[]) => logs.push(args)
+  const result: string = await cli
+    .run({
+      logger: {info: addLogs, error: addLogs},
+      process: {exit: _ => 0 as never},
+      ...runParams,
+      argv,
+    })
+    .catch(e => {
+      if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
+      if (e.exitCode === 0) return e.cause
+      throw e
+    })
+
+  return result
+}
