@@ -15,7 +15,9 @@
   "scripts": {
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
-    "build": "tsc -p tsconfig.lib.json",
+    "clean": "rm -rf dist",
+    "compile": "tsc -p tsconfig.lib.json",
+    "build": "pnpm clean && pnpm compile",
     "dev": "cd test/fixtures && tsx",
     "test": "vitest run"
   },
