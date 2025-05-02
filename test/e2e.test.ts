@@ -37,6 +37,7 @@ const tsxWithInput = async (input: string, file: string, args: string[]) => {
 }
 
 const tsxWithMultilineInput = async (input: string, file: string, args: string[]) => {
+  if (process.env.CI) console.warn(`So far this hasn't worked in CI, you'll probably get timeouts'`)
   const runSubprocess = () =>
     execa('./node_modules/.bin/tsx', [`test/fixtures/${file}`, ...args], {
       all: true,
@@ -474,17 +475,14 @@ test('thrown error in procedure includes call stack', async () => {
 
 const testLocalOnly = process.env.CI ? test : test
 
-testLocalOnly('promptable', async () => {
-  console.log('promptable', 1)
+test('promptable', async () => {
   // these snapshots look a little weird because inquirer uses `\r` to
   // replace the input line
   const yOutput = await tsxWithInput('y', 'promptable', ['challenge', 'harshly'])
-  console.log('promptable', 2)
   expect(yOutput).toMatchInlineSnapshot(`
     "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? Yes
     {"areYouSure":true}"
   `)
-  console.log('promptable', 3)
 
   const nOutput = await tsxWithInput('n', 'promptable', ['challenge', 'harshly'])
   expect(nOutput).toMatchInlineSnapshot(`
@@ -497,10 +495,11 @@ testLocalOnly('promptable', async () => {
     "? [--are-you-sure] Are you sure? (y/N)✔ [--are-you-sure] Are you sure? No
     {"areYouSure":false}"
   `)
+})
 
-  console.log('promptable', 4)
+// something about github actions ci setup doesn't like this
+testLocalOnly('promptable multiline', async () => {
   const subcommandOutput = await tsxWithMultilineInput('challenge\nharshly\ny', 'promptable', [])
-  console.log('promptable', 5)
 
   expect(subcommandOutput).toMatchInlineSnapshot(`
     "? Select a subcommand (Use arrow keys)
