@@ -302,85 +302,73 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
       parseOptions = {from: 'user'}
     }
 
-    const nextArgv = [...argv]
-    const getCommandAnalysis = async (c: Command, recursion = 0) => {
-      if (recursion > 100) throw new Error('Too many recursive calls, this is probably a bug')
-      const analysis = await new Promise<Analysis>((resolve, reject) => {
-        const shadow = createShadowCommand(c, resolve)
-        if (Math.random()) {
-          const child = shadow.commands.find(ch => ch.name() === argv[0])
-
-          const parse = child
-            ? () => child.parseAsync(argv.slice(1), parseOptions)
-            : () => shadow.parseAsync(argv, parseOptions)
-
-          parse().catch((e: unknown) => {
-            if (e instanceof CommanderError && e.exitCode === 0) {
-              // console.log('commander tried to exit with code 0, probably rendered help - no analysis to provide', e)
-              // commander tried to exit with code 0, probably rendered help - no analysis to provide
-              resolve({command: {shadow, original: c}, arguments: [], options: []})
-              return
-            }
-            reject(e as Error)
-          })
-
-          return
-        }
-        const c2 = getDefaultSubcommand(c) || c
-        shadow
-          .parseAsync(
-            argv.filter((a, i) => i > 0 || a !== c2.name()),
-            parseOptions,
-          )
-          .catch(e => {
-            if (e instanceof CommanderError && e.exitCode === 0) {
-              // commander tried to exit with code 0, probably rendered help - no analysis to provide
-              resolve({command: {shadow, original: c}, arguments: [], options: []})
-              return
-            }
-            reject(e as Error)
-          })
-      })
-
-      if (
-        // false &&
-        analysis.arguments.length === 0 &&
-        analysis.options.length === 0 &&
-        analysis.command.original.commands.length > 0 &&
-        !argv.some(a => a.startsWith('-'))
-      ) {
-        // we've got subcommands, let's prompt the user to select one
-        let currentCommand = analysis.command as Shadowed<Command> | undefined
-        while (currentCommand?.original.commands && currentCommand.original.commands.length > 0) {
-          const subcommandName = await prompter.select(
-            {
-              message: 'Select a subcommand',
-              choices: currentCommand.original.commands.map(child => ({
-                name: child.name(),
-                value: child.name(),
-                description: child.description(),
-              })),
-            },
-            {command: currentCommand.original, inputs: {argv, arguments: [], options: []}},
-          )
-          nextArgv.push(subcommandName)
-          const originalChild = currentCommand.original.commands.find(child => child.name() === subcommandName)
-          const shadowChild = currentCommand.shadow.commands.find(child => child.name() === subcommandName)
-          if (!originalChild || !shadowChild) throw new Error(`Subcommand ${subcommandName} not found`)
-          currentCommand = {original: originalChild, shadow: shadowChild}
-        }
-
-        if (currentCommand) return getCommandAnalysis(currentCommand.original, recursion + 1)
+    // first, get the command we're dealing with and the corresponding args
+    const figureOutCommandAndArgs = async (input: {command: Command; args: string[]}) => {
+      const {command, args} = input
+      if (input.command.commands.length === 0) {
+        // great, no subcommands, all we can do is use this command and the args as is
+        return input
       }
 
-      return analysis
+      // ok, we can now insist that the user passes subcommands at the front of argv
+
+      let current = input.command
+      let argsToPassToCommand = [...args]
+      for (let i = 0; i < 100; i++) {
+        if (current.commands.length === 0) {
+          // no subcommands, we're done
+          return {command: current, args: argsToPassToCommand}
+        }
+        let child
+        if (i in args) {
+          const arg = args[i]
+          child = current.commands.find(ch => ch.name() === arg)
+          if (!child) {
+            const defaultSubcommand = getDefaultSubcommand(command)
+            if (defaultSubcommand) {
+              // we got a default command, let's use that. no such thing as nested default commands, so we're done
+              return {command: defaultSubcommand, args: argsToPassToCommand} // no need to slice the args, we pass them as is
+            } else {
+              throw new Error(
+                `Subcommand ${arg} not found. Available subcommands: ${command.commands.map(c => c.name()).join(', ')}`,
+              )
+            }
+          }
+          argsToPassToCommand = argsToPassToCommand.slice(1)
+        } else {
+          const name = await prompter.select(
+            {
+              message: `Select a ${current.name() || ''} subcommand`.replace('  ', ' '),
+              choices: current.commands.map(ch => ({
+                name: ch.name(),
+                value: ch.name(),
+                description: ch.description(),
+              })),
+            },
+            {command: current, inputs: {argv: args, arguments: [], options: []}},
+          )
+          child = current.commands.find(ch => ch.name() === name)
+          if (!child)
+            throw new Error(
+              `Subcommand ${name} not found. Available subcommands: ${command.commands.map(c => c.name()).join(', ')}`,
+            )
+        }
+        current = child
+      }
+
+      throw new Error('exited loop, this is probably a bug')
     }
 
-    const analysis = await getCommandAnalysis(command)
+    const f = await figureOutCommandAndArgs({command, args: [...argv]})
+    const nextArgv = [...f.args]
 
-    const getMessage = (thing: {name: () => string; long?: string; description: string}) => {
-      if (thing.description) return `[${thing.long || thing.name()}] ${thing.description}`
-      return `Enter value for ${thing.name()}`
+    const analysis = await new Promise<Analysis>((resolve, reject) => {
+      const shadow = createShadowCommand(f.command, resolve)
+      shadow.parseAsync(f.args, parseOptions).catch(reject)
+    })
+
+    const getMessage = (thing: {name(): string} & Partial<Option> & Partial<Argument>) => {
+      return `[${thing.long || thing.name()}] ${thing.description || 'Enter a value:'}`.trim()
     }
 
     const baseContext = {
@@ -504,7 +492,7 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
 
     await prompter.teardown?.(baseContext)
 
-    return command.parseAsync(nextArgv, parseOptions)
+    return f.command.parseAsync(nextArgv, parseOptions)
   }
 
   const parseAsync = (args: string[], parseOptions?: ParseOptions) =>

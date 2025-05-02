@@ -522,11 +522,11 @@ testLocalOnly('promptable multiline', async () => {
 
      Available subcommands: harshly, gently✔ Select a subcommand 
      challenge
-    ? Select a subcommand (Use arrow keys)
+    ? Select a challenge subcommand (Use arrow keys)
     ❯ harshly
       gently
 
-     Challenge the user - they will have to say whether they are sure or not✔ Select a subcommand 
+     Challenge the user - they will have to say whether they are sure or not✔ Select a challenge subcommand 
      harshly
     ? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? 
      Yes
