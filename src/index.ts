@@ -441,14 +441,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       // Check if this command should be the default for its parent
       const meta = getMeta(commandConfig.procedure)
       if (meta.default === true) {
-        // this is the default command for the parent, so just configure the parent command to do the same action
-        configureCommand(parentCommand, procedurePath, commandConfig)
+        // the parent will pass on its args straight to the child, which will validate them. the parent just blindly accepts anything.
+        parentCommand.allowExcessArguments()
+        parentCommand.allowUnknownOption()
+        parentCommand.action(async () => {
+          await leafCommand.parseAsync([...parentCommand.args], {from: 'user'})
+        })
 
         // ancestors need to support positional options to pass through the positional args
-        for (let ancestor = parentCommand.parent, i = 0; ancestor && i < 10; ancestor = ancestor.parent, i++) {
-          ancestor.enablePositionalOptions()
-        }
-        parentCommand.passThroughOptions()
+        // for (let ancestor = parentCommand.parent, i = 0; ancestor && i < 10; ancestor = ancestor.parent, i++) {
+        //   ancestor.enablePositionalOptions()
+        // }
+        // parentCommand.passThroughOptions()
 
         defaultCommands[parentPath] = {
           procedurePath: procedurePath,
@@ -519,8 +523,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       })
 
     if (runParams?.prompts) {
-      const prompts = typeof runParams.prompts === 'function' ? await runParams.prompts() : runParams.prompts
-      program = promptify(program, prompts) as Command
+      program = promptify(program, runParams.prompts) as Command
     }
 
     await program.parseAsync(argv, opts).catch(err => {
