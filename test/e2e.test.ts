@@ -473,7 +473,7 @@ test('thrown error in procedure includes call stack', async () => {
   expect(output).toMatch(/at .* \(.*calculator.ts:\d+:\d+\)/)
 })
 
-const testLocalOnly = process.env.CI ? test : test
+const testLocalOnly = process.env.CI ? test.skip : test
 
 test('promptable', async () => {
   // these snapshots look a little weird because inquirer uses `\r` to
