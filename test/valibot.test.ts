@@ -41,7 +41,13 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
     })
 }
 
+// codegen:start {preset: custom, source: ./validation-library-codegen.ts, export: testSuite}
 test('merging input types', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({bar: z.string()})',
+    '__PLACEHOLDER__1__()': 'z.object({baz: z.number()})',
+    '__PLACEHOLDER__2__()': 'z.object({qux: z.boolean()})',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.object({bar: v.string()}))
@@ -56,6 +62,9 @@ test('merging input types', async () => {
 })
 
 test('string input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.string()',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.string()) //
@@ -66,6 +75,9 @@ test('string input', async () => {
 })
 
 test('enum input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': "z.enum(['aa', 'bb'])",
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.union([v.literal('aa'), v.literal('bb')])) //
@@ -75,18 +87,22 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected ("aa" | "bb") but received "cc"
+      Caused by: CliValidationError: Validation error
+      - Invalid enum value. Expected 'aa' | 'bb', received 'cc'
   `)
 })
 
 test('number input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.number()',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.number()) //
-      .query(({input}) => JSON.stringify({input})),
+      .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"{"input":1}"`)
+  expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CommanderError: error: command-argument value 'a' is invalid for argument 'number'. Invalid number: a
@@ -94,6 +110,9 @@ test('number input', async () => {
 })
 
 test('boolean input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.boolean()',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.boolean()) //
@@ -104,11 +123,15 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected boolean but received "a"
+      Caused by: CliValidationError: Validation error
+      - Expected boolean, received string
   `)
 })
 
 test('refine in a union pedantry', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.union([z.number().int(), z.string()])',
+  }
   const router = t.router({
     foo: t.procedure
       .input(
@@ -123,23 +146,16 @@ test('refine in a union pedantry', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  // Valibot should handle this better than arktype did
-  await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options] <value>
-
-    Arguments:
-      value       string | number (required)
-
-    Options:
-      -h, --help  display help for command
-    "
-  `)
-  // expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
-  // expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  // expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
+  expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
+  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
 test('transform in a union', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      "\n        z.union([\n          z\n            .number()\n            .int()\n            .transform(n => `Roman numeral: ${'I'.repeat(n)}`),\n          z.string(),\n        ]),\n      ",
+  }
   const router = t.router({
     foo: t.procedure
       .input(
@@ -153,26 +169,19 @@ test('transform in a union', async () => {
             v.transform(n => `Roman numeral: ${'I'.repeat(n)}`),
           ),
         ]),
-      )
+      ) //
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program foo [options] <value>
-
-    Arguments:
-      value       string | number (required)
-
-    Options:
-      -h, --help  display help for command
-    "
-  `)
-  // expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
-  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  // expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
+  expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
+  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
 })
 
 test('literal input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.literal(2)',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.literal(2)) //
@@ -182,51 +191,29 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected 2 but received 3
-  `)
-})
-
-test('description', async () => {
-  const router = t.router({
-    delete: t.procedure
-      .input(v.pipe(v.string(), v.title('filepath'), v.description('path to file for deletion'))) //
-      .query(({input}) => JSON.stringify(input)),
-  })
-
-  expect(await run(router, ['delete', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program delete [options] <filepath>
-
-    Arguments:
-      filepath    path to file for deletion (required)
-
-    Options:
-      -h, --help  display help for command
-    "
+      Caused by: CliValidationError: Validation error
+      - Invalid literal value, expected 2
   `)
 })
 
 test('optional input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.string().optional()',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.optional(v.string())) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
-  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program foo [options] <string>
-
-    Arguments:
-      string      (required)
-
-    Options:
-      -h, --help  display help for command
-    "
-  `)
-  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  // expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
+  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
 })
 
 test('union input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.union([z.number(), z.string()])',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.union([v.number(), v.string()])) //
@@ -238,6 +225,9 @@ test('union input', async () => {
 })
 
 test('regex input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': "z.string().regex(/hello/).describe('greeting')",
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.pipe(v.string(), v.regex(/hello/), v.description('greeting'))) //
@@ -245,13 +235,19 @@ test('regex input', async () => {
   })
 
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
+  // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid format: Expected /hello/ but received "goodbye xyz"
+      Caused by: CliValidationError: Validation error
+      - Invalid
   `)
 })
 
 test('boolean, number, string input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      '\n        z.union([\n          z.string(),\n          z.number(),\n          z.boolean(), //\n        ]),\n      ',
+  }
   const router = t.router({
     foo: t.procedure
       .input(
@@ -266,6 +262,9 @@ test('boolean, number, string input', async () => {
 })
 
 test('tuple input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.tuple([z.string(), z.number()])',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.tuple([v.string(), v.number()])) //
@@ -273,15 +272,17 @@ test('tuple input', async () => {
   })
 
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
-  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
-    `,
-  )
+  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
+  `)
 })
 
 test('tuple input with flags', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      '\n        z.tuple([\n          z.string(),\n          z.number(),\n          z.object({foo: z.string()}), //\n        ]),\n      ',
+  }
   const router = t.router({
     foo: t.procedure
       .input(
@@ -297,27 +298,24 @@ test('tuple input with flags', async () => {
   expect(await run(router, ['foo', 'hello', '123', '--foo', 'bar'])).toMatchInlineSnapshot(
     `"["hello",123,{"foo":"bar"}]"`,
   )
-  await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: required option '--foo <string>' not specified
-    `,
-  )
-  await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
-    `,
-  )
-  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: required option '--foo <string>' not specified
-    `,
-  )
+  await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: required option '--foo <string>' not specified
+  `)
+  await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
+  `)
+  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: required option '--foo <string>' not specified
+  `)
 })
 
 test('single character option', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({a: z.string()})',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.object({a: v.string()})) //
@@ -329,80 +327,93 @@ test('single character option', async () => {
 })
 
 test('custom default procedure', async () => {
-  const yarn = t.router({
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({cwd: z.string()})',
+  }
+  const router = t.router({
     install: t.procedure
       .meta({default: true})
-      .input(v.object({frozenLockfile: v.boolean()}))
+      .input(v.object({cwd: v.string()})) // let's pretend cwd is a required option
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+  const yarnOutput = await run(router, ['--cwd', '/foo/bar'])
+  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"cwd":"/foo/bar"}"`)
 
-  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
-  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
-
-  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
-  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+  const yarnInstallOutput = await run(router, ['install', '--cwd', '/foo/bar'])
+  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"cwd":"/foo/bar"}"`)
 })
 
 test('command alias', async () => {
-  const yarn = t.router({
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({frozenLockfile: z.boolean().optional()})',
+  }
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['i', '--frozen-lockfile'])
+  const yarnIOutput = await run(router, ['i', '--frozen-lockfile'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias', async () => {
-  const yarn = t.router({
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({frozenLockfile: z.boolean().optional()})',
+  }
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['install', '-x'])
+  const yarnIOutput = await run(router, ['install', '-x'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias can be two characters', async () => {
-  const yarn = t.router({
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({frozenLockfile: z.boolean().optional()})',
+  }
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['install', '--xx'])
+  const yarnIOutput = await run(router, ['install', '--xx'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias typo', async () => {
-  const yarn = t.router({
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({frozenLockfile: z.boolean().optional()})',
+  }
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
+  await expect(run(router, ['install', '-x'])).rejects.toMatchInlineSnapshot(
     `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
 
 test('validation', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      "z.tuple([z.string().describe('The first string'), z.string().describe('The second string')])",
+    '__PLACEHOLDER__1__()': 'z.tuple([z.string(), z.boolean()])',
+    '__PLACEHOLDER__2__()': 'z.tuple([z.string(), z.boolean(), z.object({foo: z.string()})])',
+    '__PLACEHOLDER__3__()': 'z.tuple([z.string(), z.object({foo: z.string()}), z.string()])',
+    '__PLACEHOLDER__4__()': 'z.tuple([z.string(), z.record(z.string())])',
+  }
   const router = t.router({
     tupleOfStrings: t.procedure
       .input(
@@ -430,6 +441,9 @@ test('validation', async () => {
 })
 
 test('string array input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.string())',
+  }
   const router = t.router({
     stringArray: t.procedure
       .input(v.array(v.string())) //
@@ -441,6 +455,9 @@ test('string array input', async () => {
 })
 
 test('number array input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.number())',
+  }
   const router = t.router({
     test: t.procedure
       .input(v.array(v.number())) //
@@ -452,11 +469,15 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected number but received "bad"
+      Caused by: CliValidationError: Validation error
+      - Expected number, received string at index 1
   `)
 })
 
 test('number array input with constraints', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.number().int())',
+  }
   const router = t.router({
     foo: t.procedure
       .input(
@@ -470,19 +491,17 @@ test('number array input with constraints', async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options] <parameter_1...>
-
-    Arguments:
-      parameter_1  (required)
-
-    Options:
-      -h, --help   display help for command
-    "
+  await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: Validation error
+      - Expected number, received string at index 0
   `)
 })
 
 test('boolean array input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.boolean())',
+  }
   const router = t.router({
     test: t.procedure
       .input(v.array(v.boolean())) //
@@ -494,11 +513,15 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected boolean but received "bad"
+      Caused by: CliValidationError: Validation error
+      - Expected boolean, received string at index 1
   `)
 })
 
 test('mixed array input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.union([z.boolean(), z.number(), z.string()]))',
+  }
   const router = t.router({
     test: t.procedure
       .input(v.array(v.union([v.boolean(), v.number(), v.string()]))) //
@@ -509,7 +532,40 @@ test('mixed array input', async () => {
   expect(result).toMatchInlineSnapshot(`"list: [12,true,3.14,"null","undefined","hello"]"`)
 })
 
+test('record input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.record(z.number()).optional()',
+  }
+  const router = t.router({
+    test: t.procedure
+      .input(v.record(v.number(), v.string())) //
+      .query(({input}) => `input: ${JSON.stringify(input)}`),
+  })
+
+  expect(await run(router, ['test', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
+    "Usage: program test [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Inputs with additional properties
+                      are not currently supported)
+      -h, --help      display help for command
+    "
+  `)
+  expect(await run(router, ['test'])).toMatchInlineSnapshot(`"input: undefined"`)
+  expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
+  await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: Validation error
+      - Expected number, received string at "--foo"
+  `)
+})
+
 test("nullable array inputs aren't supported", async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.string().nullable())',
+    '__PLACEHOLDER__1__()': 'z.array(z.union([z.boolean(), z.number(), z.string()]).nullable())',
+  }
   const router = t.router({
     test1: t.procedure.input(v.array(v.nullable(v.string()))).query(({input}) => `list: ${JSON.stringify(input)}`),
     test2: t.procedure
@@ -517,7 +573,7 @@ test("nullable array inputs aren't supported", async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['test1', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test1', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test1 [options]
 
     Options:
@@ -527,10 +583,10 @@ test("nullable array inputs aren't supported", async () => {
       -h, --help      display help for command
     "
   `)
-  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])
+  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])], {expectJsonInput: true})
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
 
-  await expect(run(router, ['test2', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test2', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test2 [options]
 
     Options:
@@ -543,6 +599,10 @@ test("nullable array inputs aren't supported", async () => {
 })
 
 test('string array input with options', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      '\n        z.tuple([\n          z.array(z.string()), //\n          z.object({foo: z.string()}).optional(),\n        ]),\n      ',
+  }
   const router = t.router({
     test: t.procedure
       .input(
@@ -565,6 +625,10 @@ test('string array input with options', async () => {
 })
 
 test('mixed array input with options', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      '\n        z.tuple([\n          z.array(z.union([z.string(), z.number()])), //\n          z.object({foo: z.string().optional()}),\n        ]),\n      ',
+  }
   const router = t.router({
     test: t.procedure
       .input(
@@ -589,8 +653,16 @@ test('mixed array input with options', async () => {
   expect(result3).toMatchInlineSnapshot(`"input: [["hello","world",1],{"foo":"bar"}]"`)
 })
 
-// valibot handles defaults via JSON schema
 test('defaults and negations', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({foo: z.boolean()})',
+    '__PLACEHOLDER__1__()': 'z.object({foo: z.boolean().optional()})',
+    '__PLACEHOLDER__2__()': 'z.object({foo: z.boolean().default(true)})',
+    '__PLACEHOLDER__3__()': 'z.object({foo: z.boolean().default(false)})',
+    '__PLACEHOLDER__4__()': 'z.object({foo: z.union([z.boolean(), z.number()])})',
+    '__PLACEHOLDER__5__()': 'z.object({foo: z.union([z.boolean(), z.string()])})',
+    '__PLACEHOLDER__6__()': 'z.object({foo: z.array(z.union([z.boolean(), z.number()]))})',
+  }
   const router = t.router({
     normalBoolean: t.procedure.input(v.object({foo: v.boolean()})).query(({input}) => `${inspect(input)}`),
     optionalBoolean: t.procedure
@@ -650,6 +722,7 @@ test('defaults and negations', async () => {
     `"{ foo: [ true, 1 ] }"`,
   )
 })
+// codegen:end
 
 test('valibot schemas to JSON schema', () => {
   // just a test to quickly see how valibot schemas are converted to JSON schema

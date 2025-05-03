@@ -54,6 +54,11 @@ const runWith = async <R extends AnyRouter>(
 
 // codegen:start {preset: custom, source: ./validation-library-codegen.ts, export: testSuite}
 test('merging input types', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({bar: z.string()})',
+    '__PLACEHOLDER__1__()': 'z.object({baz: z.number()})',
+    '__PLACEHOLDER__2__()': 'z.object({qux: z.boolean()})',
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__())
@@ -68,6 +73,9 @@ test('merging input types', async () => {
 })
 
 test('string input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.string()',
+  }
   const router = t.router({
     foo: t.procedure
       .input(v.string()) //
@@ -78,9 +86,12 @@ test('string input', async () => {
 })
 
 test('enum input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': "z.enum(['aa', 'bb'])",
+  }
   const router = t.router({
     foo: t.procedure
-      .input(__PLACEHOLDER__0__()) //
+      .input(v.union([v.literal('aa'), v.literal('bb')])) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -93,9 +104,12 @@ test('enum input', async () => {
 })
 
 test('number input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.number()',
+  }
   const router = t.router({
     foo: t.procedure
-      .input(__PLACEHOLDER__0__()) //
+      .input(v.number()) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -107,9 +121,12 @@ test('number input', async () => {
 })
 
 test('boolean input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.boolean()',
+  }
   const router = t.router({
     foo: t.procedure
-      .input(__PLACEHOLDER__0__()) //
+      .input(v.boolean()) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -123,9 +140,12 @@ test('boolean input', async () => {
 })
 
 test('refine in a union pedantry', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.union([z.number().int(), z.string()])',
+  }
   const router = t.router({
     foo: t.procedure
-      .input(__PLACEHOLDER__0__()) //
+      .input(v.union([v.number().int(), v.string()])) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -135,6 +155,10 @@ test('refine in a union pedantry', async () => {
 })
 
 test('transform in a union', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      "\n        z.union([\n          z\n            .number()\n            .int()\n            .transform(n => `Roman numeral: ${'I'.repeat(n)}`),\n          z.string(),\n        ]),\n      ",
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -147,6 +171,9 @@ test('transform in a union', async () => {
 })
 
 test('literal input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.literal(2)',
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -162,6 +189,9 @@ test('literal input', async () => {
 })
 
 test('optional input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.string().optional()',
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -173,6 +203,9 @@ test('optional input', async () => {
 })
 
 test('union input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.union([z.number(), z.string()])',
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -184,6 +217,9 @@ test('union input', async () => {
 })
 
 test('regex input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': "z.string().regex(/hello/).describe('greeting')",
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -200,6 +236,10 @@ test('regex input', async () => {
 })
 
 test('boolean, number, string input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      '\n        z.union([\n          z.string(),\n          z.number(),\n          z.boolean(), //\n        ]),\n      ',
+  }
   const router = t.router({
     foo: t.procedure.input(__PLACEHOLDER__0__()).query(({input}) => JSON.stringify(input || null)),
   })
@@ -210,6 +250,9 @@ test('boolean, number, string input', async () => {
 })
 
 test('tuple input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.tuple([z.string(), z.number()])',
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -224,6 +267,10 @@ test('tuple input', async () => {
 })
 
 test('tuple input with flags', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      '\n        z.tuple([\n          z.string(),\n          z.number(),\n          z.object({foo: z.string()}), //\n        ]),\n      ',
+  }
   const router = t.router({
     foo: t.procedure.input(__PLACEHOLDER__0__()).query(({input}) => JSON.stringify(input || null)),
   })
@@ -246,6 +293,9 @@ test('tuple input with flags', async () => {
 })
 
 test('single character option', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({a: z.string()})',
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -257,6 +307,9 @@ test('single character option', async () => {
 })
 
 test('custom default procedure', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({cwd: z.string()})',
+  }
   const router = t.router({
     install: t.procedure
       .meta({default: true})
@@ -272,6 +325,9 @@ test('custom default procedure', async () => {
 })
 
 test('command alias', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({frozenLockfile: z.boolean().optional()})',
+  }
   const router = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
@@ -284,6 +340,9 @@ test('command alias', async () => {
 })
 
 test('option alias', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({frozenLockfile: z.boolean().optional()})',
+  }
   const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'x'}}})
@@ -296,6 +355,9 @@ test('option alias', async () => {
 })
 
 test('option alias can be two characters', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({frozenLockfile: z.boolean().optional()})',
+  }
   const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'xx'}}})
@@ -308,6 +370,9 @@ test('option alias can be two characters', async () => {
 })
 
 test('option alias typo', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({frozenLockfile: z.boolean().optional()})',
+  }
   const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frooozenLockfile: 'x'}}})
@@ -321,6 +386,14 @@ test('option alias typo', async () => {
 })
 
 test('validation', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      "z.tuple([z.string().describe('The first string'), z.string().describe('The second string')])",
+    '__PLACEHOLDER__1__()': 'z.tuple([z.string(), z.boolean()])',
+    '__PLACEHOLDER__2__()': 'z.tuple([z.string(), z.boolean(), z.object({foo: z.string()})])',
+    '__PLACEHOLDER__3__()': 'z.tuple([z.string(), z.object({foo: z.string()}), z.string()])',
+    '__PLACEHOLDER__4__()': 'z.tuple([z.string(), z.record(z.string())])',
+  }
   const router = t.router({
     tupleOfStrings: t.procedure.input(__PLACEHOLDER__0__()).query(() => 'ok'),
     tupleWithBoolean: t.procedure
@@ -337,6 +410,9 @@ test('validation', async () => {
 })
 
 test('string array input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.string())',
+  }
   const router = t.router({
     stringArray: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -348,6 +424,9 @@ test('string array input', async () => {
 })
 
 test('number array input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.number())',
+  }
   const router = t.router({
     test: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -365,6 +444,9 @@ test('number array input', async () => {
 })
 
 test('number array input with constraints', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.number().int())',
+  }
   const router = t.router({
     foo: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -379,6 +461,9 @@ test('number array input with constraints', async () => {
 })
 
 test('boolean array input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.boolean())',
+  }
   const router = t.router({
     test: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -396,6 +481,9 @@ test('boolean array input', async () => {
 })
 
 test('mixed array input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.union([z.boolean(), z.number(), z.string()]))',
+  }
   const router = t.router({
     test: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -407,6 +495,9 @@ test('mixed array input', async () => {
 })
 
 test('record input', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.record(z.number()).optional()',
+  }
   const router = t.router({
     test: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -433,6 +524,10 @@ test('record input', async () => {
 })
 
 test("nullable array inputs aren't supported", async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.array(z.string().nullable())',
+    '__PLACEHOLDER__1__()': 'z.array(z.union([z.boolean(), z.number(), z.string()]).nullable())',
+  }
   const router = t.router({
     test1: t.procedure.input(__PLACEHOLDER__0__()).query(({input}) => `list: ${JSON.stringify(input)}`),
     test2: t.procedure
@@ -466,6 +561,10 @@ test("nullable array inputs aren't supported", async () => {
 })
 
 test('string array input with options', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      '\n        z.tuple([\n          z.array(z.string()), //\n          z.object({foo: z.string()}).optional(),\n        ]),\n      ',
+  }
   const router = t.router({
     test: t.procedure.input(__PLACEHOLDER__0__()).query(({input}) => `input: ${JSON.stringify(input)}`),
   })
@@ -481,6 +580,10 @@ test('string array input with options', async () => {
 })
 
 test('mixed array input with options', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()':
+      '\n        z.tuple([\n          z.array(z.union([z.string(), z.number()])), //\n          z.object({foo: z.string().optional()}),\n        ]),\n      ',
+  }
   const router = t.router({
     test: t.procedure
       .input(__PLACEHOLDER__0__()) //
@@ -501,6 +604,15 @@ test('mixed array input with options', async () => {
 })
 
 test('defaults and negations', async () => {
+  const _legend = {
+    '__PLACEHOLDER__0__()': 'z.object({foo: z.boolean()})',
+    '__PLACEHOLDER__1__()': 'z.object({foo: z.boolean().optional()})',
+    '__PLACEHOLDER__2__()': 'z.object({foo: z.boolean().default(true)})',
+    '__PLACEHOLDER__3__()': 'z.object({foo: z.boolean().default(false)})',
+    '__PLACEHOLDER__4__()': 'z.object({foo: z.union([z.boolean(), z.number()])})',
+    '__PLACEHOLDER__5__()': 'z.object({foo: z.union([z.boolean(), z.string()])})',
+    '__PLACEHOLDER__6__()': 'z.object({foo: z.array(z.union([z.boolean(), z.number()]))})',
+  }
   const router = t.router({
     normalBoolean: t.procedure.input(__PLACEHOLDER__0__()).query(({input}) => `${inspect(input)}`),
     optionalBoolean: t.procedure.input(__PLACEHOLDER__1__()).query(({input}) => `${inspect(input)}`),
