@@ -147,6 +147,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
 function isOptional(schema: JSONSchema7Definition) {
   if ((schema as {$zod?: {optional?: boolean}}).$zod?.optional) return true
+  if ((schema as {$valibot?: {optional?: boolean}}).$valibot?.optional) return true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
   return anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}'
 }
@@ -461,7 +462,18 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
           `no 'toJsonSchema' function found in @valibot/to-json-schema - check you are using a supported version`,
         )
       }
-      return valibotToJsonSchema(input, {errorMode: 'ignore'})
+      let v: any
+      try {
+        v = eval(`require('valibot')`)
+      } catch {
+        // couldn't load valibot, maybe it's aliased to something else? anyway bad luck, you won't know about optional positional parameters, but that's a rare-ish case so not a big deal
+      }
+      if (v) {
+        const parent = valibotToJsonSchema(v.object({child: input}), {errorMode: 'ignore'})
+        const child = parent.properties!.child as JSONSchema7
+        return parent.required?.length === 0 ? Object.assign(child, {$valibot: {optional: true}}) : child
+      }
+      return valibotToJsonSchema(input)
     },
     effect: (input: unknown) => {
       const effect = dependencies.effect || (eval(`require('effect')`) as Dependencies['effect'])

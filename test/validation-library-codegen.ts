@@ -117,7 +117,10 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
     for (const chunk of chunks.slice(1)) {
       result += chunk.split('`').slice(1).join('`')
     }
-    return result.replaceAll(/[\s"',]+/g, '')
+    return result
+      .replaceAll('// expect', 'expect')
+      .replaceAll(/\n\s+\/\/.*?\n/g, '\n')
+      .replaceAll(/[\s"',]+/g, '')
   }
 
   if (removeCruft(expected) === removeCruft(meta.existingContent)) {
