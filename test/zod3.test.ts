@@ -2,54 +2,12 @@ import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
 import {z} from 'zod'
-import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
-import {looksLikeInstanceof} from '../src/util'
+import {createCli, TrpcCliMeta} from '../src'
+import {run, snapshotSerializer} from './test-run'
 
-expect.addSnapshotSerializer({
-  test: val => looksLikeInstanceof(val, Error),
-  serialize(val, config, indentation, depth, refs, printer) {
-    let topLine = `${val.constructor.name}: ${val.message}`
-    if (val.constructor.name === 'FailedToExitError') topLine = `CLI exited with code ${val.exitCode}`
-
-    if (!val.cause) return topLine
-    indentation += '  '
-    return `${topLine}\n${indentation}Caused by: ${printer(val.cause, config, indentation, depth + 1, refs)}`
-      .split(/(---|Usage:)/)[0] // strip out the usage line and the --- line which is added for debugging when tests fail
-      .trim()
-  },
-})
+expect.addSnapshotSerializer(snapshotSerializer)
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
-
-const run = <R extends AnyRouter>(router: R, argv: string[], {expectJsonInput = false} = {}) => {
-  return runWith({router}, argv, {expectJsonInput})
-}
-const runWith = async <R extends AnyRouter>(
-  params: TrpcCliParams<R>,
-  argv: string[],
-  {expectJsonInput = false} = {},
-): Promise<string> => {
-  const cli = createCli(params)
-  const logs = [] as unknown[][]
-  const addLogs = (...args: unknown[]) => logs.push(args)
-  const result: string = await cli
-    .run({
-      argv,
-      logger: {info: addLogs, error: addLogs},
-      process: {exit: _ => 0 as never},
-    })
-    .catch(e => {
-      if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
-      if (e.exitCode === 0) return e.cause
-      throw e
-    })
-
-  const hasJsonInput = result.includes('--input [json]')
-  if (result.includes('--') && hasJsonInput !== expectJsonInput) {
-    throw new Error(`${hasJsonInput ? 'Got' : 'Did not get'} --input [json]:\n\n${result}`)
-  }
-  return result
-}
 
 test('merging input types', async () => {
   const router = t.router({
