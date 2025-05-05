@@ -492,14 +492,11 @@ const testLocalOnly = process.env.CI ? test.skip : test
 test('promptable', async () => {
   // these snapshots look a little weird because inquirer uses `\r` to
   // replace the input line
-  const yOutput = await tsxWithInput('y', 'promptable', ['challenge', 'harshly'])
-  expect(yOutput).toMatchInlineSnapshot(`"{"areYouSure":false}"`)
-
-  const nOutput = await tsxWithInput('n', 'promptable', ['challenge', 'harshly'])
-  expect(nOutput).toMatchInlineSnapshot(`"{"areYouSure":false}"`)
-
-  const emptyOutput = await tsxWithInput('', 'promptable', ['challenge', 'harshly'])
-  expect(emptyOutput).toMatchInlineSnapshot(`"{"areYouSure":false}"`)
+  const yOutput = await tsxWithInput('X', 'promptable', ['challenge', 'harshly'])
+  expect(yOutput).toMatchInlineSnapshot(`
+    "? --why <string> Why are you doing this?:? --why <string> Why are you doing this?: X? --why <string> Why are you doing this?: X✔ --why <string> Why are you doing this?: X
+    {"why":"X"}"
+  `)
 })
 
 // something about github actions ci setup doesn't like this
@@ -517,8 +514,10 @@ testLocalOnly('promptable multiline', async () => {
     ❯ harshly
       gently
 
-     Challenge the user - they will have to say whether they are sure or not✔ Select a challenge subcommand 
+     Challenge the user✔ Select a challenge subcommand 
      harshly
-    {"areYouSure":false}"
+    ? --why <string> Why are you doing this?:? --why <string> Why are you doing this?: y? --why <string> Why are you doing this?: y✔ --why <string> Why are you doing this?: 
+     y
+    {"why":"y"}"
   `)
 })
