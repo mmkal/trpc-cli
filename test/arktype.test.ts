@@ -4,54 +4,12 @@ import {type} from 'arktype'
 import {initTRPC} from 'trpcserver11'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
-import {looksLikeInstanceof} from '../src/util'
-import {run, runWith, snapshotSerializer} from './test-run'
+import {createCli, TrpcCliMeta} from '../src'
+import {run, snapshotSerializer} from './test-run'
 
 expect.addSnapshotSerializer(snapshotSerializer)
 
-// expect.addSnapshotSerializer({
-//   test: val => typeof val === 'string' && /\$ark\.fn\d+\b/.test(val),
-//   serialize(val) {
-//     return val.replaceAll(/\$ark\.fn\d+\b/g, '$ark.fn...')
-//   },
-// })
-
-// expect.addSnapshotSerializer({
-//   test: val => looksLikeInstanceof(val, Error),
-//   serialize(val, config, indentation, depth, refs, printer) {
-//     let topLine = `${val.constructor.name}: ${val.message}`
-//     if (val.constructor.name === 'FailedToExitError') topLine = `CLI exited with code ${val.exitCode}`
-
-//     if (!val.cause) return topLine
-//     indentation += '  '
-//     return `${topLine}\n${indentation}Caused by: ${printer(val.cause, config, indentation, depth + 1, refs)}`
-//       .split(/(---|Usage:)/)[0] // strip out the usage line and the --- line which is added for debugging when tests fail
-//       .trim()
-//   },
-// })
-
 const t = initTRPC.meta<TrpcCliMeta>().create()
-
-// const run = <R extends AnyRouter>(router: R, argv: string[]) => {
-//   return runWith({router}, argv)
-// }
-// const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
-//   const cli = createCli({trpcServer: import('trpcserver11'), ...params})
-//   const logs = [] as unknown[][]
-//   const addLogs = (...args: unknown[]) => logs.push(args)
-//   return cli
-//     .run({
-//       argv,
-//       logger: {info: addLogs, error: addLogs},
-//       process: {exit: _ => 0 as never},
-//     })
-//     .catch(e => {
-//       if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
-//       if (e.exitCode === 0) return e.cause
-//       throw e
-//     })
-// }
 
 // codegen:start {preset: custom, source: ./validation-library-codegen.ts, export: testSuite}
 // NOTE: the below tests are ✨generated✨ based on the hand-written tests in ../zod3.test.ts
