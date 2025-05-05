@@ -136,6 +136,5 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
   if (removeCruft(expected) === removeCruft(meta.existingContent)) {
     return meta.existingContent
   }
-  console.log('hello!!\n', removeCruft(expected))
   return expected
 }
