@@ -1,8 +1,14 @@
 export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
-  dependencies: {path, fs, dedent},
+  dependencies: {path, fs, dedent, babelParser, babelGenerator, babelTypes},
   context,
   meta,
 }) => {
+  const simplifyCode = (code: string) => {
+    const ast = babelParser.parse(code)
+    const generator = babelGenerator.default
+    generator(ast)
+    return generator.code
+  }
   const parseTestFile = (content: string) => {
     const lines = content.split('\n').map(line => (line.trim() ? line : ''))
     const firstNonImportLine = lines.findIndex(line => line && !line.startsWith('import') && !line.startsWith('//'))
@@ -57,7 +63,14 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
       placeholders[chunkIndex] = {original: chunk.slice(0, indexOfClosedParen), placeholder}
       code += chunk.slice(indexOfClosedParen)
     }
-    return {code, placeholders}
+    const codeWithoutInlineSnapshots = code
+      .split(`.toMatchInlineSnapshot(`)
+      .map((chunk, i) => {
+        if (i === 0 || !chunk.startsWith('`')) return chunk
+        return chunk.slice(1).split('`').slice(1).join('`')
+      })
+      .join(`.toMatchInlineSnapshot(`)
+    return {c: code, codeWithoutInlineSnapshots, placeholders}
   }
 
   let expected = zod3.tests
@@ -65,10 +78,10 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
       const parsed = parseTest(test)
 
       const existingTest = current.tests.find(x => x.name === test.name)
-      if (!existingTest) return parsed.code
+      if (!existingTest) return parsed.c
       const existingParsed = parseTest(existingTest)
       const existingPlaceholders = existingParsed.placeholders
-      let code = parsed.code
+      let code = parsed.c
       const zodExamples = [] as string[]
       for (let i = 0; i < 10; i++) {
         const placeholder = `__PLACEHOLDER__${i}__()`
@@ -85,6 +98,9 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
         }
       }
       const s = zodExamples.length > 1 ? 's' : ''
+      // TODO: remove this once the diff is in
+      // eslint-disable-next-line no-constant-condition
+      if (!existingTest.code.includes('__PLACEHOLDER__')) return code
       return code.replace(
         '\n',
         [

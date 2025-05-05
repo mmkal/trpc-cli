@@ -14,16 +14,6 @@ const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 // If you change anything other than `.input(...)` types, the linter will just undo your changes.
 
 test('merging input types', async () => {
-  /**
-   * Types should match the following zod schemas
-   * ```ts
-   * z.object({bar: z.string()})
-   *
-   * z.object({baz: z.number()})
-   *
-   * z.object({qux: z.boolean()})
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.object({bar: v.string()}))
@@ -38,12 +28,6 @@ test('merging input types', async () => {
 })
 
 test('string input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.string()
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.string()) //
@@ -54,12 +38,6 @@ test('string input', async () => {
 })
 
 test('enum input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.enum(['aa', 'bb'])
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.union([v.literal('aa'), v.literal('bb')])) //
@@ -69,17 +47,12 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected ("aa" | "bb") but received "cc"
+      Caused by: CliValidationError: Validation error
+      - Invalid enum value. Expected 'aa' | 'bb', received 'cc'
   `)
 })
 
 test('number input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.number()
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.number()) //
@@ -94,12 +67,6 @@ test('number input', async () => {
 })
 
 test('boolean input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.boolean()
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.boolean()) //
@@ -110,17 +77,12 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected boolean but received "a"
+      Caused by: CliValidationError: Validation error
+      - Expected boolean, received string
   `)
 })
 
 test('refine in a union pedantry', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.union([z.number().int(), z.string()])
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(
@@ -137,22 +99,10 @@ test('refine in a union pedantry', async () => {
 
   expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
   expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  // expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
 test('transform in a union', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.union([
-   *   z
-   *     .number()
-   *     .int()
-   *     .transform(n => `Roman numeral: ${'I'.repeat(n)}`),
-   *   z.string(),
-   * ]),
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(
@@ -173,12 +123,6 @@ test('transform in a union', async () => {
 })
 
 test('literal input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.literal(2)
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.literal(2)) //
@@ -188,17 +132,12 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected 2 but received 3
+      Caused by: CliValidationError: Validation error
+      - Invalid literal value, expected 2
   `)
 })
 
 test('optional input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.string().optional()
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.optional(v.string())) //
@@ -210,12 +149,6 @@ test('optional input', async () => {
 })
 
 test('union input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.union([z.number(), z.string()])
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.union([v.number(), v.string()])) //
@@ -227,12 +160,6 @@ test('union input', async () => {
 })
 
 test('regex input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.string().regex(/hello/).describe('greeting')
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.pipe(v.string(), v.regex(/hello/), v.description('greeting'))) //
@@ -243,21 +170,12 @@ test('regex input', async () => {
   // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid format: Expected /hello/ but received "goodbye xyz"
+      Caused by: CliValidationError: Validation error
+      - Invalid
   `)
 })
 
 test('boolean, number, string input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.union([
-   *   z.string(),
-   *   z.number(),
-   *   z.boolean(), //
-   * ]),
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(
@@ -272,12 +190,6 @@ test('boolean, number, string input', async () => {
 })
 
 test('tuple input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.tuple([z.string(), z.number()])
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.tuple([v.string(), v.number()])) //
@@ -292,16 +204,6 @@ test('tuple input', async () => {
 })
 
 test('tuple input with flags', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.tuple([
-   *   z.string(),
-   *   z.number(),
-   *   z.object({foo: z.string()}), //
-   * ]),
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(
@@ -332,12 +234,6 @@ test('tuple input with flags', async () => {
 })
 
 test('single character option', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.object({a: z.string()})
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.object({a: v.string()})) //
@@ -349,12 +245,6 @@ test('single character option', async () => {
 })
 
 test('custom default procedure', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.object({cwd: z.string()})
-   * ```
-   */
   const router = t.router({
     install: t.procedure
       .meta({default: true})
@@ -370,12 +260,6 @@ test('custom default procedure', async () => {
 })
 
 test('command alias', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.object({frozenLockfile: z.boolean().optional()})
-   * ```
-   */
   const router = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
@@ -388,12 +272,6 @@ test('command alias', async () => {
 })
 
 test('option alias', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.object({frozenLockfile: z.boolean().optional()})
-   * ```
-   */
   const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'x'}}})
@@ -406,12 +284,6 @@ test('option alias', async () => {
 })
 
 test('option alias can be two characters', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.object({frozenLockfile: z.boolean().optional()})
-   * ```
-   */
   const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'xx'}}})
@@ -424,12 +296,6 @@ test('option alias can be two characters', async () => {
 })
 
 test('option alias typo', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.object({frozenLockfile: z.boolean().optional()})
-   * ```
-   */
   const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frooozenLockfile: 'x'}}})
@@ -443,20 +309,6 @@ test('option alias typo', async () => {
 })
 
 test('validation', async () => {
-  /**
-   * Types should match the following zod schemas
-   * ```ts
-   * z.tuple([z.string().describe('The first string'), z.string().describe('The second string')])
-   *
-   * z.tuple([z.string(), z.boolean()])
-   *
-   * z.tuple([z.string(), z.boolean(), z.object({foo: z.string()})])
-   *
-   * z.tuple([z.string(), z.object({foo: z.string()}), z.string()])
-   *
-   * z.tuple([z.string(), z.record(z.string())])
-   * ```
-   */
   const router = t.router({
     tupleOfStrings: t.procedure
       .input(
@@ -484,12 +336,6 @@ test('validation', async () => {
 })
 
 test('string array input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.array(z.string())
-   * ```
-   */
   const router = t.router({
     stringArray: t.procedure
       .input(v.array(v.string())) //
@@ -501,12 +347,6 @@ test('string array input', async () => {
 })
 
 test('number array input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.array(z.number())
-   * ```
-   */
   const router = t.router({
     test: t.procedure
       .input(v.array(v.number())) //
@@ -518,17 +358,12 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected number but received "bad"
+      Caused by: CliValidationError: Validation error
+      - Expected number, received string at index 1
   `)
 })
 
 test('number array input with constraints', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.array(z.number().int())
-   * ```
-   */
   const router = t.router({
     foo: t.procedure
       .input(v.array(v.pipe(v.number(), v.integer()))) //
@@ -537,17 +372,12 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected number but received "1.2"
+      Caused by: CliValidationError: Validation error
+      - Expected number, received string at index 0
   `)
 })
 
 test('boolean array input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.array(z.boolean())
-   * ```
-   */
   const router = t.router({
     test: t.procedure
       .input(v.array(v.boolean())) //
@@ -559,17 +389,12 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected boolean but received "bad"
+      Caused by: CliValidationError: Validation error
+      - Expected boolean, received string at index 1
   `)
 })
 
 test('mixed array input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.array(z.union([z.boolean(), z.number(), z.string()]))
-   * ```
-   */
   const router = t.router({
     test: t.procedure
       .input(v.array(v.union([v.boolean(), v.number(), v.string()]))) //
@@ -581,12 +406,6 @@ test('mixed array input', async () => {
 })
 
 test('record input', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.record(z.number()).optional()
-   * ```
-   */
   const router = t.router({
     test: t.procedure
       .input(v.optional(v.record(v.string(), v.number()))) //
@@ -607,19 +426,12 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected number but received "x"
+      Caused by: CliValidationError: Validation error
+      - Expected number, received string at "--foo"
   `)
 })
 
 test("nullable array inputs aren't supported", async () => {
-  /**
-   * Types should match the following zod schemas
-   * ```ts
-   * z.array(z.string().nullable())
-   *
-   * z.array(z.union([z.boolean(), z.number(), z.string()]).nullable())
-   * ```
-   */
   const router = t.router({
     test1: t.procedure.input(v.array(v.nullable(v.string()))).query(({input}) => `list: ${JSON.stringify(input)}`),
     test2: t.procedure
@@ -653,15 +465,6 @@ test("nullable array inputs aren't supported", async () => {
 })
 
 test('string array input with options', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.tuple([
-   *   z.array(z.string()), //
-   *   z.object({foo: z.string()}).optional(),
-   * ]),
-   * ```
-   */
   const router = t.router({
     test: t.procedure
       .input(
@@ -684,15 +487,6 @@ test('string array input with options', async () => {
 })
 
 test('mixed array input with options', async () => {
-  /**
-   * Type should match the following zod schema
-   * ```ts
-   * z.tuple([
-   *   z.array(z.union([z.string(), z.number()])), //
-   *   z.object({foo: z.string().optional()}),
-   * ]),
-   * ```
-   */
   const router = t.router({
     test: t.procedure
       .input(
@@ -718,24 +512,6 @@ test('mixed array input with options', async () => {
 })
 
 test('defaults and negations', async () => {
-  /**
-   * Types should match the following zod schemas
-   * ```ts
-   * z.object({foo: z.boolean()})
-   *
-   * z.object({foo: z.boolean().optional()})
-   *
-   * z.object({foo: z.boolean().default(true)})
-   *
-   * z.object({foo: z.boolean().default(false)})
-   *
-   * z.object({foo: z.union([z.boolean(), z.number()])})
-   *
-   * z.object({foo: z.union([z.boolean(), z.string()])})
-   *
-   * z.object({foo: z.array(z.union([z.boolean(), z.number()]))})
-   * ```
-   */
   const router = t.router({
     normalBoolean: t.procedure.input(v.object({foo: v.boolean()})).query(({input}) => `${inspect(input)}`),
     optionalBoolean: t.procedure

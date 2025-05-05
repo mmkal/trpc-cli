@@ -57,6 +57,11 @@
     "zod-to-json-schema": "^3.23.0",
     "zod-validation-error": "^3.3.0"
   },
+  "pnpm": {
+    "overrides": {
+      "eslint-plugin-codegen": "https://pkg.pr.new/mmkal/eslint-plugin-codegen@28"
+    }
+  },
   "devDependencies": {
     "@inquirer/prompts": "7.5.0",
     "@types/json-schema": "7.0.15",

@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  eslint-plugin-codegen: https://pkg.pr.new/mmkal/eslint-plugin-codegen@28
+
 importers:
 
   .:
@@ -1932,8 +1935,9 @@ packages:
   eslint-import-resolver-node@0.3.9:
     resolution: {integrity: sha512-WFj2isz22JahUv+B788TlO3N6zL3nNJGU8CcZbPZvVEkBPaJdCV4vy5wyghty5ROFbCRnm132v8BScu5/1BQ8g==}
 
-  eslint-plugin-codegen@0.30.0:
-    resolution: {integrity: sha512-oCItByzA7EjW3bEtxfZ9HKjWI1p1Iexgzc1S4K/62WIviV4gdOoHVrv63MpWblggshr4wsW/Ulb7SWrZKpz8AA==}
+  eslint-plugin-codegen@https://pkg.pr.new/mmkal/eslint-plugin-codegen@28:
+    resolution: {tarball: https://pkg.pr.new/mmkal/eslint-plugin-codegen@28}
+    version: 0.30.0
     engines: {node: '>=18.0.0'}
 
   eslint-plugin-functional@7.3.0:
@@ -5992,7 +5996,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-codegen@0.30.0(eslint@8.57.1):
+  eslint-plugin-codegen@https://pkg.pr.new/mmkal/eslint-plugin-codegen@28(eslint@8.57.1):
     dependencies:
       '@babel/core': 7.24.5
       '@babel/generator': 7.12.17
@@ -6105,7 +6109,7 @@ snapshots:
       eslint-config-xo: 0.46.0(eslint@8.57.1)(typescript@5.8.2)
       eslint-config-xo-react: 0.27.0(eslint-plugin-react-hooks@4.6.2(eslint@8.57.1))(eslint-plugin-react@7.34.1(eslint@8.57.1))(eslint@8.57.1)
       eslint-config-xo-typescript: 7.0.0(eslint@8.57.1)(typescript@5.8.2)
-      eslint-plugin-codegen: 0.30.0(eslint@8.57.1)
+      eslint-plugin-codegen: https://pkg.pr.new/mmkal/eslint-plugin-codegen@28(eslint@8.57.1)
       eslint-plugin-functional: 7.3.0(eslint@8.57.1)(typescript@5.8.2)
       eslint-plugin-import-x: 4.6.1(eslint@8.57.1)(typescript@5.8.2)
       eslint-plugin-jsx-a11y: 6.8.0(eslint@8.57.1)
@@ -6968,7 +6972,7 @@ snapshots:
       '@types/stack-utils': 2.0.3
       chalk: 4.1.2
       graceful-fs: 4.2.11
-      micromatch: 4.0.6
+      micromatch: 4.0.8
       pretty-format: 29.7.0
       slash: 3.0.0
       stack-utils: 2.0.6
