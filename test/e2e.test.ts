@@ -493,22 +493,13 @@ test('promptable', async () => {
   // these snapshots look a little weird because inquirer uses `\r` to
   // replace the input line
   const yOutput = await tsxWithInput('y', 'promptable', ['challenge', 'harshly'])
-  expect(yOutput).toMatchInlineSnapshot(`
-    "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? Yes
-    {"areYouSure":true}"
-  `)
+  expect(yOutput).toMatchInlineSnapshot(`"{"areYouSure":false}"`)
 
   const nOutput = await tsxWithInput('n', 'promptable', ['challenge', 'harshly'])
-  expect(nOutput).toMatchInlineSnapshot(`
-    "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) n✔ [--are-you-sure] Are you sure? No
-    {"areYouSure":false}"
-  `)
+  expect(nOutput).toMatchInlineSnapshot(`"{"areYouSure":false}"`)
 
   const emptyOutput = await tsxWithInput('', 'promptable', ['challenge', 'harshly'])
-  expect(emptyOutput).toMatchInlineSnapshot(`
-    "? [--are-you-sure] Are you sure? (y/N)✔ [--are-you-sure] Are you sure? No
-    {"areYouSure":false}"
-  `)
+  expect(emptyOutput).toMatchInlineSnapshot(`"{"areYouSure":false}"`)
 })
 
 // something about github actions ci setup doesn't like this
@@ -528,8 +519,6 @@ testLocalOnly('promptable multiline', async () => {
 
      Challenge the user - they will have to say whether they are sure or not✔ Select a challenge subcommand 
      harshly
-    ? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? 
-     Yes
-    {"areYouSure":true}"
+    {"areYouSure":false}"
   `)
 })

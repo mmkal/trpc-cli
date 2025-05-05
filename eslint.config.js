@@ -3,7 +3,7 @@ module.exports = [
   {
     rules: {
       'unicorn/prefer-switch': 'off', // mmkal
-    }
+    },
   },
   {ignores: ['**/*ignoreme*']}, //
 ]

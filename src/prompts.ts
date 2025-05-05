@@ -4,14 +4,14 @@ import {CommanderProgramLike, EnquirerLike, InquirerPromptsLike, Promptable, Pro
 
 type UpstreamOptionInfo = {
   typeName: 'UpstreamOptionInfo'
-  id: number
+  id: string
   specified: boolean
   value?: string
 }
 
 type UpstreamArgumentInfo = {
   typeName: 'UpstreamArgumentInfo'
-  id: number
+  id: string
   specified: boolean
   value?: string
 }
@@ -61,17 +61,11 @@ export const createShadowCommand = (
     writeOut: () => {},
     writeErr: () => {},
   })
-  const argumentsMap = new Map<number, Shadowed<Argument>>()
-  const optionsMap = new Map<number, Shadowed<Option>>()
+  const argumentsMap = new Map<string, Shadowed<Argument>>()
+  const optionsMap = new Map<string, Shadowed<Option>>()
 
-  const commandToLookForArgumentsAndOptionsIn = getDefaultSubcommand(command) || command
-
-  if (commandToLookForArgumentsAndOptionsIn !== command) {
-    // console.warn('looking for arguments and options in', commandToLookForArgumentsAndOptionsIn?.name())
-  }
-
-  commandToLookForArgumentsAndOptionsIn.options.forEach(original => {
-    const id = Date.now() + Math.random()
+  command.options.forEach(original => {
+    const id = Date.now().toString() + Math.random().toString().slice(1)
     const shadowOption = new Option(
       original.flags.replace('<', '[').replace('>', ']'),
       JSON.stringify([`id=${id}`, original.description]),
@@ -83,9 +77,9 @@ export const createShadowCommand = (
     optionsMap.set(id, {shadow: shadowOption, original: original})
   })
 
-  commandToLookForArgumentsAndOptionsIn.registeredArguments.forEach(original => {
+  command.registeredArguments.forEach(original => {
     const shadowArgument = new Argument(original.name(), original.description)
-    const id = Date.now() + Math.random()
+    const id = Date.now().toString() + Math.random().toString().slice(1)
 
     shadowArgument.argOptional()
     const upstreamArgumentInfo: UpstreamArgumentInfo = {typeName: 'UpstreamArgumentInfo', id, specified: false}
@@ -95,9 +89,6 @@ export const createShadowCommand = (
     shadow.addArgument(shadowArgument)
     argumentsMap.set(id, {shadow: shadowArgument, original: original})
   })
-
-  // if (command._allowUnknownOption) shadow.allowUnknownOption()
-  // if (command._allowExcessArguments) shadow.allowExcessArguments()
 
   const analysis: Analysis = {
     command: {shadow, original: command},
