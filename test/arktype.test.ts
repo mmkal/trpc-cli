@@ -563,7 +563,7 @@ test('defaults and negations', async () => {
   expect(await run(router, ['optional-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-true-boolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  // expect(await run(router, ['default-true-boolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['default-true-boolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-false-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['default-false-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
@@ -608,13 +608,29 @@ test('arktype issues', () => {
         type('number').narrow(n => Number.isInteger(n)), //
       ),
     ),
-  ).toMatchInlineSnapshot(`Error: Predicate $ark.fn19 is not convertible to JSON Schema`)
+  ).toMatchInlineSnapshot(`
+    ToJsonSchemaError: {
+        code: "predicate",
+        base: {
+            type: "number"
+        },
+        predicate: Function(fn16)
+    }
+  `)
 
   expect(
     toJsonSchema(
       type('number').narrow(n => Number.isInteger(n)), //
     ),
-  ).toMatchInlineSnapshot(`Error: Predicate $ark.fn20 is not convertible to JSON Schema`)
+  ).toMatchInlineSnapshot(`
+    ToJsonSchemaError: {
+        code: "predicate",
+        base: {
+            type: "number"
+        },
+        predicate: Function(fn17)
+    }
+  `)
 
   expect(
     toJsonSchema(
@@ -623,6 +639,7 @@ test('arktype issues', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "number",
     }
   `)
@@ -635,7 +652,15 @@ test('arktype issues', () => {
       ),
     ),
   ).toMatchInlineSnapshot(
-    `Error: (In: number) => Out<unknown> is not convertible to JSON Schema because it represents a transformation, while JSON Schema only allows validation. Consider creating a Schema from one of its endpoints using \`.in\` or \`.out\`.`,
+    `
+      ToJsonSchemaError: {
+          code: "morph",
+          base: {
+              type: "number"
+          },
+          out: null
+      }
+    `,
   )
   expect(
     toJsonSchema(
@@ -647,6 +672,7 @@ test('arktype issues', () => {
   ).toMatchInlineSnapshot(
     `
       {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "anyOf": [
           {
             "type": "number",
@@ -661,8 +687,10 @@ test('arktype issues', () => {
 
   expect(toJsonSchema(type({foo: 'string = "hi"'}))).toMatchInlineSnapshot(`
     {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "foo": {
+          "default": "hi",
           "type": "string",
         },
       },
@@ -672,8 +700,10 @@ test('arktype issues', () => {
 
   expect(toJsonSchema(type({foo: type('string').default('hi')}))).toMatchInlineSnapshot(`
     {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "foo": {
+          "default": "hi",
           "type": "string",
         },
       },
@@ -683,6 +713,7 @@ test('arktype issues', () => {
 
   expect(toJsonSchema(type(/foo.*bar/))).toMatchInlineSnapshot(`
     {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "pattern": "foo.*bar",
       "type": "string",
     }
@@ -690,6 +721,7 @@ test('arktype issues', () => {
 
   expect(toJsonSchema(type('string').describe('a piece of text'))).toMatchInlineSnapshot(`
     {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
       "description": "a piece of text",
       "type": "string",
     }
