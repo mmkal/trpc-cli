@@ -9,21 +9,21 @@ const router = trpc.router({
   challenge: trpc.router({
     harshly: trpc.procedure
       .meta({
-        description: 'Challenge the user - they will have to say whether they are sure or not',
+        description: 'Challenge the user',
       })
       .input(
         z.object({
-          areYouSure: z.boolean().describe('Are you sure?'),
+          why: z.string().describe('Why are you doing this?'),
         }),
       )
       .query(({input}) => JSON.stringify(input)),
     gently: trpc.procedure
       .meta({
-        description: 'Give the user a chance to be confident',
+        description: 'Check on the user',
       })
       .input(
         z.object({
-          areYouConfident: z.boolean().describe('Are you confident?'),
+          how: z.string().describe('How are you doing?'),
         }),
       )
       .query(({input}) => JSON.stringify(input)),
