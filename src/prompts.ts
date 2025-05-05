@@ -1,5 +1,5 @@
 /* eslint-disable import-x/order */
-import {Argument, Command, CommanderError, Option} from 'commander'
+import {Argument, Command, Option} from 'commander'
 import {CommanderProgramLike, EnquirerLike, InquirerPromptsLike, Promptable, Prompter, PromptsLike} from './types'
 
 type UpstreamOptionInfo = {
@@ -51,7 +51,10 @@ const getDefaultSubcommand = (command: Command) => {
   return defaultChild ? command.commands.find(c => c.name() === defaultChild) : undefined
 }
 
-export const createShadowCommand = (command: Command, onAnalyze: (params: Analysis) => void): Command => {
+export const createShadowCommand = (
+  command: Command,
+  onAnalyze: (params: Analysis) => void | Promise<void>,
+): Command => {
   const shadow = new Command(command.name())
   shadow.exitOverride()
   shadow.configureOutput({
@@ -136,7 +139,7 @@ export const createShadowCommand = (command: Command, onAnalyze: (params: Analys
         })
       }
     })
-    onAnalyze(analysis)
+    await onAnalyze(analysis)
   })
 
   command.commands.forEach(subcommand => {
@@ -302,73 +305,76 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
       parseOptions = {from: 'user'}
     }
 
-    // first, get the command we're dealing with and the corresponding args
-    const figureOutCommandAndArgs = async (input: {command: Command; args: string[]}) => {
-      const {command, args} = input
-      if (input.command.commands.length === 0) {
-        // great, no subcommands, all we can do is use this command and the args as is
-        return input
-      }
-
-      // ok, we can now insist that the user passes subcommands at the front of argv
-
-      let current = input.command
-      let argsToPassToCommand = [...args]
-      for (let i = 0; i < 100; i++) {
-        if (current.commands.length === 0) {
-          // no subcommands, we're done
-          return {command: current, args: argsToPassToCommand}
-        }
-        let child
-        if (i in args) {
-          const arg = args[i]
-          child = current.commands.find(ch => ch.name() === arg)
-          if (!child) {
-            const defaultSubcommand = getDefaultSubcommand(command)
-            if (defaultSubcommand) {
-              // we got a default command, let's use that. no such thing as nested default commands, so we're done
-              return {command: defaultSubcommand, args: argsToPassToCommand} // no need to slice the args, we pass them as is
-            } else {
-              throw new Error(
-                `Subcommand ${arg} not found. Available subcommands: ${command.commands.map(c => c.name()).join(', ')}`,
-              )
-            }
-          }
-          argsToPassToCommand = argsToPassToCommand.slice(1)
-        } else {
-          const name = await prompter.select(
-            {
-              message: `Select a ${current.name() || ''} subcommand`.replace('  ', ' '),
-              choices: current.commands.map(ch => ({
-                name: ch.name(),
-                value: ch.name(),
-                description: ch.description(),
-              })),
-            },
-            {command: current, inputs: {argv: args, arguments: [], options: []}},
-          )
-          child = current.commands.find(ch => ch.name() === name)
-          if (!child)
-            throw new Error(
-              `Subcommand ${name} not found. Available subcommands: ${command.commands.map(c => c.name()).join(', ')}`,
-            )
-        }
-        current = child
-      }
-
-      throw new Error('exited loop, this is probably a bug')
-    }
-
-    const f = await figureOutCommandAndArgs({command, args: [...argv]})
+    const f = {command, args: [...argv]} // await figureOutCommandAndArgs({command, args: [...argv]})
     const nextArgv = [...f.args]
 
-    const analysis = await new Promise<Analysis>((resolve, reject) => {
-      const shadow = createShadowCommand(f.command, resolve)
-      shadow.parseAsync(f.args, parseOptions).catch(reject)
-    })
+    let analysis: Analysis | undefined = undefined
+    const maxAttempts = 100
+    for (let i = maxAttempts; i >= 0 && !analysis; i--) {
+      // try to get analysis - we should epxect this to remain undefined only if the user hasn't specified a command. i.e. they're just running the root program
+      // and are expecting to be prompted for a command.
+      analysis = await new Promise<Analysis | undefined>((resolve, reject) => {
+        const shadow = createShadowCommand(f.command, async an => {
+          if (an.command.original.commands.length === 0) {
+            // no subcommands, let's pass this on straight to the original
+            resolve(an)
+            return
+          }
+          const defaultSubcommand = getDefaultSubcommand(an.command.original)
+          if (defaultSubcommand) {
+            // there's a default subcommand, the original should have an action which passes through args to the default child. So we're done here.
+            // note that this means no prompting if you build `yarn` with this library, and then the end-user just runs `yarn` (because there's a default subcommand)
+            resolve(an)
+            return
+          }
+          // ok, the user hasn't actually specified a subcommand, let's prompt them for one, add it on to the args
+          const name = await prompter.select(
+            {
+              message: `Select a ${an.command.original.name() || ''} subcommand`.replace('  ', ' '),
+              choices: an.command.original.commands.map(c => ({
+                name: c.name(),
+                value: c.name(),
+                description: c.description(),
+              })),
+            },
+            {} as never,
+          )
+          // push onto the _end_ of the args, because at this point we know there are no subcommands, so hopefully there are no ambiguous option/flags interfering with parsing.
+          nextArgv.push(name)
+          // resolve with undefined - we'll have to re-parse now that we've got a subcommand added to the args
+          resolve(undefined)
+        })
+        shadow.parseAsync(nextArgv, parseOptions).catch(e => {
+          if (e?.constructor?.name === 'CommanderError') {
+            // CommanderError is thrown when user passes `--help`, or tries to use an unknown option.
+            // We want to suppress the "shadow" version of this error, so just pass on no analysis and the rest of the flow will call the original program
+            // with the same argument, and presumably get the same error but with more helpful output from the "real" program.
+            resolve({
+              command: {shadow: f.command, original: f.command},
+              arguments: [],
+              options: [],
+            })
+          } else {
+            reject(e as Error)
+          }
+        })
+      })
+    }
 
-    const getMessage = (thing: {name(): string} & Partial<Option> & Partial<Argument>) => {
-      return `[${thing.long || thing.name()}] ${thing.description || 'Enter a value:'}`.trim()
+    if (!analysis) {
+      const message = `Failed to find a subcommand after ${maxAttempts} attempts - failing to avoid an infinite loop. This is probably a bug in trpc-cli.`
+      throw new Error(message)
+    }
+
+    const getMessage = (argOrOpt: Argument | Option) => {
+      const name = 'long' in argOrOpt ? argOrOpt.flags : `[${argOrOpt.name()}]`
+      const parts = [
+        name,
+        argOrOpt.description,
+        argOrOpt.defaultValue && `(default: ${argOrOpt.defaultValue as string})`,
+        !argOrOpt.defaultValue && !argOrOpt.required && '(optional)',
+      ]
+      return parts.filter(Boolean).join(' ').trim() + ':'
     }
 
     const baseContext = {
@@ -379,113 +385,131 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
         options: analysis.options.map(o => ({name: o.original.name(), specified: o.specified, value: o.value})),
       },
     }
-    // console.log('baseContext', baseContext.inputs)
     await prompter.setup?.(baseContext)
 
-    for (const arg of analysis.arguments) {
-      const ctx = {...baseContext, argument: arg.original}
-      if (!arg.specified) {
-        const parseArg =
-          'parseArg' in arg.original && typeof arg.original.parseArg === 'function'
-            ? (arg.original.parseArg as (value: string) => string | undefined)
-            : undefined
-        const promptedValue = await prompter.input(
-          {
-            message: getMessage(arg.original),
-            required: arg.original.required,
-            default: arg.value,
-            validate: input => {
-              try {
-                parseArg?.(input)
-                return true
-              } catch (e) {
-                return `${(e as Error)?.message || (e as string)}`
-              }
-            },
-          },
-          ctx,
-        )
-        nextArgv.push(promptedValue)
-      }
+    // one day maybe consider making this more configurable by the user (or rather the package user -- the developer)
+    // it's kinda complicated. rn 'necessary' means only prompt if something's unspecified and required.
+    // but it'll then prompt for all unspecified args, even if they're not required.
+    const promptConfig = 'necessary' as 'always' | 'never' | 'necessary'
+
+    let shouldPrompt: boolean
+    if (promptConfig === 'always') {
+      shouldPrompt = true
+    } else if (promptConfig === 'never') {
+      shouldPrompt = false
+    } else {
+      promptConfig satisfies 'necessary'
+      const someRequiredArgsUnspecified = analysis.arguments.some(a => a.original.required && !a.specified)
+      const someRequiredOptionsUnspecified = analysis.options.some(o => o.original.required && !o.specified)
+      shouldPrompt = someRequiredArgsUnspecified || someRequiredOptionsUnspecified
     }
-    for (const option of analysis.options) {
-      const ctx = {...baseContext, option: option.original}
-      if (!option.specified) {
-        const fullFlag = option.original.long || `--${option.original.name()}`
-        const isBoolean = option.original.isBoolean() || option.original.flags.includes('[boolean]')
-        if (isBoolean) {
-          const promptedValue = await prompter.confirm(
+
+    if (shouldPrompt) {
+      for (const arg of analysis.arguments) {
+        const ctx = {...baseContext, argument: arg.original}
+        if (!arg.specified) {
+          const parseArg =
+            'parseArg' in arg.original && typeof arg.original.parseArg === 'function'
+              ? (arg.original.parseArg as (value: string) => string | undefined)
+              : undefined
+          const promptedValue = await prompter.input(
             {
-              message: getMessage(option.original),
-              default: (option.original.defaultValue as boolean | undefined) ?? false,
+              message: getMessage(arg.original),
+              required: arg.original.required,
+              default: arg.value,
+              validate: input => {
+                try {
+                  parseArg?.(input)
+                  return true
+                } catch (e) {
+                  return `${(e as Error)?.message || (e as string)}`
+                }
+              },
             },
             ctx,
           )
-          if (promptedValue) nextArgv.push(fullFlag)
-        } else if (option.original.variadic && option.original.argChoices) {
-          const choices = option.original.argChoices.slice()
-          const results = await prompter.checkbox(
-            {
-              message: getMessage(option.original),
-              choices: choices.map(choice => ({
-                value: choice,
-                name: choice,
-                checked: true,
-              })),
-            },
-            ctx,
-          )
-          results.forEach(result => {
-            if (typeof result === 'string') nextArgv.push(fullFlag, result)
-          })
-        } else if (option.original.argChoices) {
-          const choices = option.original.argChoices.slice()
-          const set = new Set(choices)
-          const promptedValue = await prompter.select(
-            {
-              message: getMessage(option.original),
-              choices,
-              default: option.original.defaultValue as string,
-              // required: option.original.required,
-            },
-            ctx,
-          )
-          if (set.has(promptedValue)) {
-            nextArgv.push(fullFlag, promptedValue)
-          }
-        } else if (option.original.variadic) {
-          const values: string[] = []
-          do {
-            const promptedValue = await prompter.input(
+          nextArgv.push(promptedValue)
+        }
+      }
+      for (const option of analysis.options) {
+        const ctx = {...baseContext, option: option.original}
+        if (!option.specified) {
+          const fullFlag = option.original.long || `--${option.original.name()}`
+          const isBoolean = option.original.isBoolean() || option.original.flags.includes('[boolean]')
+          if (isBoolean) {
+            const promptedValue = await prompter.confirm(
               {
                 message: getMessage(option.original),
-                default: option.original.defaultValue?.[values.length] as string,
+                default: (option.original.defaultValue as boolean | undefined) ?? false,
               },
               ctx,
             )
-            if (!promptedValue) break
-            values.push(fullFlag, promptedValue)
-          } while (values)
-          nextArgv.push(...values)
-        } else {
-          // let's handle this as a string - but the `parseArg` function could turn it into a number or boolean or whatever
-          const getParsedValue = (input: string) => {
-            return option.original.parseArg ? option.original.parseArg(input, undefined as string | undefined) : input
-          }
-          const promptedValue = await prompter.input(
-            {
-              message: getMessage(option.original),
-              default: option.value,
-              required: option.original.required,
-              validate: input => {
-                const parsed = getParsedValue(input)
-                if (parsed == null && input != null) return 'Invalid value'
-                return true
+            if (promptedValue) nextArgv.push(fullFlag)
+          } else if (option.original.variadic && option.original.argChoices) {
+            const choices = option.original.argChoices.slice()
+            const results = await prompter.checkbox(
+              {
+                message: getMessage(option.original),
+                choices: choices.map(choice => ({
+                  value: choice,
+                  name: choice,
+                  checked: true,
+                })),
               },
-            },
-            ctx,
-          )
-          nextArgv.push(fullFlag, getParsedValue(promptedValue) ?? promptedValue)
+              ctx,
+            )
+            results.forEach(result => {
+              if (typeof result === 'string') nextArgv.push(fullFlag, result)
+            })
+          } else if (option.original.argChoices) {
+            const choices = option.original.argChoices.slice()
+            const set = new Set(choices)
+            const promptedValue = await prompter.select(
+              {
+                message: getMessage(option.original),
+                choices,
+                default: option.original.defaultValue as string,
+                // required: option.original.required,
+              },
+              ctx,
+            )
+            if (set.has(promptedValue)) {
+              nextArgv.push(fullFlag, promptedValue)
+            }
+          } else if (option.original.variadic) {
+            const values: string[] = []
+            do {
+              const promptedValue = await prompter.input(
+                {
+                  message: getMessage(option.original),
+                  default: option.original.defaultValue?.[values.length] as string,
+                },
+                ctx,
+              )
+              if (!promptedValue) break
+              values.push(fullFlag, promptedValue)
+            } while (values)
+            nextArgv.push(...values)
+          } else {
+            // let's handle this as a string - but the `parseArg` function could turn it into a number or boolean or whatever
+            const getParsedValue = (input: string) => {
+              return option.original.parseArg ? option.original.parseArg(input, undefined as string | undefined) : input
+            }
+            const promptedValue = await prompter.input(
+              {
+                message: getMessage(option.original),
+                default: option.value,
+                required: option.original.required,
+                validate: input => {
+                  const parsed = getParsedValue(input)
+                  if (parsed == null && input != null) return 'Invalid value'
+                  return true
+                },
+              },
+              ctx,
+            )
+            if (promptedValue) nextArgv.push(fullFlag, getParsedValue(promptedValue) ?? promptedValue)
+          }
         }
       }
     }
