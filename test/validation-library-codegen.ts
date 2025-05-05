@@ -1,14 +1,8 @@
 export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
-  dependencies: {path, fs, dedent, babelParser, babelGenerator, babelTypes},
+  dependencies: {path, fs, dedent},
   context,
   meta,
 }) => {
-  const simplifyCode = (code: string) => {
-    const ast = babelParser.parse(code)
-    const generator = babelGenerator.default
-    generator(ast)
-    return generator.code
-  }
   const parseTestFile = (content: string) => {
     const lines = content.split('\n').map(line => (line.trim() ? line : ''))
     const firstNonImportLine = lines.findIndex(line => line && !line.startsWith('import') && !line.startsWith('//'))
