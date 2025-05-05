@@ -395,13 +395,13 @@ test('number array input', async () => {
 test('number array input with constraints', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(type('number[]').narrow(n => Number.isInteger(n))) //
+      .input(type('number[]').narrow(ns => ns.every(n => Number.isInteger(n)))) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: too many arguments for 'foo'. Expected 0 arguments but got 1.
+      Caused by: CliValidationError: must be valid according to an anonymous predicate (was [1.2])
   `)
 })
 
