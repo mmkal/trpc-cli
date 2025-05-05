@@ -492,22 +492,10 @@ const testLocalOnly = process.env.CI ? test.skip : test
 test('promptable', async () => {
   // these snapshots look a little weird because inquirer uses `\r` to
   // replace the input line
-  const yOutput = await tsxWithInput('y', 'promptable', ['challenge', 'harshly'])
+  const yOutput = await tsxWithInput('X', 'promptable', ['challenge', 'harshly'])
   expect(yOutput).toMatchInlineSnapshot(`
-    "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? Yes
-    {"areYouSure":true}"
-  `)
-
-  const nOutput = await tsxWithInput('n', 'promptable', ['challenge', 'harshly'])
-  expect(nOutput).toMatchInlineSnapshot(`
-    "? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) n✔ [--are-you-sure] Are you sure? No
-    {"areYouSure":false}"
-  `)
-
-  const emptyOutput = await tsxWithInput('', 'promptable', ['challenge', 'harshly'])
-  expect(emptyOutput).toMatchInlineSnapshot(`
-    "? [--are-you-sure] Are you sure? (y/N)✔ [--are-you-sure] Are you sure? No
-    {"areYouSure":false}"
+    "? --why <string> Why are you doing this?:? --why <string> Why are you doing this?: X? --why <string> Why are you doing this?: X✔ --why <string> Why are you doing this?: X
+    {"why":"X"}"
   `)
 })
 
@@ -522,14 +510,14 @@ testLocalOnly('promptable multiline', async () => {
 
      Available subcommands: harshly, gently✔ Select a subcommand 
      challenge
-    ? Select a subcommand (Use arrow keys)
+    ? Select a challenge subcommand (Use arrow keys)
     ❯ harshly
       gently
 
-     Challenge the user - they will have to say whether they are sure or not✔ Select a subcommand 
+     Challenge the user✔ Select a challenge subcommand 
      harshly
-    ? [--are-you-sure] Are you sure? (y/N)? [--are-you-sure] Are you sure? (y/N) y✔ [--are-you-sure] Are you sure? 
-     Yes
-    {"areYouSure":true}"
+    ? --why <string> Why are you doing this?:? --why <string> Why are you doing this?: y? --why <string> Why are you doing this?: y✔ --why <string> Why are you doing this?: 
+     y
+    {"why":"y"}"
   `)
 })

@@ -12,7 +12,7 @@ test('custom prompter', async () => {
       .input(
         z.object({
           projectName: z.string().describe('What will your project be called?').default('my-app'),
-          language: z.enum(['typescript', 'javascript']).describe('What language will you be using?').optional(),
+          language: z.enum(['typescript', 'javascript']).describe('What language will you be using?'),
           packages: z
             .enum(['better-auth', 'pgkit', 'tailwind', 'trpc'])
             .array()
@@ -28,7 +28,7 @@ test('custom prompter', async () => {
       .mutation(async ({input}) => JSON.stringify(input, null, 2)),
   })
 
-  const result = await runWith({router}, ['create', '--package-manager', 'yarn'], {
+  const runOptions: Parameters<typeof runWith>[2] = {
     prompts: command => {
       // example of how you can customize prompts however you want - this one doesn't "prompt" at all, it uses silly rules to decide on values.
       return {
@@ -61,16 +61,24 @@ test('custom prompter', async () => {
           return true
         },
         checkbox: async (params, _ctx) => {
-          return params.choices.flatMap((c, i) => (i % 2 === 0 ? [c.value] : [])) // select every other option
+          return params.choices.flatMap((c, i) => (i % 2 === 0 ? [c.value] : []))
         },
       }
+    },
+  }
+  const result = await runWith({router}, ['create', '--package-manager', 'yarn'], runOptions)
+  expect(JSON.parse(result)).toMatchObject({packageManager: 'yarn'})
+
+  expect(log.mock.calls[0][0]).toMatchObject({
+    inputs: {
+      options: expect.arrayContaining([{name: 'package-manager', specified: true, value: 'yarn'}]),
     },
   })
 
   expect(result).toMatchInlineSnapshot(
     `
       "{
-        "projectName": "a value in response to: [--project-name] What will your project be called?",
+        "projectName": "a value in response to: --project-name [string] What will your project be called? (default: my-app):",
         "language": "javascript",
         "packages": [
           "better-auth",
