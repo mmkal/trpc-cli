@@ -64,7 +64,7 @@
     "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.0.0",
     "arktype": "2.1.9",
-    "effect": "3.14.18",
+    "effect": "3.14.19",
     "enquirer": "2.4.1",
     "eslint": "8",
     "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb",
