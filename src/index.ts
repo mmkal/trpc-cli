@@ -43,14 +43,11 @@ export class Command extends BaseCommand {
 export {AnyRouter, AnyProcedure} from './trpc-compat'
 
 /**
- * Run a trpc router as a CLI.
- *
- * @param router A trpc router
- * @param context The context to use when calling the procedures - needed if your router requires a context
- * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
- * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+ * @internal takes a trpc router and returns an object that you **could** use to build a CLI, or UI, or a bunch of other things with.
+ * Officially, just internal for building a CLI. GLHF.
  */
-export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
+// todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
+export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
     const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], {
       zod: params.zod,
@@ -77,7 +74,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         procedurePath,
         {
           name: procedurePath,
-          procedure,
+          meta: getMeta(procedure),
           procedureInputs: {
             positionalParameters: [],
             optionsJsonSchema: {
@@ -103,13 +100,30 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const procedureInputs = procedureInputsResult.value
     const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
 
-    const result = [procedurePath, {name: procedurePath, procedure, procedureInputs, incompatiblePairs, type}] as const
+    const result = [
+      procedurePath,
+      {name: procedurePath, meta: getMeta(procedure), procedureInputs, incompatiblePairs, type},
+    ] as const
     return result
   })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
     return typeof v === 'string' ? [] : [[k, v] as const]
   })
+
+  return procedureEntries
+}
+
+/**
+ * Run a trpc router as a CLI.
+ *
+ * @param router A trpc router
+ * @param context The context to use when calling the procedures - needed if your router requires a context
+ * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
+ * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+ */
+export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
+  const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
@@ -136,7 +150,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const configureCommand = (
       command: Command,
       procedurePath: string,
-      {procedure, procedureInputs, incompatiblePairs}: (typeof procedureEntries)[0][1],
+      {meta, procedureInputs, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
       const optionJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
       command.exitOverride(ec => {
@@ -152,8 +166,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         },
       })
       command.showHelpAfterError()
-
-      const meta = getMeta(procedure)
 
       if (meta.usage) command.usage([meta.usage].flat().join('\n'))
       if (meta.examples) command.addHelpText('after', `\nExamples:\n${[meta.examples].flat().join('\n')}`)
@@ -439,7 +451,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       parentCommand.addCommand(leafCommand)
 
       // Check if this command should be the default for its parent
-      const meta = getMeta(commandConfig.procedure)
+      const meta = commandConfig.meta
       if (meta.default === true) {
         // the parent will pass on its args straight to the child, which will validate them. the parent just blindly accepts anything.
         parentCommand.allowExcessArguments()
