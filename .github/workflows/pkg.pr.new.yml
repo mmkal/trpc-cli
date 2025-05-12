@@ -10,6 +10,7 @@ jobs:
       - run: npm install -g corepack@0.31.0 # todo: delete if https://github.com/nodejs/corepack/issues/612 is resolved
       - run: corepack enable
       - name: set package.json version
+        # note: if dependencies are a "real" version that matches the repo's package.json, pnpm uses the cached version. So patch to a fake/unrealistic version.
         run: |
           sed -i 's|"version":|"version": "0.0.0-dev","oldversion":|g' package.json
       - run: pnpm install
