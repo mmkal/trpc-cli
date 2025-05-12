@@ -219,7 +219,12 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
       optionsJsonSchema: {
         allOf: parsedIndividually.map(p => {
           const successful = p as Extract<typeof p, {success: true}>
-          return successful.value.optionsJsonSchema
+          const optionsSchema = successful.value.optionsJsonSchema
+          if ('additionalProperties' in optionsSchema && optionsSchema.additionalProperties === false) {
+            const {additionalProperties, ...rest} = optionsSchema
+            return rest
+          }
+          return optionsSchema
         }),
       },
       getPojoInput: argv => argv.options,
