@@ -72,7 +72,7 @@
     "expect-type": "1.2.1",
     "fs-syncer": "0.5.3",
     "np": "10.2.0",
-    "pkg-pr-new": "^0.0.44",
+    "pkg-pr-new": "^0.0.45",
     "prompts": "2.4.2",
     "strip-ansi": "7.1.0",
     "trpcserver10": "npm:@trpc/server@^10.45.2",
