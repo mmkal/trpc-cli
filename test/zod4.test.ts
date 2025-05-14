@@ -3,8 +3,7 @@ process.env.TEST_FILE = 'zod4.test.ts'
 import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import {z} from 'zod4'
-import * as zod4 from 'zod4'
+import * as z from 'zod/v4'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
@@ -28,10 +27,7 @@ const run = <R extends AnyRouter>(router: R, argv: string[]) => {
   return runWith({router}, argv)
 }
 const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
-  const cli = createCli({
-    ...params,
-    zod: zod4,
-  })
+  const cli = createCli(params)
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   return cli

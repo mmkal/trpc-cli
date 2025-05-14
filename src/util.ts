@@ -10,10 +10,10 @@
 import {StandardSchemaV1} from './standard-schema'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const looksLikeInstanceof = <T>(value: unknown, target: new (...args: any[]) => T): value is T => {
+export const looksLikeInstanceof = <T>(value: unknown, target: string | (new (...args: any[]) => T)): value is T => {
   let current = value?.constructor
   while (current?.name) {
-    if (current?.name === target.name) return true
+    if (current?.name === (typeof target === 'string' ? target : target.name)) return true
     current = Object.getPrototypeOf(current) as typeof current // parent class
   }
   return false
