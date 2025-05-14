@@ -580,11 +580,14 @@ function transformError(err: unknown, command: Command, procedureInputs: unknown
       'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
     )
   }
+
   if (looksLikeInstanceof<trpcServer11.TRPCError>(err, 'TRPCError')) {
     const cause = err.cause
     const isZod4Input =
+      !!zod4PrettifyError &&
+      procedureInputs.length > 0 &&
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      procedureInputs.length > 0 && procedureInputs.every(input => (input as any)._zod?.version?.major == 4)
+      procedureInputs.every(input => (input as any)._zod?.version?.major == 4)
     if (err.code === 'BAD_REQUEST' && isZod4Input && looksLikeInstanceof<Zod4Error>(cause, 'ZodError')) {
       const prettyMessage = zod4PrettifyError(cause)
       return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())

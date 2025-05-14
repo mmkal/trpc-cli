@@ -27,7 +27,7 @@ const run = <R extends AnyRouter>(router: R, argv: string[]) => {
   return runWith({router}, argv)
 }
 const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
-  const cli = createCli(params)
+  const cli = createCli({...params})
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   return cli

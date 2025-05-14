@@ -434,8 +434,11 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       // @ts-expect-error don't worry lots of ?.
       if (input._zod?.version?.major == 4) {
         return zod4.toJSONSchema(input as never, {
+          // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
           io: 'input',
+          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           unrepresentable: 'any',
+          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           override: ctx => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
               ctx.jsonSchema.$zod = {optional: true}
