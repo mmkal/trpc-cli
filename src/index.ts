@@ -589,30 +589,17 @@ function transformError(err: unknown, command: Command, dependencies: Dependenci
       }
     }
     if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(cause, ZodError)) {
-      const originalIssues = cause.issues
-      try {
-        cause.issues = cause.issues.map(issue => {
-          if (typeof issue.path[0] !== 'string') return issue
-          return {
-            ...issue,
-            path: ['--' + issue.path[0], ...issue.path.slice(1)],
-          }
-        })
-
-        if (dependencies.zod?.prettifyError) {
-          const prettyMessage = dependencies.zod.prettifyError(cause as never)
-          return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
-        }
-
-        const validationError = zodValidationError.fromError(cause, {
-          prefixSeparator: '\n  - ',
-          issueSeparator: '\n  - ',
-        })
-
-        return new CliValidationError(validationError.message + '\n\n' + command.helpInformation())
-      } finally {
-        cause.issues = originalIssues
+      if (dependencies.zod?.prettifyError) {
+        const prettyMessage = dependencies.zod.prettifyError(cause as never)
+        return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
       }
+
+      const validationError = zodValidationError.fromError(cause, {
+        prefixSeparator: '\n  - ',
+        issueSeparator: '\n  - ',
+      })
+
+      return new CliValidationError(validationError.message + '\n\n' + command.helpInformation())
     }
 
     if (
