@@ -542,20 +542,11 @@ Zod support is built-in, including the `zod-to-json-schema` conversion helper. Y
 
 #### zod v4
 
-You can use zod v4 right now, but you'll need to pass it in to `createCli` so that trpc-cli knows how to format errors and parse your router's inputs:
+You can use zod v4 right now! You can start taking advantage of zod's new `meta` feature too to improve parameter names:
 
 ```ts
-import * as zod from 'zod' // zod v4!
+import {z} from 'zod/v4' // or import {z} from 'zod' if you have the v4 beta installed
 
-const cli = createCli({
-  router: myRouter,
-  zod,
-})
-```
-
-And that's it! Everything else will *just work*. You can start taking advantage of zod's new `meta` feature too to improve parameter names:
-
-```ts
 const myRouter = t.router({
   createFile: t.procedure
     .input(
@@ -569,6 +560,8 @@ const myRouter = t.router({
     }),
 })
 ```
+
+Once zod v4 is stable, the `zod-validation-error` and `zod-to-json-schema` dependencies may be dropped from this library, since they are built into zod v4.
 
 ### arktype
 
