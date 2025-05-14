@@ -194,7 +194,7 @@ export type Dependencies = {
    */
   zod?: {
     prettifyError?: (error: never) => string
-    toJSONSchema?: (schema: never) => {}
+    toJSONSchema?: (schema: never, options: Record<string, unknown>) => {}
     string: () => {}
   }
   '@valibot/to-json-schema'?: {

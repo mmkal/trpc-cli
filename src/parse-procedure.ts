@@ -430,22 +430,23 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 const getJsonSchemaConverters = (dependencies: Dependencies) => {
   return {
     zod: (input: unknown) => {
-      if (dependencies.zod?.toJSONSchema) {
-        const toJSONSchema = dependencies.zod.toJSONSchema as typeof import('zod4').toJSONSchema
-        // zod4 has toJSONSchema built in.
-        const converted = toJSONSchema(input as never, {
+      // @ts-expect-error don't worry lots of ?.
+      if (input._zod?.version?.major == 4) {
+        const zod4 = dependencies.zod as {} as typeof import('zod4')
+        if (!zod4?.toJSONSchema) throw new Error('zod v4 schema encountered but zod v4 not passed as a dependency')
+
+        return zod4.toJSONSchema(input as never, {
           // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
           pipes: 'input',
+          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          unrepresentable: 'any',
           // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           override: ctx => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
               ctx.jsonSchema.$zod = {optional: true}
             }
           },
-          unrepresentable: 'any',
-        })
-
-        return converted as JSONSchema7
+        }) as JSONSchema7
       }
       return zodToJsonSchema(input as never) as JSONSchema7
     },
