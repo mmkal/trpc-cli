@@ -17,6 +17,10 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ No config needed. Run on an existing router with `npx trpc-cli src/your-router.ts`
 
+```sh
+npm install trpc-cli@next
+```
+
 ---
 
 ## Contents
