@@ -1,5 +1,6 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
+import * as zod4 from 'zod/v4/core'
 import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
@@ -432,12 +433,9 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
     zod: (input: unknown) => {
       // @ts-expect-error don't worry lots of ?.
       if (input._zod?.version?.major == 4) {
-        const zod4 = dependencies.zod as {} as typeof import('zod4')
-        if (!zod4?.toJSONSchema) throw new Error('zod v4 schema encountered but zod v4 not passed as a dependency')
-
         return zod4.toJSONSchema(input as never, {
           // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
-          pipes: 'input',
+          io: 'input',
           // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           unrepresentable: 'any',
           // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed

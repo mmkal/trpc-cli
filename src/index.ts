@@ -3,6 +3,7 @@ import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
 import {type ZodError as Zod3Error} from 'zod'
+import {type $ZodError as Zod4Error, prettifyError as zod4PrettifyError} from 'zod/v4/core'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
@@ -18,7 +19,7 @@ import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
 import {promptify} from './prompts'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {Dependencies, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
+import {TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
 
 export * from './types'
@@ -415,7 +416,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
           const procedure = procedureEntriesMap.get(procedurePath)
-          throw transformError(err, command, procedure?.procedure?._def.inputs || [], params)
+          throw transformError(err, command, procedure?.procedure?._def.inputs || [])
         })
         command.__result = result
         if (result != null) logger.info?.(result)
@@ -573,9 +574,7 @@ function kebabCase(propName: string) {
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-function transformError(err: unknown, command: Command, procedureInputs: unknown[], dependencies: Dependencies) {
-  type Zod4Error = never // this will import from zod/v4 in future
-  const zod4PrettifyError = dependencies?.zod?.prettifyError
+function transformError(err: unknown, command: Command, procedureInputs: unknown[]) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error(
       'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
