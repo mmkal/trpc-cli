@@ -456,7 +456,7 @@ test('record input', async () => {
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: Validation error
-      - Expected number, received string at "--foo"
+      - Expected number, received string at "foo"
   `)
 })
 
