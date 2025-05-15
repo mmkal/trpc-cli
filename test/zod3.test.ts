@@ -85,8 +85,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid enum value. Expected 'aa' | 'bb', received 'cc'
+      Caused by: CliValidationError: ✖ Invalid enum value. Expected 'aa' | 'bb', received 'cc'
   `)
 })
 
@@ -115,8 +114,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected boolean, received string
+      Caused by: CliValidationError: ✖ Expected boolean, received string
   `)
 })
 
@@ -162,8 +160,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid literal value, expected 2
+      Caused by: CliValidationError: ✖ Invalid literal value, expected 2
   `)
 })
 
@@ -200,8 +197,7 @@ test('regex input', async () => {
   // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Invalid
+      Caused by: CliValidationError: ✖ Invalid
   `)
 })
 
@@ -387,8 +383,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 1
+      Caused by: CliValidationError: ✖ Expected number, received string → at [1]
   `)
 })
 
@@ -401,8 +396,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at index 0
+      Caused by: CliValidationError: ✖ Expected number, received string → at [0]
   `)
 })
 
@@ -418,8 +412,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected boolean, received string at index 1
+      Caused by: CliValidationError: ✖ Expected boolean, received string → at [1]
   `)
 })
 
@@ -455,8 +448,7 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Validation error
-      - Expected number, received string at "foo"
+      Caused by: CliValidationError: ✖ Expected number, received string → at foo
   `)
 })
 

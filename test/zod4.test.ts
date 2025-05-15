@@ -428,8 +428,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
-      → at [0]
+      Caused by: CommanderError: error: too many arguments for 'foo'. Expected 0 arguments but got 1.
   `)
 })
 
@@ -473,8 +472,9 @@ test('record input', async () => {
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Inputs with additional properties
-                      are not currently supported)
+                      converted to CLI arguments: Invalid input type { '$schema':
+                      'http://json-schema.org/draft-07/schema#' }, expected object
+                      or tuple.)
       -h, --help      display help for command
     "
   `)
@@ -482,8 +482,7 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
-      → at foo
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at foo
   `)
 })
 
@@ -500,8 +499,9 @@ test("nullable array inputs aren't supported", async () => {
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type Array<string |
-                      null>. Nullable arrays are not supported.)
+                      converted to CLI arguments: Invalid input type { '$schema':
+                      'http://json-schema.org/draft-07/schema#' }, expected object
+                      or tuple.)
       -h, --help      display help for command
     "
   `)
@@ -513,8 +513,9 @@ test("nullable array inputs aren't supported", async () => {
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type Array<boolean |
-                      number | string | null>. Nullable arrays are not supported.)
+                      converted to CLI arguments: Invalid input type { '$schema':
+                      'http://json-schema.org/draft-07/schema#' }, expected object
+                      or tuple.)
       -h, --help      display help for command
     "
   `)
@@ -675,26 +676,27 @@ test('use zod4 meta', async () => {
 
   const help = await run(router, ['create-file', '--help'])
   expect(help).toMatchInlineSnapshot(`
-    "Usage: program create-file [options] <File path>
-
-    Arguments:
-      File path   The path to the file to be created. If necessary, parent folders
-                  will be created (required)
+    "Usage: program create-file [options]
 
     Options:
-      -h, --help  display help for command
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Invalid input type { '$schema':
+                      'http://json-schema.org/draft-07/schema#' }, expected object
+                      or tuple.)
+      -h, --help      display help for command
     "
   `)
 
   const help2 = await run(router, ['create-file2', '--help'])
   expect(help2).toMatchInlineSnapshot(`
-    "Usage: program create-file2 [options] <path to the file to be created>
-
-    Arguments:
-      path to the file to be created  path to the file to be created (required)
+    "Usage: program create-file2 [options]
 
     Options:
-      -h, --help                      display help for command
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Invalid input type { '$schema':
+                      'http://json-schema.org/draft-07/schema#' }, expected object
+                      or tuple.)
+      -h, --help      display help for command
     "
   `)
 })

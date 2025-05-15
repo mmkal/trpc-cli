@@ -75,7 +75,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected ("aa" | "bb") but received "cc"
+      Caused by: CliValidationError: ✖ Invalid type: Expected ("aa" | "bb") but received "cc"
   `)
 })
 
@@ -104,7 +104,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected boolean but received "a"
+      Caused by: CliValidationError: ✖ Invalid type: Expected boolean but received "a"
   `)
 })
 
@@ -182,7 +182,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected 2 but received 3
+      Caused by: CliValidationError: ✖ Invalid type: Expected 2 but received 3
   `)
 })
 
@@ -247,7 +247,7 @@ test('regex input', async () => {
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid format: Expected /hello/ but received "goodbye xyz"
+      Caused by: CliValidationError: ✖ Invalid format: Expected /hello/ but received "goodbye xyz"
   `)
 })
 
@@ -452,7 +452,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected number but received "bad"
+      Caused by: CliValidationError: ✖ Invalid type: Expected number but received "bad" → at [1]
   `)
 })
 
@@ -494,7 +494,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Invalid type: Expected boolean but received "bad"
+      Caused by: CliValidationError: ✖ Invalid type: Expected boolean but received "bad" → at [1]
   `)
 })
 
