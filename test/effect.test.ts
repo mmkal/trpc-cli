@@ -40,7 +40,8 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: Expected "aa", actual "cc"
+      Caused by: CliValidationError: ✖ Expected "aa", actual "cc"
+    ✖ Expected "bb", actual "cc"
   `)
 })
 

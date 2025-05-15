@@ -168,8 +168,7 @@ test('cli divide', async () => {
 test('cli divide failure', async () => {
   const output = await tsx('calculator', ['divide', '8', '0'])
   expect(output).toMatchInlineSnapshot(`
-    "Validation error
-      - Invalid input at index 1
+    "✖ Invalid input → at [1]
 
     Usage: calculator divide [options] <numerator> <denominator>
 
@@ -442,8 +441,7 @@ test('fs copy', async () => {
 
   // invalid enum value:
   expect(await tsx('fs', ['diff', 'one', 'fileNotFound'])).toMatchInlineSnapshot(`
-    "Validation error
-      - Invalid enum value. Expected 'one' | 'two' | 'three' | 'four', received 'fileNotFound' at index 1
+    "✖ Invalid enum value. Expected 'one' | 'two' | 'three' | 'four', received 'fileNotFound' → at [1]
 
     Usage: fs diff [options] <Base path> <Head path>
 
