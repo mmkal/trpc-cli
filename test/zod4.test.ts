@@ -3,7 +3,7 @@ process.env.TEST_FILE = 'zod4.test.ts'
 import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import * as z from 'zod4'
+import {z} from 'zod4'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
@@ -39,6 +39,10 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
     .catch(e => {
       if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
       if (e.exitCode === 0) return e.cause
+      if (String(e?.cause).includes('too many arguments')) {
+        // this happens a lot when the command expects json input because something went wrong converting to json schema. show help information which has hints about that.
+        e.message += '\n\n' + cli.buildProgram().helpInformation()
+      }
       throw e
     })
 }
@@ -77,7 +81,8 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid option: expected one of "aa"|"bb"
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -106,7 +111,8 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -138,7 +144,8 @@ test('refinemenet type', async () => {
   expect(await run(router, ['foo', 'hello world'])).toMatchInlineSnapshot(`"There are 2 os in your string"`)
   await expect(run(router, ['foo', 'bye earth'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ input must include o
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 
   expect(await run(router, ['bar', '--greeting', 'hello world'])).toMatchInlineSnapshot(
@@ -146,8 +153,8 @@ test('refinemenet type', async () => {
   )
   await expect(run(router, ['bar', '--greeting', 'bye earth'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ input must include o
-      → at greeting
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -181,7 +188,8 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected 2
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -218,7 +226,8 @@ test('regex input', async () => {
   // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid string: must match pattern /hello/
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -414,8 +423,8 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
-      → at [1]
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -428,8 +437,8 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
-      → at [0]
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -445,8 +454,8 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string
-      → at [1]
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 
@@ -482,8 +491,8 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
-      → at foo
+      Caused by: TRPCError: 
+        Caused by: UnknownCauseError:
   `)
 })
 

@@ -50,6 +50,7 @@ export {AnyRouter, AnyProcedure} from './trpc-compat'
 export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
     const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], {
+      zod: params.zod,
       '@valibot/to-json-schema': params['@valibot/to-json-schema'],
       effect: params.effect,
     })
