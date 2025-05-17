@@ -46,8 +46,8 @@ importers:
         specifier: 2.4.9
         version: 2.4.9
       '@valibot/to-json-schema':
-        specifier: 1.1.0
-        version: 1.1.0(valibot@1.1.0(typescript@5.8.3))
+        specifier: 1.2.0
+        version: 1.2.0(valibot@1.1.0(typescript@5.8.3))
       arktype:
         specifier: 2.1.9
         version: 2.1.9
@@ -1252,8 +1252,8 @@ packages:
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
 
-  '@valibot/to-json-schema@1.1.0':
-    resolution: {integrity: sha512-vpF5NKL5MmqbVVFzp3Z6CuoaYXJB75QxmW+tJNnng9UVUx9Yx+FVCyEm1kIWr05EzkuPI0b/EbVWIs25UL9mNQ==}
+  '@valibot/to-json-schema@1.2.0':
+    resolution: {integrity: sha512-vNPg/esuEAUFaJoyNdnKLEIIRL0LndRyFD3eJR2itwLGr3hH3X8q17Yo84dkyDfZBR8WetHto/5K2OYlyQUUYQ==}
     peerDependencies:
       valibot: ^1.1.0
 
@@ -5197,7 +5197,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@valibot/to-json-schema@1.1.0(valibot@1.1.0(typescript@5.8.3))':
+  '@valibot/to-json-schema@1.2.0(valibot@1.1.0(typescript@5.8.3))':
     dependencies:
       valibot: 1.1.0(typescript@5.8.3)
 
