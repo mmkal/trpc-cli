@@ -2,6 +2,8 @@ name: deps-sync
 on:
   push:
     branches: [main, deps]
+  pull_request:
+    types: [edited]
 permissions:
   contents: write
   actions: write
@@ -11,4 +13,4 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - uses: mmkal/runovate@v1.0.1
+      - uses: mmkal/runovate@c223138d17039398427aa3c61ba7e32577ba369e

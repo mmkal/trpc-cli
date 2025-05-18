@@ -39,6 +39,10 @@ const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) 
     .catch(e => {
       if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
       if (e.exitCode === 0) return e.cause
+      if (String(e?.cause).includes('too many arguments')) {
+        // this happens a lot when the command expects json input because something went wrong converting to json schema. show help information which has hints about that.
+        e.message += '\n\n' + cli.buildProgram().helpInformation()
+      }
       throw e
     })
 }
@@ -146,8 +150,7 @@ test('refinemenet type', async () => {
   )
   await expect(run(router, ['bar', '--greeting', 'bye earth'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ input must include o
-      → at greeting
+      Caused by: CliValidationError: ✖ input must include o → at greeting
   `)
 })
 
@@ -414,8 +417,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
-      → at [1]
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at [1]
   `)
 })
 
@@ -428,8 +430,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
-      → at [0]
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at [0]
   `)
 })
 
@@ -445,8 +446,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string
-      → at [1]
+      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string → at [1]
   `)
 })
 
@@ -482,8 +482,7 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string
-      → at foo
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at foo
   `)
 })
 

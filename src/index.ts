@@ -3,7 +3,6 @@ import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
 import {type ZodError as Zod3Error} from 'zod'
-import {type $ZodError as Zod4Error, prettifyError as zod4PrettifyError} from 'zod/v4/core'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
@@ -18,6 +17,8 @@ import {
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
 import {promptify} from './prompts'
+import {prettifyStandardSchemaError} from './standard-schema/errors'
+import {looksLikeStandardSchemaFailure} from './standard-schema/utils'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
 import {TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
@@ -125,7 +126,6 @@ export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliPar
  */
 export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
   const procedureEntries = parseRouter({router, ...params})
-  const procedureEntriesMap = new Map(procedureEntries)
 
   function buildProgram(runParams?: TrpcCliRunParams) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
@@ -415,8 +415,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const caller = createCallerFactory(router)(params.context)
 
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-          const procedure = procedureEntriesMap.get(procedurePath)
-          throw transformError(err, command, procedure?.procedure?._def.inputs || [])
+          throw transformError(err, command)
         })
         command.__result = result
         if (result != null) logger.info?.(result)
@@ -574,7 +573,7 @@ function kebabCase(propName: string) {
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-function transformError(err: unknown, command: Command, procedureInputs: unknown[]) {
+function transformError(err: unknown, command: Command) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error(
       'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
@@ -583,13 +582,8 @@ function transformError(err: unknown, command: Command, procedureInputs: unknown
 
   if (looksLikeInstanceof<trpcServer11.TRPCError>(err, 'TRPCError')) {
     const cause = err.cause
-    const isZod4Input =
-      !!zod4PrettifyError &&
-      procedureInputs.length > 0 &&
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      procedureInputs.every(input => (input as any)._zod?.version?.major == 4)
-    if (err.code === 'BAD_REQUEST' && isZod4Input && looksLikeInstanceof<Zod4Error>(cause, 'ZodError')) {
-      const prettyMessage = zod4PrettifyError(cause)
+    if (looksLikeStandardSchemaFailure(cause)) {
+      const prettyMessage = prettifyStandardSchemaError(cause)
       return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
     }
 

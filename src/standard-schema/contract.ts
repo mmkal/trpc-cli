@@ -1,4 +1,4 @@
-// copied from https://github.com/standard-schema/standard-schema/tree/main/README.md
+// from https://github.com/standard-schema/standard-schema
 
 /** The Standard Schema interface. */
 export interface StandardSchemaV1<Input = unknown, Output = Input> {
