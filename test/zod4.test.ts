@@ -81,8 +81,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid option: expected one of "aa"|"bb"
   `)
 })
 
@@ -111,8 +110,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string
   `)
 })
 
@@ -144,8 +142,7 @@ test('refinemenet type', async () => {
   expect(await run(router, ['foo', 'hello world'])).toMatchInlineSnapshot(`"There are 2 os in your string"`)
   await expect(run(router, ['foo', 'bye earth'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ input must include o
   `)
 
   expect(await run(router, ['bar', '--greeting', 'hello world'])).toMatchInlineSnapshot(
@@ -153,8 +150,7 @@ test('refinemenet type', async () => {
   )
   await expect(run(router, ['bar', '--greeting', 'bye earth'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ input must include o → at greeting
   `)
 })
 
@@ -188,8 +184,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected 2
   `)
 })
 
@@ -226,8 +221,7 @@ test('regex input', async () => {
   // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid string: must match pattern /hello/
   `)
 })
 
@@ -423,8 +417,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at [1]
   `)
 })
 
@@ -437,8 +430,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at [0]
   `)
 })
 
@@ -454,8 +446,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string → at [1]
   `)
 })
 
@@ -491,8 +482,7 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: TRPCError: 
-        Caused by: UnknownCauseError:
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at foo
   `)
 })
 
