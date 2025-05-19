@@ -2,9 +2,7 @@
 import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
-import {type ZodError as Zod3Error} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
-import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
 import {
@@ -25,7 +23,7 @@ import {looksLikeInstanceof} from './util'
 
 export * from './types'
 
-export {z} from 'zod'
+export {z} from 'zod/v4'
 export * as zod from 'zod'
 
 export * as trpcServer from '@trpc/server'
@@ -52,7 +50,6 @@ export {AnyRouter, AnyProcedure} from './trpc-compat'
 export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
     const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], {
-      zod: params.zod,
       '@valibot/to-json-schema': params['@valibot/to-json-schema'],
       effect: params.effect,
     })
@@ -586,16 +583,6 @@ function transformError(err: unknown, command: Command) {
     if (looksLikeStandardSchemaFailure(cause)) {
       const prettyMessage = prettifyStandardSchemaError(cause)
       return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
-    }
-
-    // if it's a ZodError that's not zod4, let's assume it's zod3
-    if (err.code === 'BAD_REQUEST' && looksLikeInstanceof<Zod3Error>(cause, 'ZodError')) {
-      const validationError = zodValidationError.fromError(cause, {
-        prefixSeparator: '\n  - ',
-        issueSeparator: '\n  - ',
-      })
-
-      return new CliValidationError(validationError.message + '\n\n' + command.helpInformation())
     }
 
     if (

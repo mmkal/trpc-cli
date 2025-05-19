@@ -52,7 +52,7 @@ test('override of process.exit and pass in bad option', async () => {
   )
   expect(result.exitCode).toBe(1)
   expect(result.cause).toMatchInlineSnapshot(`
-    [Error: ✖ Expected number, received string → at bar
+    [Error: ✖ Invalid input: expected number, received string → at bar
 
     Usage: program foo [options]
 

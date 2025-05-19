@@ -24,14 +24,11 @@ importers:
         specifier: ^1.0.1
         version: 1.1.1
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.25.3
         version: 3.25.4
       zod-to-json-schema:
         specifier: ^3.23.0
         version: 3.24.5(zod@3.25.4)
-      zod-validation-error:
-        specifier: ^3.3.0
-        version: 3.4.1(zod@3.25.4)
     devDependencies:
       '@inquirer/prompts':
         specifier: 7.5.1
@@ -102,9 +99,6 @@ importers:
       vitest:
         specifier: 3.1.4
         version: 3.1.4(@types/node@20.17.48)
-      zod4:
-        specifier: npm:zod@4.0.0-beta.20250414T061543
-        version: zod@4.0.0-beta.20250414T061543
 
 packages:
 
@@ -1285,9 +1279,6 @@ packages:
 
   '@vitest/utils@3.1.4':
     resolution: {integrity: sha512-yriMuO1cfFhmiGc8ataN51+9ooHRuURdfAZfwFd3usWynjzpLslZdYnRegTv32qdgtJTsj15FoeZe2g15fY1gg==}
-
-  '@zod/core@0.5.0':
-    resolution: {integrity: sha512-9EW5fOng5558DM68WmVtecPzHuROdB5AcBVOBVqtPIup1quYRxxzwzT9+BPNX5Pr+so0wP/Hxv8+pCrBbjKQeg==}
 
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
@@ -4011,17 +4002,8 @@ packages:
     peerDependencies:
       zod: ^3.24.1
 
-  zod-validation-error@3.4.1:
-    resolution: {integrity: sha512-1KP64yqDPQ3rupxNv7oXhf7KdhHHgaqbKuspVoiN93TT0xrBjql+Svjkdjq/Qh/7GSMmgQs3AfvBT0heE35thw==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      zod: ^3.24.4
-
   zod@3.25.4:
     resolution: {integrity: sha512-7zz8qNtVv37yCd8OeUW37PMXrR0K/zg+6vw+Z2FJ2+oozVdRbFKldkCoqxd9nJflDrx2ZkjUJrPF2DMj+L4pBQ==}
-
-  zod@4.0.0-beta.20250414T061543:
-    resolution: {integrity: sha512-1X7/cVHAWBt9jEIIg2Q2GFEApZy1VYe+YBxsjwVMmDZfMvn09CylsKLGZtfjZ/cwYrJha0OIWOh+MouaOj3Zdg==}
 
 snapshots:
 
@@ -5240,8 +5222,6 @@ snapshots:
       '@vitest/pretty-format': 3.1.4
       loupe: 3.1.3
       tinyrainbow: 2.0.0
-
-  '@zod/core@0.5.0': {}
 
   acorn-jsx@5.3.2(acorn@8.14.1):
     dependencies:
@@ -8317,12 +8297,4 @@ snapshots:
     dependencies:
       zod: 3.25.4
 
-  zod-validation-error@3.4.1(zod@3.25.4):
-    dependencies:
-      zod: 3.25.4
-
   zod@3.25.4: {}
-
-  zod@4.0.0-beta.20250414T061543:
-    dependencies:
-      '@zod/core': 0.5.0

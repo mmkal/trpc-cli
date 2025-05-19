@@ -1,5 +1,6 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
+import * as zod4 from 'zod/v4/core'
 import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
@@ -431,16 +432,8 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
   return {
     zod: (input: unknown) => {
       // @ts-expect-error don't worry lots of ?.
-      const zodVersion = input?._zod?.version as {major: number} | undefined
-      // 0.5.0 is weirdly the version an old version of zod4 used
-      if (zodVersion?.major == 4 || (zodVersion && Object.values(zodVersion).join('.') === '0.5.0')) {
-        const zod4 = dependencies.zod as {} as typeof import('zod4')
-        if (!zod4?.toJSONSchema) throw new Error('zod v4 schema encountered but zod v4 not passed as a dependency')
-
+      if (input._zod?.version?.major == 4) {
         return zod4.toJSONSchema(input as never, {
-          // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
-          pipes: 'input',
-          // @ts-expect-error future proof an api change. i probably adopted zod 4 a bit too early.
           // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
           io: 'input',
           // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
