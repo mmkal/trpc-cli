@@ -24,14 +24,14 @@ importers:
         specifier: ^1.0.1
         version: 1.1.1
       zod:
-        specifier: 3.25.0-beta.20250514T200757
-        version: 3.25.0-beta.20250514T200757
+        specifier: ^3.25.3
+        version: 3.25.3
       zod-to-json-schema:
         specifier: ^3.23.0
-        version: 3.24.5(zod@3.25.0-beta.20250514T200757)
+        version: 3.24.5(zod@3.25.3)
       zod-validation-error:
         specifier: ^3.3.0
-        version: 3.4.0(zod@3.25.0-beta.20250514T200757)
+        version: 3.4.0(zod@3.25.3)
     devDependencies:
       '@inquirer/prompts':
         specifier: 7.5.0
@@ -4020,11 +4020,8 @@ packages:
     peerDependencies:
       zod: ^3.18.0
 
-  zod@3.24.4:
-    resolution: {integrity: sha512-OdqJE9UDRPwWsrHjLN2F8bPxvwJBK22EHLWtanu0LSYr5YqzsaaW3RMgmjwr8Rypg5k+meEJdSPXJZXE/yqOMg==}
-
-  zod@3.25.0-beta.20250514T200757:
-    resolution: {integrity: sha512-b1wDWBCPYu7iGXoH+xSFqkuHAx6myrvpei34ZRQZZ4omKf7RutL7QSowGl/A2j40tDqPXwqgtM38XOtdqCGesQ==}
+  zod@3.25.3:
+    resolution: {integrity: sha512-VGZqnyYNrl8JpEJRZaFPqeVNIuqgXNu4cXZ5cOb6zEUO1OxKbRnWB4UdDIXMmiERWncs0yDQukssHov8JUxykQ==}
 
 snapshots:
 
@@ -7564,7 +7561,7 @@ snapshots:
       quick-lru: 7.0.0
       url-join: 5.0.0
       validate-npm-package-name: 5.0.1
-      zod: 3.24.4
+      zod: 3.25.3
       zod-package-json: 1.0.3
 
   query-string@9.0.0:
@@ -8315,16 +8312,14 @@ snapshots:
 
   zod-package-json@1.0.3:
     dependencies:
-      zod: 3.24.4
+      zod: 3.25.3
 
-  zod-to-json-schema@3.24.5(zod@3.25.0-beta.20250514T200757):
+  zod-to-json-schema@3.24.5(zod@3.25.3):
     dependencies:
-      zod: 3.25.0-beta.20250514T200757
+      zod: 3.25.3
 
-  zod-validation-error@3.4.0(zod@3.25.0-beta.20250514T200757):
+  zod-validation-error@3.4.0(zod@3.25.3):
     dependencies:
-      zod: 3.25.0-beta.20250514T200757
+      zod: 3.25.3
 
-  zod@3.24.4: {}
-
-  zod@3.25.0-beta.20250514T200757: {}
+  zod@3.25.3: {}
