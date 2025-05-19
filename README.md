@@ -563,7 +563,7 @@ const myRouter = t.router({
 
 If you `import {z} from 'trpc-cli'` - note that it is a re-export of `zod/v4`.
 
-Once zod v4 is more widely adopted, the `zod-to-json-schema` dependencies may be dropped from this library, since json-schema conversion is built into zod v4.
+Once zod v4 is more widely adopted, the `zod-to-json-schema` dependency may be dropped from this library, since json-schema conversion is built into zod v4.
 
 ### arktype
 
