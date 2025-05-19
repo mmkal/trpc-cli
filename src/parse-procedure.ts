@@ -1,5 +1,6 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
+import * as zod4 from 'zod/v4/core'
 import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
@@ -220,7 +221,12 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
       optionsJsonSchema: {
         allOf: parsedIndividually.map(p => {
           const successful = p as Extract<typeof p, {success: true}>
-          return successful.value.optionsJsonSchema
+          const optionsSchema = successful.value.optionsJsonSchema
+          if ('additionalProperties' in optionsSchema && optionsSchema.additionalProperties === false) {
+            const {additionalProperties, ...rest} = optionsSchema
+            return rest
+          }
+          return optionsSchema
         }),
       },
       getPojoInput: argv => argv.options,
@@ -426,22 +432,20 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 const getJsonSchemaConverters = (dependencies: Dependencies) => {
   return {
     zod: (input: unknown) => {
-      if (dependencies.zod?.toJSONSchema) {
-        const toJSONSchema = dependencies.zod.toJSONSchema as typeof import('zod4').toJSONSchema
-        // zod4 has toJSONSchema built in.
-        const converted = toJSONSchema(input as never, {
+      // @ts-expect-error don't worry lots of ?.
+      if (input._zod?.version?.major == 4) {
+        return zod4.toJSONSchema(input as never, {
           // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
-          pipes: 'input',
+          io: 'input',
+          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          unrepresentable: 'any',
           // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           override: ctx => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
               ctx.jsonSchema.$zod = {optional: true}
             }
           },
-          unrepresentable: 'any',
-        })
-
-        return converted as JSONSchema7
+        }) as JSONSchema7
       }
       return zodToJsonSchema(input as never) as JSONSchema7
     },

@@ -328,7 +328,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L53)
+#### [createCli](./src/index.ts#L125)
 
 Run a trpc router as a CLI.
 
@@ -542,20 +542,11 @@ Zod support is built-in, including the `zod-to-json-schema` conversion helper. Y
 
 #### zod v4
 
-You can use zod v4 right now, but you'll need to pass it in to `createCli` so that trpc-cli knows how to format errors and parse your router's inputs:
+You can use zod v4 right now! You can start taking advantage of zod's new `meta` feature too to improve parameter names:
 
 ```ts
-import * as zod from 'zod' // zod v4!
+import {z} from 'zod/v4' // or import {z} from 'zod' if you have the v4 beta installed
 
-const cli = createCli({
-  router: myRouter,
-  zod,
-})
-```
-
-And that's it! Everything else will *just work*. You can start taking advantage of zod's new `meta` feature too to improve parameter names:
-
-```ts
 const myRouter = t.router({
   createFile: t.procedure
     .input(
@@ -569,6 +560,10 @@ const myRouter = t.router({
     }),
 })
 ```
+
+If you `import {z} from 'trpc-cli'` - note that it is a re-export of `zod/v4`.
+
+Once zod v4 is more widely adopted, the `zod-to-json-schema` dependency may be dropped from this library, since json-schema conversion is built into zod v4.
 
 ### arktype
 
@@ -1134,8 +1129,7 @@ All dependencies have zero dependencies of their own, so the dependency tree is 
 - [@trpc/server](https://npmjs.com/package/@trpc/server) for the trpc router
 - [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
 - [zod](https://npmjs.com/package/zod) for input validation, included for convenience
-- [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod schemas to make them easier to recurse and format help text from
-- [zod-validation-error](https://npmjs.com/package/zod-validation-error) to make bad inputs have readable error messages
+- [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod v3 schemas into a standard, inspectable format
 
 `zod` and `@tprc/server` are included as dependencies for convenience, but you can use your own separate installations if you prefer. Zod 3+ and @trpc/server 10 and 11, have been tested. It should work with most versions of zod.
 

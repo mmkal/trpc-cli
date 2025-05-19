@@ -1,6 +1,6 @@
 {
   "name": "trpc-cli",
-  "version": "0.6.0-14",
+  "version": "0.6.0",
   "description": "Turn a tRPC router into a type-safe, fully-functional, documented CLI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +11,7 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@10.6.5",
+  "packageManager": "pnpm@10.11.0",
   "scripts": {
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
@@ -51,11 +51,10 @@
   "dependencies": {
     "@trpc/server": "^11.1.1",
     "@types/omelette": "^0.4.4",
-    "commander": "^13.1.0",
+    "commander": "^14.0.0",
     "picocolors": "^1.0.1",
-    "zod": "^3.24.2",
-    "zod-to-json-schema": "^3.23.0",
-    "zod-validation-error": "^3.3.0"
+    "zod": "^3.25.3",
+    "zod-to-json-schema": "^3.23.0"
   },
   "pnpm": {
     "overrides": {
@@ -63,29 +62,28 @@
     }
   },
   "devDependencies": {
-    "@inquirer/prompts": "7.5.0",
+    "@inquirer/prompts": "7.5.1",
     "@types/json-schema": "7.0.15",
-    "@types/node": "20.17.27",
+    "@types/node": "20.17.48",
     "@types/prompts": "2.4.9",
-    "@valibot/to-json-schema": "1.0.0",
-    "arktype": "2.1.20",
-    "effect": "3.14.2",
+    "@valibot/to-json-schema": "1.2.0",
+    "arktype": "2.1.9",
+    "effect": "3.15.2",
     "enquirer": "2.4.1",
     "eslint": "8",
     "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb",
     "execa": "9.3.1",
-    "expect-type": "1.2.0",
+    "expect-type": "1.2.1",
     "fs-syncer": "0.5.3",
     "np": "10.2.0",
-    "pkg-pr-new": "^0.0.41",
+    "pkg-pr-new": "^0.0.50",
     "prompts": "2.4.2",
     "strip-ansi": "7.1.0",
     "trpcserver10": "npm:@trpc/server@^10.45.2",
     "trpcserver11": "npm:@trpc/server@^11.1.1",
-    "tsx": "4.19.3",
-    "typescript": "5.8.2",
-    "valibot": "1.0.0",
-    "vitest": "3.0.9",
-    "zod4": "npm:zod@4.0.0-beta.20250414T061543"
+    "tsx": "4.19.4",
+    "typescript": "5.8.3",
+    "valibot": "1.1.0",
+    "vitest": "3.1.4"
   }
 }

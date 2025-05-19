@@ -2,9 +2,7 @@
 import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
-import {ZodError} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
-import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
 import {
@@ -17,13 +15,15 @@ import {
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
 import {promptify} from './prompts'
+import {prettifyStandardSchemaError} from './standard-schema/errors'
+import {looksLikeStandardSchemaFailure} from './standard-schema/utils'
 import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {Dependencies, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
-import {looksLikeInstanceof, looksLikeStandardSchemaFailureResult} from './util'
+import {TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
+import {looksLikeInstanceof} from './util'
 
 export * from './types'
 
-export {z} from 'zod'
+export {z} from 'zod/v4'
 export * as zod from 'zod'
 
 export * as trpcServer from '@trpc/server'
@@ -43,17 +43,13 @@ export class Command extends BaseCommand {
 export {AnyRouter, AnyProcedure} from './trpc-compat'
 
 /**
- * Run a trpc router as a CLI.
- *
- * @param router A trpc router
- * @param context The context to use when calling the procedures - needed if your router requires a context
- * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
- * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+ * @internal takes a trpc router and returns an object that you **could** use to build a CLI, or UI, or a bunch of other things with.
+ * Officially, just internal for building a CLI. GLHF.
  */
-export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
+// todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
+export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
   const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
     const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], {
-      zod: params.zod,
       '@valibot/to-json-schema': params['@valibot/to-json-schema'],
       effect: params.effect,
     })
@@ -78,6 +74,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         {
           name: procedurePath,
           procedure,
+          meta: getMeta(procedure),
           procedureInputs: {
             positionalParameters: [],
             optionsJsonSchema: {
@@ -103,13 +100,30 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const procedureInputs = procedureInputsResult.value
     const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
 
-    const result = [procedurePath, {name: procedurePath, procedure, procedureInputs, incompatiblePairs, type}] as const
+    const result = [
+      procedurePath,
+      {name: procedurePath, meta: getMeta(procedure), procedureInputs, incompatiblePairs, type, procedure},
+    ] as const
     return result
   })
 
   const procedureEntries = procedures.flatMap(([k, v]) => {
     return typeof v === 'string' ? [] : [[k, v] as const]
   })
+
+  return procedureEntries
+}
+
+/**
+ * Run a trpc router as a CLI.
+ *
+ * @param router A trpc router
+ * @param context The context to use when calling the procedures - needed if your router requires a context
+ * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
+ * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+ */
+export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
+  const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
@@ -136,7 +150,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const configureCommand = (
       command: Command,
       procedurePath: string,
-      {procedure, procedureInputs, incompatiblePairs}: (typeof procedureEntries)[0][1],
+      {meta, procedureInputs, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
       const optionJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
       command.exitOverride(ec => {
@@ -152,8 +166,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         },
       })
       command.showHelpAfterError()
-
-      const meta = getMeta(procedure)
 
       if (meta.usage) command.usage([meta.usage].flat().join('\n'))
       if (meta.examples) command.addHelpText('after', `\nExamples:\n${[meta.examples].flat().join('\n')}`)
@@ -401,7 +413,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const caller = createCallerFactory(router)(params.context)
 
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-          throw transformError(err, command, params)
+          throw transformError(err, command)
         })
         command.__result = result
         if (result != null) logger.info?.(result)
@@ -439,7 +451,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       parentCommand.addCommand(leafCommand)
 
       // Check if this command should be the default for its parent
-      const meta = getMeta(commandConfig.procedure)
+      const meta = commandConfig.meta
       if (meta.default === true) {
         // the parent will pass on its args straight to the child, which will validate them. the parent just blindly accepts anything.
         parentCommand.allowExcessArguments()
@@ -493,7 +505,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
   }
 
   const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams)) => {
-    if (!looksLikeInstanceof(program, Command)) throw new Error(`program is not a Command instance`)
+    if (!looksLikeInstanceof<Command>(program, 'Command')) throw new Error(`program is not a Command instance`)
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
     const argv = [...(runParams?.argv || process.argv)]
 
@@ -559,48 +571,18 @@ function kebabCase(propName: string) {
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-function transformError(err: unknown, command: Command, dependencies: Dependencies) {
+function transformError(err: unknown, command: Command) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error(
       'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
     )
   }
-  if (looksLikeInstanceof(err, trpcServer11.TRPCError)) {
+
+  if (looksLikeInstanceof<trpcServer11.TRPCError>(err, 'TRPCError')) {
     const cause = err.cause
-    if (err.code === 'BAD_REQUEST' && dependencies.zod?.prettifyError && looksLikeStandardSchemaFailureResult(cause)) {
-      // looks like zod 4 which has a built in prettifier (although does it??? what if someone uses zod 4 for *most* of their procedures but arktype or whatever for others? the errors will look like standard-schema errors but we won't know if we should be using zod 4's prettifier)
-      try {
-        const prettyMessage = dependencies.zod.prettifyError(cause as never)
-        return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
-      } finally {
-        // cause.issues = originalIssues
-      }
-    }
-    if (err.code === 'BAD_REQUEST' && looksLikeInstanceof(cause, ZodError)) {
-      const originalIssues = cause.issues
-      try {
-        cause.issues = cause.issues.map(issue => {
-          if (typeof issue.path[0] !== 'string') return issue
-          return {
-            ...issue,
-            path: ['--' + issue.path[0], ...issue.path.slice(1)],
-          }
-        })
-
-        if (dependencies.zod?.prettifyError) {
-          const prettyMessage = dependencies.zod.prettifyError(cause as never)
-          return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
-        }
-
-        const validationError = zodValidationError.fromError(cause, {
-          prefixSeparator: '\n  - ',
-          issueSeparator: '\n  - ',
-        })
-
-        return new CliValidationError(validationError.message + '\n\n' + command.helpInformation())
-      } finally {
-        cause.issues = originalIssues
-      }
+    if (looksLikeStandardSchemaFailure(cause)) {
+      const prettyMessage = prettifyStandardSchemaError(cause)
+      return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
     }
 
     if (

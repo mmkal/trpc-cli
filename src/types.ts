@@ -186,17 +186,6 @@ export interface TrpcCli {
 
 // todo: allow these all to be async?
 export type Dependencies = {
-  /** A custom `zod` module to use for converting to JSON schema. Defaults to zod v3, which *doesn't* convert to JSON schema and generating readable error messages.
-   * Required when using zod v4 with (experimental) JSON schema output built-in.
-   *
-   * For zod v3 (the default), the `zod-to-json-schema` package is used for JSON schema output and
-   * `zod-validation-error` is used for readable error messages.
-   */
-  zod?: {
-    prettifyError?: (error: never) => string
-    toJSONSchema?: (schema: never) => {}
-    string: () => {}
-  }
   '@valibot/to-json-schema'?: {
     toJsonSchema: (input: unknown, options?: {errorMode?: 'throw' | 'ignore' | 'warn'}) => JSONSchema7
   }
