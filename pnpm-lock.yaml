@@ -25,10 +25,10 @@ importers:
         version: 1.1.1
       zod:
         specifier: ^3.25.3
-        version: 3.25.4
+        version: 3.25.6
       zod-to-json-schema:
         specifier: ^3.23.0
-        version: 3.24.5(zod@3.25.4)
+        version: 3.24.5(zod@3.25.6)
     devDependencies:
       '@inquirer/prompts':
         specifier: 7.5.1
@@ -4002,8 +4002,8 @@ packages:
     peerDependencies:
       zod: ^3.24.1
 
-  zod@3.25.4:
-    resolution: {integrity: sha512-7zz8qNtVv37yCd8OeUW37PMXrR0K/zg+6vw+Z2FJ2+oozVdRbFKldkCoqxd9nJflDrx2ZkjUJrPF2DMj+L4pBQ==}
+  zod@3.25.6:
+    resolution: {integrity: sha512-kA1wikWvfsP+z3L6mzUJJRQz1Y28BR0Bu/MTWeYbfaFJ8c+OLOt1Bb8d4V3Mk1480H+poPYG6BjS/I4kJ1U8WA==}
 
 snapshots:
 
@@ -7539,7 +7539,7 @@ snapshots:
       quick-lru: 7.0.0
       url-join: 5.0.0
       validate-npm-package-name: 5.0.1
-      zod: 3.25.4
+      zod: 3.25.6
       zod-package-json: 1.0.3
 
   query-string@9.0.0:
@@ -8291,10 +8291,10 @@ snapshots:
 
   zod-package-json@1.0.3:
     dependencies:
-      zod: 3.25.4
+      zod: 3.25.6
 
-  zod-to-json-schema@3.24.5(zod@3.25.4):
+  zod-to-json-schema@3.24.5(zod@3.25.6):
     dependencies:
-      zod: 3.25.4
+      zod: 3.25.6
 
-  zod@3.25.4: {}
+  zod@3.25.6: {}
