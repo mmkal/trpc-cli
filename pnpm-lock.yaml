@@ -49,7 +49,7 @@ importers:
         specifier: 1.2.0
         version: 1.2.0(valibot@1.1.0(typescript@5.8.3))
       arktype:
-        specifier: 2.1.20
+        specifier: ^2.1.20
         version: 2.1.20
       effect:
         specifier: 3.15.2
@@ -6076,7 +6076,7 @@ snapshots:
       eslint-config-xo: 0.46.0(eslint@8.57.1)(typescript@5.8.3)
       eslint-config-xo-react: 0.27.0(eslint-plugin-react-hooks@4.6.2(eslint@8.57.1))(eslint-plugin-react@7.34.1(eslint@8.57.1))(eslint@8.57.1)
       eslint-config-xo-typescript: 7.0.0(eslint@8.57.1)(typescript@5.8.3)
-      eslint-plugin-codegen: 0.30.0(eslint@8.57.1)
+      eslint-plugin-codegen: https://pkg.pr.new/mmkal/eslint-plugin-codegen@28(eslint@8.57.1)
       eslint-plugin-functional: 7.3.0(eslint@8.57.1)(typescript@5.8.3)
       eslint-plugin-import-x: 4.6.1(eslint@8.57.1)(typescript@5.8.3)
       eslint-plugin-jsx-a11y: 6.8.0(eslint@8.57.1)
