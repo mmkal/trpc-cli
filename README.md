@@ -328,7 +328,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L126)
+#### [createCli](./src/index.ts#L125)
 
 Run a trpc router as a CLI.
 
@@ -560,6 +560,8 @@ const myRouter = t.router({
     }),
 })
 ```
+
+If you `import {z} from 'trpc-cli'` - note that it is a re-export of `zod/v4`.
 
 Once zod v4 is more widely adopted, the `zod-to-json-schema` dependencies may be dropped from this library, since json-schema conversion is built into zod v4.
 
