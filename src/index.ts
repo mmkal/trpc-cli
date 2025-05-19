@@ -2,7 +2,6 @@
 import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
-import {type ZodError as Zod3Error} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
@@ -24,7 +23,7 @@ import {looksLikeInstanceof} from './util'
 
 export * from './types'
 
-export {z} from 'zod'
+export {z} from 'zod/v4'
 export * as zod from 'zod'
 
 export * as trpcServer from '@trpc/server'

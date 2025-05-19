@@ -1,7 +1,7 @@
 import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import {z} from 'zod'
+import {z} from 'zod/v3' // same as 'zod' but this is more explicit
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 

@@ -78,6 +78,8 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
       .filter(([k, vv]) => {
         if (k === 'default' || k === 'additionalProperties') return false
         if (k === 'type' && typeof vv === 'string') return depth > 0 // don't show type: string at depth 0, that's the default
+        if (k.startsWith('$')) return false // helpers props to add on to a few different external library output formats
+        if (k === 'maximum' && vv === Number.MAX_SAFE_INTEGER) return false // zod adds this for `z.number().int().positive()`
         if (depth <= 1 && k === 'enum' && getEnumChoices(v)?.type === 'string_enum') return false // don't show Enum: ["a","b"], that's handled by commander's `choices`
         return true
       })

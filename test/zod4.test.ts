@@ -1,9 +1,7 @@
-process.env.TEST_FILE = 'zod4.test.ts'
-
 import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import * as z from 'zod/v4'
+import {z} from 'zod/v4'
 import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
