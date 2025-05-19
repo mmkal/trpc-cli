@@ -29,9 +29,6 @@ importers:
       zod-to-json-schema:
         specifier: ^3.23.0
         version: 3.24.5(zod@3.25.3)
-      zod-validation-error:
-        specifier: ^3.3.0
-        version: 3.4.0(zod@3.25.3)
     devDependencies:
       '@inquirer/prompts':
         specifier: 7.5.0
@@ -4013,12 +4010,6 @@ packages:
     resolution: {integrity: sha512-/AuWwMP+YqiPbsJx5D6TfgRTc4kTLjsh5SOcd4bLsfUg2RcEXrFMJl1DGgdHy2aCfsIA/cr/1JM0xcB2GZji8g==}
     peerDependencies:
       zod: ^3.24.1
-
-  zod-validation-error@3.4.0:
-    resolution: {integrity: sha512-ZOPR9SVY6Pb2qqO5XHt+MkkTRxGXb4EVtnjc9JpXUOtUB1T9Ru7mZOT361AN3MsetVe7R0a1KZshJDZdgp9miQ==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      zod: ^3.18.0
 
   zod@3.25.3:
     resolution: {integrity: sha512-VGZqnyYNrl8JpEJRZaFPqeVNIuqgXNu4cXZ5cOb6zEUO1OxKbRnWB4UdDIXMmiERWncs0yDQukssHov8JUxykQ==}
@@ -8315,10 +8306,6 @@ snapshots:
       zod: 3.25.3
 
   zod-to-json-schema@3.24.5(zod@3.25.3):
-    dependencies:
-      zod: 3.25.3
-
-  zod-validation-error@3.4.0(zod@3.25.3):
     dependencies:
       zod: 3.25.3
 

@@ -4,7 +4,6 @@ import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'co
 import {inspect} from 'util'
 import {type ZodError as Zod3Error} from 'zod'
 import {JsonSchema7Type} from 'zod-to-json-schema'
-import * as zodValidationError from 'zod-validation-error'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
 import {
@@ -585,16 +584,6 @@ function transformError(err: unknown, command: Command) {
     if (looksLikeStandardSchemaFailure(cause)) {
       const prettyMessage = prettifyStandardSchemaError(cause)
       return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
-    }
-
-    // if it's a ZodError that's not zod4, let's assume it's zod3
-    if (err.code === 'BAD_REQUEST' && looksLikeInstanceof<Zod3Error>(cause, 'ZodError')) {
-      const validationError = zodValidationError.fromError(cause, {
-        prefixSeparator: '\n  - ',
-        issueSeparator: '\n  - ',
-      })
-
-      return new CliValidationError(validationError.message + '\n\n' + command.helpInformation())
     }
 
     if (
