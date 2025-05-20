@@ -62,7 +62,7 @@
     "@types/node": "20.17.48",
     "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.2.0",
-    "arktype": "2.1.9",
+    "arktype": "2.1.20",
     "effect": "3.15.2",
     "enquirer": "2.4.1",
     "eslint": "8",
