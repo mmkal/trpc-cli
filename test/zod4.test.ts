@@ -2,48 +2,58 @@ import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
 import {z} from 'zod/v4'
-import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
-import {looksLikeInstanceof} from '../src/util'
+import {createCli, TrpcCliMeta} from '../src'
+import {run, snapshotSerializer} from './test-run'
 
-expect.addSnapshotSerializer({
-  test: val => looksLikeInstanceof(val, Error),
-  serialize(val, config, indentation, depth, refs, printer) {
-    let topLine = `${val.constructor.name}: ${val.message}`
-    if (val.constructor.name === 'FailedToExitError') topLine = `CLI exited with code ${val.exitCode}`
-
-    if (!val.cause) return topLine
-    indentation += '  '
-    return `${topLine}\n${indentation}Caused by: ${printer(val.cause, config, indentation, depth + 1, refs)}`
-      .split(/(---|Usage:)/)[0] // strip out the usage line and the --- line which is added for debugging when tests fail
-      .trim()
-  },
-})
+expect.addSnapshotSerializer(snapshotSerializer)
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
-const run = <R extends AnyRouter>(router: R, argv: string[]) => {
-  return runWith({router}, argv)
-}
-const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
-  const cli = createCli({...params})
-  const logs = [] as unknown[][]
-  const addLogs = (...args: unknown[]) => logs.push(args)
-  return cli
-    .run({
-      argv,
-      logger: {info: addLogs, error: addLogs},
-      process: {exit: _ => 0 as never},
-    })
-    .catch(e => {
-      if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
-      if (e.exitCode === 0) return e.cause
-      if (String(e?.cause).includes('too many arguments')) {
-        // this happens a lot when the command expects json input because something went wrong converting to json schema. show help information which has hints about that.
-        e.message += '\n\n' + cli.buildProgram().helpInformation()
-      }
-      throw e
-    })
-}
+test('refinemenet type', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.string().refine(s => s.includes('o'), 'input must include o'))
+      .mutation(({input}) => `There are ${input.length - input.replaceAll('o', '').length} os in your string`),
+    bar: t.procedure
+      .input(z.object({greeting: z.string().refine(s => s.includes('o'), 'input must include o')}))
+      .mutation(
+        ({input}) =>
+          `There are ${input.greeting.length - input.greeting.replaceAll('o', '').length} os in your greeting`,
+      ),
+  })
+
+  expect(await run(router, ['foo', 'hello world'])).toMatchInlineSnapshot(`"There are 2 os in your string"`)
+  await expect(run(router, ['foo', 'bye earth'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CliValidationError: ✖ input must include o
+    `,
+  )
+
+  expect(await run(router, ['bar', '--greeting', 'hello world'])).toMatchInlineSnapshot(
+    `"There are 2 os in your greeting"`,
+  )
+  await expect(run(router, ['bar', '--greeting', 'bye earth'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CliValidationError: ✖ input must include o → at greeting
+    `,
+  )
+})
+
+test('basic boolean option', async () => {
+  const router = t.router({
+    test: t.procedure.input(z.object({foo: z.boolean()})).query(({input}) => `${JSON.stringify({input})}`),
+  })
+
+  const result = await run(router, ['test', '--foo'])
+  expect(result).toMatchInlineSnapshot(`"{"input":{"foo":true}}"`)
+})
+
+// codegen:start {preset: custom, source: ./validation-library-codegen.ts, export: testSuite}
+// NOTE: the below tests are ✨generated✨ based on the hand-written tests in ../zod3.test.ts
+// But the zod types are expected to be replaced with equivalent types (written by hand).
+// If you change anything other than `.input(...)` types, the linter will just undo your changes.
 
 test('merging input types', async () => {
   const router = t.router({
@@ -122,34 +132,6 @@ test('refine in a union pedantry', async () => {
   expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
   expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
   expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
-})
-
-test('refinemenet type', async () => {
-  const router = t.router({
-    foo: t.procedure
-      .input(z.string().refine(s => s.includes('o'), 'input must include o'))
-      .mutation(({input}) => `There are ${input.length - input.replaceAll('o', '').length} os in your string`),
-    bar: t.procedure
-      .input(z.object({greeting: z.string().refine(s => s.includes('o'), 'input must include o')}))
-      .mutation(
-        ({input}) =>
-          `There are ${input.greeting.length - input.greeting.replaceAll('o', '').length} os in your greeting`,
-      ),
-  })
-
-  expect(await run(router, ['foo', 'hello world'])).toMatchInlineSnapshot(`"There are 2 os in your string"`)
-  await expect(run(router, ['foo', 'bye earth'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CliValidationError: ✖ input must include o
-  `)
-
-  expect(await run(router, ['bar', '--greeting', 'hello world'])).toMatchInlineSnapshot(
-    `"There are 2 os in your greeting"`,
-  )
-  await expect(run(router, ['bar', '--greeting', 'bye earth'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CliValidationError: ✖ input must include o → at greeting
-  `)
 })
 
 test('transform in a union', async () => {
@@ -296,75 +278,65 @@ test('single character option', async () => {
 })
 
 test('custom default procedure', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({default: true})
-      .input(z.object({frozenLockfile: z.boolean().optional()}))
+      .input(z.object({cwd: z.string().optional()})) // let's pretend cwd is a required option
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+  const yarnOutput = await run(router, ['--cwd', '/foo/bar'])
+  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"cwd":"/foo/bar"}"`)
 
-  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
-  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
-
-  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
-  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+  const yarnInstallOutput = await run(router, ['install', '--cwd', '/foo/bar'])
+  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"cwd":"/foo/bar"}"`)
 })
 
 test('command alias', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['i', '--frozen-lockfile'])
+  const yarnIOutput = await run(router, ['i', '--frozen-lockfile'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['install', '-x'])
+  const yarnIOutput = await run(router, ['install', '-x'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias can be two characters', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['install', '--xx'])
+  const yarnIOutput = await run(router, ['install', '--xx'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias typo', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(z.object({frozenLockfile: z.boolean().optional()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
+  await expect(run(router, ['install', '-x'])).rejects.toMatchInlineSnapshot(
     `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
@@ -465,7 +437,7 @@ test('record input', async () => {
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
 
-  expect(await run(router, ['test', '--help'])).toMatchInlineSnapshot(`
+  expect(await run(router, ['test', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
     "Usage: program test [options]
 
     Options:
@@ -491,7 +463,7 @@ test("nullable array inputs aren't supported", async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['test1', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test1', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test1 [options]
 
     Options:
@@ -501,10 +473,10 @@ test("nullable array inputs aren't supported", async () => {
       -h, --help      display help for command
     "
   `)
-  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])
+  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])], {expectJsonInput: true})
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
 
-  await expect(run(router, ['test2', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test2', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test2 [options]
 
     Options:
@@ -561,15 +533,6 @@ test('mixed array input with options', async () => {
 
   const result3 = await run(router, ['test', 'hello', 'world', '--foo=bar', '1'])
   expect(result3).toMatchInlineSnapshot(`"input: [["hello","world",1],{"foo":"bar"}]"`)
-})
-
-test('basic boolean option', async () => {
-  const router = t.router({
-    test: t.procedure.input(z.object({foo: z.boolean()})).query(({input}) => `${JSON.stringify({input})}`),
-  })
-
-  const result = await run(router, ['test', '--foo'])
-  expect(result).toMatchInlineSnapshot(`"{"input":{"foo":true}}"`)
 })
 
 test('defaults and negations', async () => {
@@ -630,6 +593,7 @@ test('defaults and negations', async () => {
     `"{ foo: [ true, 1 ] }"`,
   )
 })
+// codegen:end
 
 test('use zod4 meta', async () => {
   const myString = z
