@@ -281,7 +281,7 @@ test('custom default procedure', async () => {
   const router = t.router({
     install: t.procedure
       .meta({default: true})
-      .input(z.object({cwd: z.string().optional()})) // let's pretend cwd is a required option
+      .input(z.object({cwd: z.string()})) // let's pretend cwd is a required option
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 

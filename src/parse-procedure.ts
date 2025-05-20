@@ -450,13 +450,8 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       return zodToJsonSchema(input as never) as JSONSchema7
     },
     arktype: (input: unknown) => {
-      const _fn = () => (({}) as typeof import('arktype').type)('string')
-      const type = prepareArktypeType(input) as ReturnType<typeof _fn>
-      return type.toJsonSchema({
-        fallback: ctx => {
-          return ctx.base
-        },
-      }) as JSONSchema7
+      const type = prepareArktypeType(input) as import('arktype').Type
+      return type.toJsonSchema({fallback: ctx => ctx.base}) as JSONSchema7
     },
     valibot: (input: unknown) => {
       let valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema']
