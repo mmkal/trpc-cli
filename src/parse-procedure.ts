@@ -451,7 +451,6 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       return zodToJsonSchema(input as never) as JSONSchema7
     },
     arktype: (input: unknown) => {
-      const arktype = eval(`require('arktype')`) as typeof import('arktype')
       const type = prepareArktypeType(input) as import('arktype').Type
       return type.toJsonSchema({
         fallback: ctx => {
