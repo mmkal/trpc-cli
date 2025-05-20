@@ -149,8 +149,13 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 function isOptional(schema: JSONSchema7Definition) {
   if ((schema as {$zod?: {optional?: boolean}}).$zod?.optional) return true
   if ((schema as {$valibot?: {optional?: boolean}}).$valibot?.optional) return true
+  if ((schema as {$arktype?: {optional?: boolean}}).$arktype?.optional) return true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
-  return anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}'
+  if (anyOf?.length === 2) {
+    if (JSON.stringify(anyOf[0]) === '{"not":{}}') return true
+    if (anyOf.some(sub => isOptional(sub))) return true
+  }
+  return false
 }
 
 function parsePrimitiveInput(schema: JSONSchema7): Result<ParsedProcedure> {
@@ -450,8 +455,14 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       return zodToJsonSchema(input as never) as JSONSchema7
     },
     arktype: (input: unknown) => {
+      const arktype = eval(`require('arktype')`) as typeof import('arktype')
       const type = prepareArktypeType(input) as import('arktype').Type
-      return type.toJsonSchema({fallback: ctx => ctx.base}) as JSONSchema7
+      return type.toJsonSchema({
+        fallback: ctx => {
+          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, $arktype: {optional: true}}
+          return ctx.base
+        },
+      }) as JSONSchema7
     },
     valibot: (input: unknown) => {
       let valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema']

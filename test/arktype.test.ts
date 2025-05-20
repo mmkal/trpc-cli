@@ -138,8 +138,8 @@ test('optional input', async () => {
       .query(({input}) => JSON.stringify(input || null)),
   })
 
-  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  // expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
+  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
 })
 
 test('union input', async () => {
@@ -554,7 +554,12 @@ test('defaults and negations', async () => {
 test('arktype issues', () => {
   const toJsonSchema = (schema: type.Any) => {
     try {
-      return schema.toJsonSchema()
+      return schema.toJsonSchema({
+        fallback: ctx => {
+          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, $arktype: {optional: true}}
+          return ctx.base
+        },
+      })
     } catch (e) {
       return e
     }
@@ -567,12 +572,16 @@ test('arktype issues', () => {
       ),
     ),
   ).toMatchInlineSnapshot(`
-    ToJsonSchemaError: {
-        code: "predicate",
-        base: {
-            type: "number"
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "string",
         },
-        predicate: Function(fn16)
+        {
+          "type": "number",
+        },
+      ],
     }
   `)
 
@@ -581,12 +590,9 @@ test('arktype issues', () => {
       type('number').narrow(n => Number.isInteger(n)), //
     ),
   ).toMatchInlineSnapshot(`
-    ToJsonSchemaError: {
-        code: "predicate",
-        base: {
-            type: "number"
-        },
-        predicate: Function(fn17)
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "number",
     }
   `)
 
@@ -611,14 +617,18 @@ test('arktype issues', () => {
     ),
   ).toMatchInlineSnapshot(
     `
-      ToJsonSchemaError: {
-          code: "morph",
-          base: {
-              type: "number"
-          },
-          out: null
-      }
-    `,
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
+      ],
+    }
+  `,
   )
   expect(
     toJsonSchema(
@@ -682,6 +692,22 @@ test('arktype issues', () => {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "description": "a piece of text",
       "type": "string",
+    }
+  `)
+
+  expect(toJsonSchema(type('string | undefined'))).toMatchInlineSnapshot(`
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "$arktype": {
+            "optional": true,
+          },
+        },
+      ],
     }
   `)
 })
