@@ -147,14 +147,10 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
 function isOptional(schema: JSONSchema7Definition) {
-  if ((schema as {$zod?: {optional?: boolean}}).$zod?.optional) return true
-  if ((schema as {$valibot?: {optional?: boolean}}).$valibot?.optional) return true
-  if ((schema as {$arktype?: {optional?: boolean}}).$arktype?.optional) return true
+  if (schema && typeof schema === 'object' && 'optional' in schema) return schema.optional === true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
-  if (anyOf?.length === 2) {
-    if (JSON.stringify(anyOf[0]) === '{"not":{}}') return true
-    if (anyOf.some(sub => isOptional(sub))) return true
-  }
+  if (anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}') return true
+  if (anyOf?.some(sub => isOptional(sub))) return true
   return false
 }
 
@@ -447,7 +443,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
           // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           override: ctx => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
-              ctx.jsonSchema.$zod = {optional: true}
+              ctx.jsonSchema.optional = true
             }
           },
         }) as JSONSchema7
@@ -459,7 +455,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       const type = prepareArktypeType(input) as import('arktype').Type
       return type.toJsonSchema({
         fallback: ctx => {
-          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, $arktype: {optional: true}}
+          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, optional: true}
           return ctx.base
         },
       }) as JSONSchema7
@@ -489,7 +485,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       if (v) {
         const parent = valibotToJsonSchema(v.object({child: input}), {errorMode: 'ignore'})
         const child = parent.properties!.child as JSONSchema7
-        return parent.required?.length === 0 ? Object.assign(child, {$valibot: {optional: true}}) : child
+        return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
       }
       return valibotToJsonSchema(input)
     },

@@ -556,7 +556,7 @@ test('arktype issues', () => {
     try {
       return schema.toJsonSchema({
         fallback: ctx => {
-          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, $arktype: {optional: true}}
+          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, optional: true}
           return ctx.base
         },
       })
@@ -617,18 +617,18 @@ test('arktype issues', () => {
     ),
   ).toMatchInlineSnapshot(
     `
-    {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "anyOf": [
-        {
-          "type": "string",
-        },
-        {
-          "type": "number",
-        },
-      ],
-    }
-  `,
+      {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "type": "number",
+          },
+        ],
+      }
+    `,
   )
   expect(
     toJsonSchema(
@@ -703,9 +703,7 @@ test('arktype issues', () => {
           "type": "string",
         },
         {
-          "$arktype": {
-            "optional": true,
-          },
+          "optional": true,
         },
       ],
     }
