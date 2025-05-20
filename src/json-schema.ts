@@ -76,7 +76,7 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
   return (
     Object.entries(v)
       .filter(([k, vv]) => {
-        if (k === 'default' || k === 'additionalProperties') return false
+        if (k === 'default' || k === 'additionalProperties' || k === 'optional') return false
         if (k === 'type' && typeof vv === 'string') return depth > 0 // don't show type: string at depth 0, that's the default
         if (k.startsWith('$')) return false // helpers props to add on to a few different external library output formats
         if (k === 'maximum' && vv === Number.MAX_SAFE_INTEGER) return false // zod adds this for `z.number().int().positive()`
