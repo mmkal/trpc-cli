@@ -147,9 +147,11 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
 function isOptional(schema: JSONSchema7Definition) {
-  if ((schema as {$zod?: {optional?: boolean}}).$zod?.optional) return true
+  if (schema && typeof schema === 'object' && 'optional' in schema) return schema.optional === true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
-  return anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}'
+  if (anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}') return true
+  if (anyOf?.some(sub => isOptional(sub))) return true
+  return false
 }
 
 function parsePrimitiveInput(schema: JSONSchema7): Result<ParsedProcedure> {
@@ -441,14 +443,22 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
           // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           override: ctx => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
-              ctx.jsonSchema.$zod = {optional: true}
+              ctx.jsonSchema.optional = true
             }
           },
         }) as JSONSchema7
       }
       return zodToJsonSchema(input as never) as JSONSchema7
     },
-    arktype: (input: unknown) => prepareArktypeType(input).toJsonSchema(),
+    arktype: (input: unknown) => {
+      const type = prepareArktypeType(input) as import('arktype').Type
+      return type.toJsonSchema({
+        fallback: ctx => {
+          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, optional: true}
+          return ctx.base
+        },
+      }) as JSONSchema7
+    },
     valibot: (input: unknown) => {
       let valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema']
       if (!valibotToJsonSchemaLib) {
@@ -465,7 +475,18 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
           `no 'toJsonSchema' function found in @valibot/to-json-schema - check you are using a supported version`,
         )
       }
-      return valibotToJsonSchema(input, {errorMode: 'ignore'})
+      let v: typeof import('valibot')
+      try {
+        v = eval(`require('valibot')`)
+      } catch {
+        // couldn't load valibot, maybe it's aliased to something else? anyway bad luck, you won't know about optional positional parameters, but that's a rare-ish case so not a big deal
+        return valibotToJsonSchema(input)
+      }
+      const parent = valibotToJsonSchema(v.object({child: input as import('valibot').StringSchema<undefined>}), {
+        errorMode: 'ignore',
+      })
+      const child = parent.properties!.child as JSONSchema7
+      return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
     },
     effect: (input: unknown) => {
       const effect = dependencies.effect || (eval(`require('effect')`) as Dependencies['effect'])

@@ -1,45 +1,17 @@
-import {initTRPC} from 'trpcserver11'
 import {inspect} from 'util'
 import * as v from 'valibot'
 import {expect, test} from 'vitest'
-import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
-import {looksLikeInstanceof} from '../src/util'
+import {createCli, TrpcCliMeta, trpcServer} from '../src'
+import {run, snapshotSerializer} from './test-run'
 
-expect.addSnapshotSerializer({
-  test: val => looksLikeInstanceof(val, Error),
-  serialize(val, config, indentation, depth, refs, printer) {
-    let topLine = `${val.constructor.name}: ${val.message}`
-    if (val.constructor.name === 'FailedToExitError') topLine = `CLI exited with code ${val.exitCode}`
+expect.addSnapshotSerializer(snapshotSerializer)
 
-    if (!val.cause) return topLine
-    indentation += '  '
-    return `${topLine}\n${indentation}Caused by: ${printer(val.cause, config, indentation, depth + 1, refs)}`
-      .split(/(---|Usage:)/)[0] // strip out the usage line and the --- line which is added for debugging when tests fail
-      .trim()
-  },
-})
+const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
-const t = initTRPC.meta<TrpcCliMeta>().create()
-
-const run = <R extends AnyRouter>(router: R, argv: string[]) => {
-  return runWith({router}, argv)
-}
-const runWith = <R extends AnyRouter>(params: TrpcCliParams<R>, argv: string[]) => {
-  const cli = createCli({trpcServer: import('trpcserver11'), ...params})
-  const logs = [] as unknown[][]
-  const addLogs = (...args: unknown[]) => logs.push(args)
-  return cli
-    .run({
-      argv,
-      logger: {info: addLogs, error: addLogs},
-      process: {exit: _ => 0 as never},
-    })
-    .catch(e => {
-      if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
-      if (e.exitCode === 0) return e.cause
-      throw e
-    })
-}
+// codegen:start {preset: custom, source: ./validation-library-codegen.ts, export: testSuite}
+// NOTE: the below tests are ✨generated✨ based on the hand-written tests in ../zod3.test.ts
+// But the zod types are expected to be replaced with equivalent types (written by hand).
+// If you change anything other than `.input(...)` types, the linter will just undo your changes.
 
 test('merging input types', async () => {
   const router = t.router({
@@ -83,10 +55,10 @@ test('number input', async () => {
   const router = t.router({
     foo: t.procedure
       .input(v.number()) //
-      .query(({input}) => JSON.stringify({input})),
+      .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"{"input":1}"`)
+  expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CommanderError: error: command-argument value 'a' is invalid for argument 'number'. Invalid number: a
@@ -116,27 +88,16 @@ test('refine in a union pedantry', async () => {
           v.string(),
           v.pipe(
             v.number(),
-            v.custom(n => Number.isInteger(n)),
+            v.integer(), //
           ),
         ]),
       ) //
       .query(({input}) => JSON.stringify(input)),
   })
 
-  // Valibot should handle this better than arktype did
-  await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options] <value>
-
-    Arguments:
-      value       string | number (required)
-
-    Options:
-      -h, --help  display help for command
-    "
-  `)
-  // expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
-  // expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  // expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
+  expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
+  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
 test('transform in a union', async () => {
@@ -146,30 +107,17 @@ test('transform in a union', async () => {
         v.union([
           v.string(),
           v.pipe(
-            v.pipe(
-              v.number(),
-              v.custom(n => Number.isInteger(n)),
-            ),
+            v.pipe(v.number(), v.integer()),
             v.transform(n => `Roman numeral: ${'I'.repeat(n)}`),
           ),
         ]),
-      )
+      ) //
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program foo [options] <value>
-
-    Arguments:
-      value       string | number (required)
-
-    Options:
-      -h, --help  display help for command
-    "
-  `)
-  // expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
-  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  // expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
+  expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
+  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
 })
 
 test('literal input', async () => {
@@ -186,25 +134,6 @@ test('literal input', async () => {
   `)
 })
 
-test('description', async () => {
-  const router = t.router({
-    delete: t.procedure
-      .input(v.pipe(v.string(), v.title('filepath'), v.description('path to file for deletion'))) //
-      .query(({input}) => JSON.stringify(input)),
-  })
-
-  expect(await run(router, ['delete', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program delete [options] <filepath>
-
-    Arguments:
-      filepath    path to file for deletion (required)
-
-    Options:
-      -h, --help  display help for command
-    "
-  `)
-})
-
 test('optional input', async () => {
   const router = t.router({
     foo: t.procedure
@@ -212,18 +141,8 @@ test('optional input', async () => {
       .query(({input}) => JSON.stringify(input || null)),
   })
 
-  expect(await run(router, ['foo', '--help'])).toMatchInlineSnapshot(`
-    "Usage: program foo [options] <string>
-
-    Arguments:
-      string      (required)
-
-    Options:
-      -h, --help  display help for command
-    "
-  `)
-  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  // expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
+  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"null"`)
 })
 
 test('union input', async () => {
@@ -245,6 +164,7 @@ test('regex input', async () => {
   })
 
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
+  // todo: raise a zod-validation-error issue 👇 not a great error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: ✖ Invalid format: Expected /hello/ but received "goodbye xyz"
@@ -273,12 +193,10 @@ test('tuple input', async () => {
   })
 
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
-  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
-    `,
-  )
+  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
+  `)
 })
 
 test('tuple input with flags', async () => {
@@ -297,24 +215,18 @@ test('tuple input with flags', async () => {
   expect(await run(router, ['foo', 'hello', '123', '--foo', 'bar'])).toMatchInlineSnapshot(
     `"["hello",123,{"foo":"bar"}]"`,
   )
-  await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: required option '--foo <string>' not specified
-    `,
-  )
-  await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
-    `,
-  )
-  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: required option '--foo <string>' not specified
-    `,
-  )
+  await expect(run(router, ['foo', 'hello', '123'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: required option '--foo <string>' not specified
+  `)
+  await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
+  `)
+  await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: required option '--foo <string>' not specified
+  `)
 })
 
 test('single character option', async () => {
@@ -329,75 +241,65 @@ test('single character option', async () => {
 })
 
 test('custom default procedure', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({default: true})
-      .input(v.object({frozenLockfile: v.boolean()}))
+      .input(v.object({cwd: v.string()})) // let's pretend cwd is a required option
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
+  const yarnOutput = await run(router, ['--cwd', '/foo/bar'])
+  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"cwd":"/foo/bar"}"`)
 
-  const yarnOutput = await runWith(params, ['--frozen-lockfile'])
-  expect(yarnOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
-
-  const yarnInstallOutput = await runWith(params, ['install', '--frozen-lockfile'])
-  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
+  const yarnInstallOutput = await run(router, ['install', '--cwd', '/foo/bar'])
+  expect(yarnInstallOutput).toMatchInlineSnapshot(`"install: {"cwd":"/foo/bar"}"`)
 })
 
 test('command alias', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {command: ['i']}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['i', '--frozen-lockfile'])
+  const yarnIOutput = await run(router, ['i', '--frozen-lockfile'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'x'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['install', '-x'])
+  const yarnIOutput = await run(router, ['install', '-x'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias can be two characters', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frozenLockfile: 'xx'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  const yarnIOutput = await runWith(params, ['install', '--xx'])
+  const yarnIOutput = await run(router, ['install', '--xx'])
   expect(yarnIOutput).toMatchInlineSnapshot(`"install: {"frozenLockfile":true}"`)
 })
 
 test('option alias typo', async () => {
-  const yarn = t.router({
+  const router = t.router({
     install: t.procedure
       .meta({aliases: {options: {frooozenLockfile: 'x'}}})
       .input(v.object({frozenLockfile: v.boolean()}))
       .query(({input}) => 'install: ' + JSON.stringify(input)),
   })
 
-  const params: TrpcCliParams<typeof yarn> = {router: yarn}
-
-  await expect(runWith(params, ['install', '-x'])).rejects.toMatchInlineSnapshot(
+  await expect(run(router, ['install', '-x'])).rejects.toMatchInlineSnapshot(
     `Error: Invalid option aliases: frooozenLockfile: x`,
   )
 })
@@ -459,26 +361,13 @@ test('number array input', async () => {
 test('number array input with constraints', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(
-        v.array(
-          v.pipe(
-            v.number(),
-            v.custom(n => Number.isInteger(n)),
-          ),
-        ),
-      ) //
+      .input(v.array(v.pipe(v.number(), v.integer()))) //
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['foo', '--help'])).resolves.toMatchInlineSnapshot(`
-    "Usage: program foo [options] <parameter_1...>
-
-    Arguments:
-      parameter_1  (required)
-
-    Options:
-      -h, --help   display help for command
-    "
+  await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Invalid type: Expected number but received "1.2" → at [0]
   `)
 })
 
@@ -509,6 +398,31 @@ test('mixed array input', async () => {
   expect(result).toMatchInlineSnapshot(`"list: [12,true,3.14,"null","undefined","hello"]"`)
 })
 
+test('record input', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(v.optional(v.record(v.string(), v.number()))) //
+      .query(({input}) => `input: ${JSON.stringify(input)}`),
+  })
+
+  expect(await run(router, ['test', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
+    "Usage: program test [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Inputs with additional properties
+                      are not currently supported)
+      -h, --help      display help for command
+    "
+  `)
+  expect(await run(router, ['test'])).toMatchInlineSnapshot(`"input: undefined"`)
+  expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
+  await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Invalid type: Expected number but received "x" → at foo
+  `)
+})
+
 test("nullable array inputs aren't supported", async () => {
   const router = t.router({
     test1: t.procedure.input(v.array(v.nullable(v.string()))).query(({input}) => `list: ${JSON.stringify(input)}`),
@@ -517,7 +431,7 @@ test("nullable array inputs aren't supported", async () => {
       .query(({input}) => `list: ${JSON.stringify(input)}`),
   })
 
-  await expect(run(router, ['test1', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test1', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test1 [options]
 
     Options:
@@ -527,10 +441,10 @@ test("nullable array inputs aren't supported", async () => {
       -h, --help      display help for command
     "
   `)
-  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])])
+  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])], {expectJsonInput: true})
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
 
-  await expect(run(router, ['test2', '--help'])).resolves.toMatchInlineSnapshot(`
+  await expect(run(router, ['test2', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test2 [options]
 
     Options:
@@ -589,7 +503,6 @@ test('mixed array input with options', async () => {
   expect(result3).toMatchInlineSnapshot(`"input: [["hello","world",1],{"foo":"bar"}]"`)
 })
 
-// valibot handles defaults via JSON schema
 test('defaults and negations', async () => {
   const router = t.router({
     normalBoolean: t.procedure.input(v.object({foo: v.boolean()})).query(({input}) => `${inspect(input)}`),
@@ -650,6 +563,7 @@ test('defaults and negations', async () => {
     `"{ foo: [ true, 1 ] }"`,
   )
 })
+// codegen:end
 
 test('valibot schemas to JSON schema', () => {
   // just a test to quickly see how valibot schemas are converted to JSON schema
@@ -662,13 +576,44 @@ test('valibot schemas to JSON schema', () => {
     }
   }
 
+  expect(toJsonSchema(v.optional(v.string()))).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "string",
+    }
+  `)
+
   expect(
     toJsonSchema(
       v.union([
         v.string(),
         v.pipe(
           v.number(),
-          v.custom(n => Number.isInteger(n)),
+          v.integer(), //
+        ),
+      ]),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "integer",
+        },
+      ],
+    }
+  `)
+
+  expect(
+    toJsonSchema(
+      v.union([
+        v.string(),
+        v.pipe(
+          v.number(),
+          v.custom(n => Number.isInteger(n)), // note: avoid this - the resultant JSON schema doesn't know the number must be an integer
         ),
       ]),
     ),
@@ -761,7 +706,7 @@ test('valibot schemas to JSON schema', () => {
           v.string(),
           v.pipe(
             v.number(),
-            v.custom(n => Number.isInteger(n)),
+            v.integer(), //
           ),
         ]),
         v.transform(u => ({u})),
@@ -775,7 +720,7 @@ test('valibot schemas to JSON schema', () => {
           "type": "string",
         },
         {
-          "type": "number",
+          "type": "integer",
         },
       ],
     }
