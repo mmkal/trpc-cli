@@ -475,18 +475,18 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
           `no 'toJsonSchema' function found in @valibot/to-json-schema - check you are using a supported version`,
         )
       }
-      let v: any
+      let v: typeof import('valibot')
       try {
         v = eval(`require('valibot')`)
       } catch {
         // couldn't load valibot, maybe it's aliased to something else? anyway bad luck, you won't know about optional positional parameters, but that's a rare-ish case so not a big deal
+        return valibotToJsonSchema(input)
       }
-      if (v) {
-        const parent = valibotToJsonSchema(v.object({child: input}), {errorMode: 'ignore'})
-        const child = parent.properties!.child as JSONSchema7
-        return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
-      }
-      return valibotToJsonSchema(input)
+      const parent = valibotToJsonSchema(v.object({child: input as import('valibot').StringSchema<undefined>}), {
+        errorMode: 'ignore',
+      })
+      const child = parent.properties!.child as JSONSchema7
+      return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
     },
     effect: (input: unknown) => {
       const effect = dependencies.effect || (eval(`require('effect')`) as Dependencies['effect'])
