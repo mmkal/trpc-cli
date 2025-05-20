@@ -545,7 +545,7 @@ Zod support is built-in, including the `zod-to-json-schema` conversion helper. Y
 You can use zod v4 right now! You can start taking advantage of zod's new `meta` feature too to improve parameter names:
 
 ```ts
-import {z} from 'zod/v4' // or import {z} from 'zod' if you have the v4 beta installed
+import {z} from 'zod/v4'
 
 const myRouter = t.router({
   createFile: t.procedure
