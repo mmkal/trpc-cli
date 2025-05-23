@@ -52,8 +52,8 @@ importers:
         specifier: ^2.1.20
         version: 2.1.20
       effect:
-        specifier: 3.15.2
-        version: 3.15.2
+        specifier: 3.15.3
+        version: 3.15.3
       enquirer:
         specifier: 2.4.1
         version: 2.4.1
@@ -1779,8 +1779,8 @@ packages:
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
 
-  effect@3.15.2:
-    resolution: {integrity: sha512-0JNwvfs4Wwbo3f6IOydBFlp+zxuO8Iny2UAWNW3+FNn9x8FJf7q67QnQagUZgPl/BLl/xuPLVksrmNyIrJ8k/Q==}
+  effect@3.15.3:
+    resolution: {integrity: sha512-Qo5LpHaeKKeZUZF99FwxiaGA39SiX5H2G5K0YgqFWy1eEiN6CpgwBYGqpNyz+STMdiibuTrO4kGQUpQyYw+bLA==}
 
   electron-to-chromium@1.5.113:
     resolution: {integrity: sha512-wjT2O4hX+wdWPJ76gWSkMhcHAV2PTMX+QetUCPYEdCIe+cxmgzzSSiGRCKW8nuh4mwKZlpv0xvoW7OF2X+wmHg==}
@@ -1916,7 +1916,7 @@ packages:
 
   eslint-plugin-codegen@https://pkg.pr.new/mmkal/eslint-plugin-codegen@28:
     resolution: {tarball: https://pkg.pr.new/mmkal/eslint-plugin-codegen@28}
-    version: 0.30.0
+    version: 0.31.0
     engines: {node: '>=18.0.0'}
 
   eslint-plugin-functional@7.3.0:
@@ -5710,7 +5710,7 @@ snapshots:
 
   eastasianwidth@0.2.0: {}
 
-  effect@3.15.2:
+  effect@3.15.3:
     dependencies:
       '@standard-schema/spec': 1.0.0
       fast-check: 3.23.2
