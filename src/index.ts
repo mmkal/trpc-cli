@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
-import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
+import {Argument, Command as BaseCommand, InvalidArgumentError, Option, program} from 'commander'
 import {inspect} from 'util'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
+import {commandToJSON} from './json'
 import {
   flattenedProperties,
   incompatiblePropertyPairs,
@@ -556,7 +557,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     })
   }
 
-  return {run, buildProgram}
+  return {run, buildProgram, toJSON: () => commandToJSON(buildProgram())}
 }
 
 function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {

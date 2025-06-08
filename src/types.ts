@@ -1,5 +1,6 @@
 import type {JSONSchema7} from 'json-schema'
 import {type JsonSchema7Type} from 'zod-to-json-schema'
+import {CommandJSON} from './json'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -182,6 +183,7 @@ export type CommanderProgramLike = {
 export interface TrpcCli {
   run: (params?: TrpcCliRunParams, program?: CommanderProgramLike) => Promise<void>
   buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
+  toJSON: () => CommandJSON
 }
 
 // todo: allow these all to be async?
