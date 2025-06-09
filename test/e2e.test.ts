@@ -267,7 +267,7 @@ test('migrations help', async () => {
 
   const output = await tsx('migrations', ['--help'])
   expect(output).toMatchInlineSnapshot(`
-    "Usage: migrations migrations down
+    "Usage: migrations [options] [command]
 
     Manage migrations
     Available subcommands: up, create, list, search
@@ -312,7 +312,7 @@ test('migrations union type', async () => {
 test('migrations search.byName help', async () => {
   const output = await tsx('migrations', ['search.byName', '--help'])
   expect(output).toMatchInlineSnapshot(`
-    "Usage: migrations migrations down
+    "Usage: migrations [options] [command]
 
     Manage migrations
     Available subcommands: up, create, list, search
@@ -350,7 +350,7 @@ test('migrations search.byContent', async () => {
 
 
 
-    Usage: migrations migrations down
+    Usage: migrations [options] [command]
 
     Manage migrations
     Available subcommands: up, create, list, search

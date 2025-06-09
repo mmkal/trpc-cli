@@ -89,7 +89,6 @@ const cli = createCli({
   name: 'migrations',
   version: '1.0.0',
   description: 'Manage migrations',
-  usage: ['migrations up', 'migrations down'],
 })
 if (require.main === module) {
   void cli.run()
