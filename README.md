@@ -799,7 +799,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:dba3999588bc00f25bce5abea149e9a3 -->
+<!-- hash:fb832e86869dc44396d5db272281a6ce -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -913,7 +913,6 @@ const cli = createCli({
   name: 'migrations',
   version: '1.0.0',
   description: 'Manage migrations',
-  usage: ['migrations up', 'migrations down'],
 })
 if (require.main === module) {
   void cli.run()
@@ -952,7 +951,7 @@ Here's how the CLI will work:
 `node path/to/migrations --help` output:
 
 ```
-Usage: migrations migrations down
+Usage: migrations [options] [command]
 
 Manage migrations
 Available subcommands: up, create, list, search
@@ -976,7 +975,7 @@ Commands:
 `node path/to/migrations apply --help` output:
 
 ```
-Usage: migrations migrations down
+Usage: migrations [options] [command]
 
 Manage migrations
 Available subcommands: up, create, list, search
@@ -1000,7 +999,7 @@ Commands:
 `node path/to/migrations search.byContent --help` output:
 
 ```
-Usage: migrations migrations down
+Usage: migrations [options] [command]
 
 Manage migrations
 Available subcommands: up, create, list, search
