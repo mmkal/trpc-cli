@@ -78,7 +78,7 @@ jobs:
               )
               .query(({input}) => {
                 const [name, {enthusiasm}] = input
-                return `Hello ${name}` + '!'.repeat(enthusiasm)
+                return `Hello ${name}` + "!".repeat(enthusiasm)
               })
           })
 
