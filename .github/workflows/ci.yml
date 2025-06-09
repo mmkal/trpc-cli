@@ -63,8 +63,8 @@ jobs:
           }
           ' > tsconfig.json
           echo '
-          import {initTRPC, TrpcCliMeta, createCli, z} from "trpc-cli"
-          const t = initTRPC.meta<TrpcCliMeta>().create()
+          import {trpcServer, TrpcCliMeta, createCli, z} from "trpc-cli"
+          const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
           const router = t.router({
             sayHello: t.procedure
@@ -84,9 +84,13 @@ jobs:
 
           const cli = createCli({router})
 
-          cli.run()
+          void cli.run()
           ' > test.ts
-      - run: npx tsc -p .
+
+          cat test.ts
+      - name: compile
+        working-directory: test-dir
+        run: npx tsc -p .
       - name: run test
         working-directory: test-dir
         run: |
