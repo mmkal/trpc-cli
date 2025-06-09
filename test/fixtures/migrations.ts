@@ -84,8 +84,14 @@ export const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc11RouterLike
 
+const cli = createCli({
+  router,
+  name: 'migrations',
+  version: '1.0.0',
+  description: 'Manage migrations',
+  usage: ['migrations up', 'migrations down'],
+})
 if (require.main === module) {
-  const cli = createCli({router})
   void cli.run()
 }
 function getMigrations() {

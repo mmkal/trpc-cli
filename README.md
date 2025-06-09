@@ -350,7 +350,7 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:e30cac4beb319a42941777d631465ee0 -->
+<!-- hash:ac0f348dafc53b3e441e1d8466c29c5c -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer} from 'trpc-cli'
 import {z} from 'zod'
@@ -408,7 +408,7 @@ const router = trpc.router({
     }),
 })
 
-void createCli({router}).run()
+void createCli({router, name: 'calculator', version: '1.0.0'}).run()
 ```
 <!-- codegen:end -->
 
@@ -424,6 +424,7 @@ Usage: calculator [options] [command]
 Available subcommands: add, subtract, multiply, divide, square-root
 
 Options:
+  -V, --version                         output the version number
   -h, --help                            display help for command
 
 Commands:
@@ -798,7 +799,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:72921e331afb12cbf349fa2e980c9f26 -->
+<!-- hash:dba3999588bc00f25bce5abea149e9a3 -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -907,8 +908,14 @@ export const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc11RouterLike
 
+const cli = createCli({
+  router,
+  name: 'migrations',
+  version: '1.0.0',
+  description: 'Manage migrations',
+  usage: ['migrations up', 'migrations down'],
+})
 if (require.main === module) {
-  const cli = createCli({router})
   void cli.run()
 }
 function getMigrations() {
@@ -945,11 +952,13 @@ Here's how the CLI will work:
 `node path/to/migrations --help` output:
 
 ```
-Usage: migrations [options] [command]
+Usage: migrations migrations down
 
+Manage migrations
 Available subcommands: up, create, list, search
 
 Options:
+  -V, --version     output the version number
   -h, --help        display help for command
 
 Commands:
@@ -967,11 +976,13 @@ Commands:
 `node path/to/migrations apply --help` output:
 
 ```
-Usage: migrations [options] [command]
+Usage: migrations migrations down
 
+Manage migrations
 Available subcommands: up, create, list, search
 
 Options:
+  -V, --version     output the version number
   -h, --help        display help for command
 
 Commands:
@@ -989,11 +1000,13 @@ Commands:
 `node path/to/migrations search.byContent --help` output:
 
 ```
-Usage: migrations [options] [command]
+Usage: migrations migrations down
 
+Manage migrations
 Available subcommands: up, create, list, search
 
 Options:
+  -V, --version     output the version number
   -h, --help        display help for command
 
 Commands:
