@@ -22,21 +22,44 @@ program.option(
   '-r, --require [module]',
   'A module (or comma-separated modules) to require before running the cli. Can be used to pass in options for the trpc router. e.g. --require dotenv/config',
 )
+program.option(
+  '-i, --import [module]',
+  'A module (or comma-separated modules) to import before running the cli. Can be used to pass in options for the trpc router. e.g. --import tsx/esm',
+)
 
 program.action(async () => {
   const [filepath, ...argv] = program.args
-  console.log({filepath, argv, opts: program.opts()})
   if (filepath === '-h' || filepath === '--help') {
     program.help()
     return
   }
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-  const options = program.opts() as {export?: string; require?: string}
-  // for (const)
-  options.require?.split(',')?.forEach(require)
+  const options = program.opts() as {export?: string; require?: string; import?: string}
+  for (const r of options.require?.split(',') || []) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require(r)
+  }
+  for (const m of options.import?.split(',') || []) {
+    await import(m)
+  }
+
+  if (!options.require && !options.import) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('tsx/cjs')
+      // @ts-expect-error - this might not be available, that's why we're catching
+      await import('tsx/esm')
+    } catch {
+      // don't worry
+    }
+  }
 
   const fullpath = path.resolve(process.cwd(), filepath)
-  const importedModule = (await import(fullpath)) as {}
+  let importedModule = (await import(fullpath)) as {}
+  while ('module.exports' in importedModule) {
+    // this is a cjs-like module, possibly what tsx gives us
+    importedModule = (importedModule as {['module.exports']: {}})?.['module.exports']
+  }
   let router: Trpc11RouterLike
   const isTrpcRouterLike = (value: unknown): value is Trpc11RouterLike =>
     Boolean((value as Trpc11RouterLike)?._def?.procedures)
