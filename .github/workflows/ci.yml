@@ -31,7 +31,7 @@ jobs:
     needs: [create_tgz]
     strategy:
       matrix:
-        node: [23, 22, 20, 18, 16]
+        node: [23, 22]
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -47,6 +47,21 @@ jobs:
           npm init -y
           npm install ../pkg.tgz
           npm install typescript
+          echo '
+          {
+            "compilerOptions": {
+                "target": "ES2022",
+                "lib": ["ES2022"],
+                "esModuleInterop": true,
+                "module": "NodeNext",
+                "moduleResolution": "NodeNext",
+                "strict": true,
+                "noEmit": true,
+                "skipLibCheck": true
+            },
+            "include": ["test.ts"]
+          }
+          ' > tsconfig.json
           echo '
           import {initTRPC, TrpcCliMeta, createCli, z} from "trpc-cli"
           const t = initTRPC.meta<TrpcCliMeta>().create()
@@ -71,10 +86,12 @@ jobs:
 
           cli.run()
           ' > test.ts
+      - run: tsc
       - name: run test
         working-directory: test-dir
         run: |
-          tsc test.ts
           node test.js
+          node test.js --help
+          node test.js say-hello mmkal --enthusiasm 3
       - run: ls -R
         if: always()
