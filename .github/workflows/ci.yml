@@ -56,7 +56,6 @@ jobs:
                 "module": "NodeNext",
                 "moduleResolution": "NodeNext",
                 "strict": true,
-                "noEmit": true,
                 "skipLibCheck": true
             },
             "include": ["test.ts"]
@@ -94,14 +93,15 @@ jobs:
       - name: run test
         working-directory: test-dir
         run: |
-          node test.js
           node test.js --help
+          node test.js --help | grep 'say-hello [options] <name>'
+
           node test.js say-hello mmkal --enthusiasm 3
+          node test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!!!'
       - name: tsx test
         if: failure()
         working-directory: test-dir
         run: |
-          npx tsx test.ts
           npx tsx test.ts --help
           npx tsx test.ts say-hello mmkal --enthusiasm 3
       - run: ls -R
