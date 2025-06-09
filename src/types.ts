@@ -174,6 +174,10 @@ export type TrpcCliRunParams = {
   }
 }
 
+/**
+ * Type that looks like a `commander` Command instance, but doesn't require a dependency on `commander` to avoid awkward typescript errors.
+ * If you need to use it as a `Command` instance, just cast it with `as` to `import('commander').Command`.
+ */
 export type CommanderProgramLike = {
   name: () => string
   parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
@@ -183,7 +187,7 @@ export type CommanderProgramLike = {
 export interface TrpcCli {
   run: (params?: TrpcCliRunParams, program?: CommanderProgramLike) => Promise<void>
   buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
-  toJSON: () => CommandJSON
+  toJSON: (program?: CommanderProgramLike) => CommandJSON
 }
 
 // todo: allow these all to be async?
