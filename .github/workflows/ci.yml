@@ -12,10 +12,69 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - run: pnpm lint
-  test_trpc_vnext:
+  create_tgz:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: corepack enable
-      - run: pnpm install @trpc/server@next
-      - run: pnpm test e2e
+      - run: pnpm install
+      - run: pnpm build
+      - run: npm pack
+      - name: rename tgz
+        run: mv $(ls | grep .tgz) pkg.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball
+          path: pkg.tgz
+  test_tgz:
+    runs-on: ubuntu-latest
+    needs: [create_tgz]
+    strategy:
+      matrix:
+        node: [23, 22, 20, 18, 16]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: tarball
+      - run: ls
+      - run: mkdir test-dir
+      - name: setup test-dir
+        working-directory: test-dir
+        run: |
+          npm init -y
+          npm install ../pkg.tgz
+          npm install typescript
+          echo '
+          import {initTRPC, TrpcCliMeta, createCli, z} from "trpc-cli"
+          const t = initTRPC.meta<TrpcCliMeta>().create()
+
+          const router = t.router({
+            sayHello: t.procedure
+              .input(
+                z.tuple([
+                  z.string().describe("name"),
+                  z.object({
+                    enthusiasm: z.number().describe("exclamation marks"),
+                  })
+                ])
+              )
+              .query(({input}) => {
+                const [name, {enthusiasm}] = input
+                return `Hello ${name}` + '!'.repeat(enthusiasm)
+              })
+          })
+
+          const cli = createCli({router})
+
+          cli.run()
+          ' > test.ts
+      - name: run test
+        working-directory: test-dir
+        run: |
+          tsc test.ts
+          node test.js
+      - run: ls -R
+        if: always()
