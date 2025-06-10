@@ -53,4 +53,4 @@ const router = trpc.router({
     }),
 })
 
-void createCli({router}).run()
+void createCli({router, name: 'calculator', version: '1.0.0'}).run()

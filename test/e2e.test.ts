@@ -67,6 +67,7 @@ test('cli help', async () => {
       Available subCommands: add, subtract, multiply, divide, square-root
 
       Options:
+        -V, --version                         output the version number
         -h, --help                            display help for command
 
       Commands:
@@ -198,6 +199,7 @@ test('cli non-existent command', async () => {
     Available subcommands: add, subtract, multiply, divide, square-root
 
     Options:
+      -V, --version                         output the version number
       -h, --help                            display help for command
 
     Commands:
@@ -232,6 +234,7 @@ test('cli no command', async () => {
     Available subcommands: add, subtract, multiply, divide, square-root
 
     Options:
+      -V, --version                         output the version number
       -h, --help                            display help for command
 
     Commands:
@@ -259,13 +262,18 @@ test('cli no command', async () => {
 })
 
 test('migrations help', async () => {
+  const version = await tsx('migrations', ['--version'])
+  expect(version.trim()).toMatchInlineSnapshot(`"1.0.0"`)
+
   const output = await tsx('migrations', ['--help'])
   expect(output).toMatchInlineSnapshot(`
     "Usage: migrations [options] [command]
 
+    Manage migrations
     Available subcommands: up, create, list, search
 
     Options:
+      -V, --version     output the version number
       -h, --help        display help for command
 
     Commands:
@@ -306,9 +314,11 @@ test('migrations search.byName help', async () => {
   expect(output).toMatchInlineSnapshot(`
     "Usage: migrations [options] [command]
 
+    Manage migrations
     Available subcommands: up, create, list, search
 
     Options:
+      -V, --version     output the version number
       -h, --help        display help for command
 
     Commands:
@@ -342,9 +352,11 @@ test('migrations search.byContent', async () => {
 
     Usage: migrations [options] [command]
 
+    Manage migrations
     Available subcommands: up, create, list, search
 
     Options:
+      -V, --version     output the version number
       -h, --help        display help for command
 
     Commands:
