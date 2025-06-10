@@ -5,6 +5,7 @@ import {inspect} from 'util'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
+import {commandToJSON} from './json'
 import {
   flattenedProperties,
   incompatiblePropertyPairs,
@@ -562,7 +563,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     })
   }
 
-  return {run, buildProgram}
+  return {run, buildProgram, toJSON: (program = buildProgram()) => commandToJSON(program as Command)}
 }
 
 function getMeta(procedure: AnyProcedure): Omit<TrpcCliMeta, 'cliMeta'> {
