@@ -128,7 +128,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
   function buildProgram(runParams?: TrpcCliRunParams) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    const program = new Command()
+    const program = new Command(params.name)
+
+    if (params.version) program.version(params.version)
+    if (params.description) program.description(params.description)
+    if (params.usage) [params.usage].flat().forEach(usage => program.usage(usage))
+
     program.showHelpAfterError()
     program.showSuggestionAfterError()
 
@@ -217,14 +222,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             ? ({exists: true, value: propertyValue.default} as const)
             : ({exists: false} as const)
 
-        if (defaultValue.value === true) {
-          const negation = new Option(
-            longOption.replace('--', '--no-'),
-            `Negate \`${longOption}\` option. ${description || ''}`.trim(),
-          )
-          command.addOption(negation)
-        }
-
         const rootTypes = getSchemaTypes(propertyValue).sort()
 
         /** try to get a parser that can confidently parse a string into the correct type. Returns null if it can't confidently parse */
@@ -269,12 +266,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           procedureInputs.optionsJsonSchema.required?.includes(propertyKey)
         const isCliOptionRequired = isValueRequired && propertyType !== 'boolean' && !defaultValue.exists
 
+        function negate() {
+          const negation = new Option(longOption.replace('--', '--no-'), `Negate \`${longOption}\` option.`.trim())
+          command.addOption(negation)
+        }
+
         const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
 
         if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'string') {
           const option = new Option(`${flags} [value]`, description)
           option.default(defaultValue.exists ? defaultValue.value : false)
           command.addOption(option)
+          negate()
           return
         }
         if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'number') {
@@ -282,6 +285,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option.argParser(getValueParser(rootTypes).parser!)
           option.default(defaultValue.exists ? defaultValue.value : false)
           command.addOption(option)
+          negate()
           return
         }
         if (rootTypes.length === 2 && rootTypes[0] === 'number' && rootTypes[1] === 'string') {
@@ -306,14 +310,15 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           const option = new Option(flags, description)
           option.default(defaultValue.exists ? defaultValue.value : false)
           command.addOption(option)
+          negate()
           return
-        }
-        if (propertyType === 'boolean' && !isValueRequired) {
+        } else if (propertyType === 'boolean') {
           const option = new Option(`${flags} [boolean]`, description)
           option.argParser(value => booleanParser(value))
           // don't set a default value of `false`, because `undefined` is accepted by the procedure
           if (defaultValue.exists) option.default(defaultValue.value)
           command.addOption(option)
+          negate()
           return
         }
 
@@ -371,6 +376,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         )
 
         command.addOption(option)
+        if (propertyType === 'boolean') negate() // just in case we refactor the code above and don't handle booleans as a special case
       }
 
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)

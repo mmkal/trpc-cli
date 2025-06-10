@@ -111,6 +111,8 @@ cli.run()
 
 ### Existing routers
 
+🚧 This feature is usable but likely to change. Right now, the trpc-cli bin script will import `tsx` before running your CLI in order to import routers written in typescript. This might change in future to allow for more ways of running typescript files (possibly checking if [`importx`](https://github.com/antfu-collective/importx) instead of tsx) 🚧
+
 If you already have a trpc router (say, for a regular server rather), you can invoke it as a CLI without writing any additional code - just use the built in bin script:
 
 ```
@@ -350,7 +352,7 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:e30cac4beb319a42941777d631465ee0 -->
+<!-- hash:ac0f348dafc53b3e441e1d8466c29c5c -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer} from 'trpc-cli'
 import {z} from 'zod'
@@ -408,7 +410,7 @@ const router = trpc.router({
     }),
 })
 
-void createCli({router}).run()
+void createCli({router, name: 'calculator', version: '1.0.0'}).run()
 ```
 <!-- codegen:end -->
 
@@ -424,6 +426,7 @@ Usage: calculator [options] [command]
 Available subcommands: add, subtract, multiply, divide, square-root
 
 Options:
+  -V, --version                         output the version number
   -h, --help                            display help for command
 
 Commands:
@@ -798,7 +801,7 @@ In general, you should rely on `trpc-cli` to correctly handle the lifecycle and 
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:72921e331afb12cbf349fa2e980c9f26 -->
+<!-- hash:fb832e86869dc44396d5db272281a6ce -->
 ```ts
 import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
 import * as trpcCompat from '../../src/trpc-compat'
@@ -907,8 +910,13 @@ export const router = trpc.router({
   }),
 }) satisfies trpcCompat.Trpc11RouterLike
 
+const cli = createCli({
+  router,
+  name: 'migrations',
+  version: '1.0.0',
+  description: 'Manage migrations',
+})
 if (require.main === module) {
-  const cli = createCli({router})
   void cli.run()
 }
 function getMigrations() {
@@ -947,9 +955,11 @@ Here's how the CLI will work:
 ```
 Usage: migrations [options] [command]
 
+Manage migrations
 Available subcommands: up, create, list, search
 
 Options:
+  -V, --version     output the version number
   -h, --help        display help for command
 
 Commands:
@@ -969,9 +979,11 @@ Commands:
 ```
 Usage: migrations [options] [command]
 
+Manage migrations
 Available subcommands: up, create, list, search
 
 Options:
+  -V, --version     output the version number
   -h, --help        display help for command
 
 Commands:
@@ -991,9 +1003,11 @@ Commands:
 ```
 Usage: migrations [options] [command]
 
+Manage migrations
 Available subcommands: up, create, list, search
 
 Options:
+  -V, --version     output the version number
   -h, --help        display help for command
 
 Commands:

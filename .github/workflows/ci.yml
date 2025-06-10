@@ -12,10 +12,129 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - run: pnpm lint
-  test_trpc_vnext:
+  create_tgz:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: corepack enable
-      - run: pnpm install @trpc/server@next
-      - run: pnpm test e2e
+      - run: pnpm install
+      - run: pnpm build
+      - run: npm pack
+      - name: rename tgz
+        run: mv $(ls | grep .tgz) pkg.tgz
+      - name: arethetypeswrong
+        run: npx --yes @arethetypeswrong/cli ./pkg.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball
+          path: pkg.tgz
+  test_tgz:
+    runs-on: ubuntu-latest
+    needs: [create_tgz]
+    strategy:
+      matrix:
+        node: [23, 22]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: tarball
+      - run: ls
+      - run: mkdir test-dir
+      - name: setup test-dir
+        working-directory: test-dir
+        run: |
+          npm init -y
+          npm install ../pkg.tgz
+          npm install typescript@5.8.3 @trpc/server@^11.1.1 zod@3.25.3 tsx@4.19.4
+          echo '{
+            "compilerOptions": {
+                "target": "ES2022",
+                "lib": ["ES2022"],
+                "skipLibCheck": true,
+                "strict": true,
+                "declaration": true,
+                "esModuleInterop": true,
+                "module": "NodeNext",
+                "moduleResolution": "NodeNext"
+            },
+            "include": ["*.ts"]
+          }' > tsconfig.json
+          echo '
+          import {trpcServer, z, createCli} from "trpc-cli"
+
+          const t = trpcServer.initTRPC.create()
+
+          export const router = t.router({
+            sayHello: t.procedure
+              .input(
+                z.tuple([
+                  z.string().describe("name"),
+                  z.object({
+                    enthusiasm: z.number().int().positive().describe("exclamation marks"),
+                  })
+                ])
+              )
+              .query(({input: [name, {enthusiasm}]}) => {
+                return `Hello ${name}` + "!".repeat(enthusiasm)
+              })
+          })
+
+          const cli = createCli({router})
+
+          void cli.run()
+          ' > test.ts
+
+
+          # let's create an equivalent file without using `trpc-cli` imports at all - we'll test the bin script on this
+          # to make sure it's possible to use the package's CLI on an existing trpc router.
+          echo '
+          import * as trpcServer from "@trpc/server"
+          import {z} from "zod"
+          ' > router.ts
+
+          cat test.ts | grep -v import | grep -v 'const cli =' | grep -v cli.run >> router.ts
+
+          cat test.ts
+          cat router.ts
+      - name: compile
+        working-directory: test-dir
+        run: npx tsc -p .
+      - name: run test
+        working-directory: test-dir
+        run: |
+          echo testing --help
+          node test.js --help
+
+          echo checking --help output
+          node test.js --help | grep say-hello
+
+          echo testing say-hello
+          node test.js say-hello mmkal --enthusiasm 3
+
+          echo checking say-hello output
+          node test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+      - name: test bin script
+        working-directory: test-dir
+        run: |
+          echo testing --help
+          ./node_modules/.bin/trpc-cli router.ts --help
+
+          echo checking --help output
+          ./node_modules/.bin/trpc-cli router.ts --help | grep say-hello
+
+          echo testing say-hello
+          ./node_modules/.bin/trpc-cli router.ts say-hello mmkal --enthusiasm 3
+
+          echo checking say-hello output
+          ./node_modules/.bin/trpc-cli router.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+      - name: tsx test
+        if: failure()
+        working-directory: test-dir
+        run: |
+          npx tsx test.ts --help
+          npx tsx test.ts say-hello mmkal --enthusiasm 3
+      - run: ls -R
+        if: always()
