@@ -22,6 +22,8 @@ jobs:
       - run: npm pack
       - name: rename tgz
         run: mv $(ls | grep .tgz) pkg.tgz
+      - name: arethetypeswrong
+        run: npx --yes @arethetypeswrong/cli ./pkg.tgz
       - uses: actions/upload-artifact@v4
         with:
           name: tarball
