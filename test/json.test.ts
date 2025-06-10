@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest'
 
-import {createCli} from '../src'
+import {createCli, trpcServer, z} from '../src'
 import {router} from './fixtures/migrations'
 
 expect.addSnapshotSerializer({
@@ -8,7 +8,20 @@ expect.addSnapshotSerializer({
   print: val => JSON.stringify(val, null, 2),
 })
 
-test('toJSON', async () => {
+test('simple toJSON', async () => {
+  const t = trpcServer.initTRPC.create()
+
+  const myRouter = t.router({
+    hello: t.procedure.input(z.object({firstName: z.string()})).mutation(({input}) => `hello, ${input.firstName}`),
+  })
+
+  const cli = createCli({router: myRouter, name: 'mycli', version: '1.2.3'})
+  expect(JSON.stringify(cli.toJSON())).toMatchInlineSnapshot(
+    `"{\\"description\\":\\"Available subcommands: hello\\",\\"usage\\":\\"[options] [command]\\",\\"arguments\\":[],\\"options\\":[],\\"commands\\":[{\\"name\\":\\"hello\\",\\"usage\\":\\"[options]\\",\\"arguments\\":[],\\"options\\":[{\\"name\\":\\"first-name\\",\\"required\\":true,\\"optional\\":false,\\"negate\\":false,\\"variadic\\":false,\\"flags\\":\\"--first-name <string>\\",\\"attributeName\\":\\"firstName\\"}],\\"commands\\":[]}]}"`,
+  )
+})
+
+test('migrations toJSON', async () => {
   const json = createCli({router}).toJSON()
   expect(json).toMatchInlineSnapshot(`
     {

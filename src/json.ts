@@ -1,5 +1,9 @@
 import {Command} from 'commander'
 
+/**
+ * JSON representation of a commander `Command` instance
+ * Note: this is not necessarily a _complete_ representation of the command - it aims to be a big enough subset to be useful for generating documentation etc.
+ */
 export type CommandJSON = {
   name?: string
   version?: string

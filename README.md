@@ -41,6 +41,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
    - [effect](#effect)
 - [tRPC v10 vs v11](#trpc-v10-vs-v11)
 - [Output and lifecycle](#output-and-lifecycle)
+- [`.toJSON()`](#tojson)
 - [Testing your CLI](#testing-your-cli)
 - [Features and Limitations](#features-and-limitations)
 - [More Examples](#more-examples)
@@ -708,6 +709,23 @@ cli.run({
 ```
 
 You could also override `process.exit` to avoid killing the process at all - see [programmatic usage](#programmatic-usage) for an example.
+
+## `.toJSON()`
+
+If you want to generate a website/help docs for your CLI, you can use `.toJSON()`:
+
+```ts
+const myRouter = t.router({
+  hello: t.procedure
+    .input(z.object({firstName: z.string()}))
+    .mutation(({input}) => `hello, ${input.firstName}`),
+})
+
+const cli = createCli({router: myRouter, name: 'mycli', version: '1.2.3'})
+cli.toJSON() // {"name":"mycli", "version": "1.2.3", "commands": [{"name"":"hello", "options": [{"name": "firstName", "required": true, ...}]}]}
+```
+
+This is a _rough_ JSON representation of the CLI - useful for generating documentation etc. It returns basic information about the CLI and each command - to get any extra details you will need to use the `cli.buildProgram()` method and walk the tree of commands yourself.
 
 ## Testing your CLI
 
