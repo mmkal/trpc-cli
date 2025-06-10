@@ -31,6 +31,7 @@ export type CommandJSON = {
     short?: string
     negate: boolean
     optional: boolean
+    choices?: string[]
   }[]
 }
 
@@ -78,6 +79,7 @@ export const commandToJSON = (command: Command): CommandJSON => {
     if (o.flags) result.flags = o.flags
     if (o.short) result.short = o.short
     if (o.description) result.description = o.description
+    if (o.argChoices) result.choices = o.argChoices
 
     const attributeName = o.attributeName()
     if (attributeName) result.attributeName = attributeName

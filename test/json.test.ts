@@ -12,12 +12,73 @@ test('simple toJSON', async () => {
   const t = trpcServer.initTRPC.create()
 
   const myRouter = t.router({
-    hello: t.procedure.input(z.object({firstName: z.string()})).mutation(({input}) => `hello, ${input.firstName}`),
+    hello: t.procedure
+      .input(
+        z.object({
+          firstName: z.string(),
+          role: z.enum(['user', 'admin', 'anonymous']),
+        }),
+      )
+      .mutation(({input}) => `hello, ${input.firstName}`),
   })
 
   const cli = createCli({router: myRouter, name: 'mycli', version: '1.2.3'})
-  expect(JSON.stringify(cli.toJSON())).toMatchInlineSnapshot(
-    `"{\\"description\\":\\"Available subcommands: hello\\",\\"usage\\":\\"[options] [command]\\",\\"arguments\\":[],\\"options\\":[],\\"commands\\":[{\\"name\\":\\"hello\\",\\"usage\\":\\"[options]\\",\\"arguments\\":[],\\"options\\":[{\\"name\\":\\"first-name\\",\\"required\\":true,\\"optional\\":false,\\"negate\\":false,\\"variadic\\":false,\\"flags\\":\\"--first-name <string>\\",\\"attributeName\\":\\"firstName\\"}],\\"commands\\":[]}]}"`,
+  expect(cli.toJSON()).toMatchInlineSnapshot(
+    `
+      {
+        "name": "mycli",
+        "version": "1.2.3",
+        "description": "Available subcommands: hello",
+        "usage": "[options] [command]",
+        "arguments": [],
+        "options": [
+          {
+            "name": "version",
+            "required": false,
+            "optional": false,
+            "negate": false,
+            "variadic": false,
+            "flags": "-V, --version",
+            "short": "-V",
+            "description": "output the version number",
+            "attributeName": "version"
+          }
+        ],
+        "commands": [
+          {
+            "name": "hello",
+            "usage": "[options]",
+            "arguments": [],
+            "options": [
+              {
+                "name": "first-name",
+                "required": true,
+                "optional": false,
+                "negate": false,
+                "variadic": false,
+                "flags": "--first-name <string>",
+                "attributeName": "firstName"
+              },
+              {
+                "name": "role",
+                "required": true,
+                "optional": false,
+                "negate": false,
+                "variadic": false,
+                "flags": "--role <string>",
+                "choices": [
+                  "user",
+                  "admin",
+                  "anonymous"
+                ],
+                "attributeName": "role"
+              }
+            ],
+            "commands": []
+          }
+        ]
+      }
+    `,
   )
 })
 
@@ -101,6 +162,10 @@ test('migrations toJSON', async () => {
               "flags": "-s, --status [string]",
               "short": "-s",
               "description": "Filter to only show migrations with this status",
+              "choices": [
+                "executed",
+                "pending"
+              ],
               "attributeName": "status"
             }
           ],
@@ -128,6 +193,10 @@ test('migrations toJSON', async () => {
                   "flags": "-s, --status [string]",
                   "short": "-s",
                   "description": "Filter to only show migrations with this status",
+                  "choices": [
+                    "executed",
+                    "pending"
+                  ],
                   "attributeName": "status"
                 },
                 {
@@ -156,6 +225,10 @@ test('migrations toJSON', async () => {
                   "variadic": false,
                   "flags": "--status [string]",
                   "description": "Filter to only show migrations with this status",
+                  "choices": [
+                    "executed",
+                    "pending"
+                  ],
                   "attributeName": "status"
                 },
                 {
