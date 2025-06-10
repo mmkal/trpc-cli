@@ -12,10 +12,103 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - run: pnpm lint
-  test_trpc_vnext:
+  create_tgz:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: corepack enable
-      - run: pnpm install @trpc/server@next
-      - run: pnpm test e2e
+      - run: pnpm install
+      - run: pnpm build
+      - run: npm pack
+      - name: rename tgz
+        run: mv $(ls | grep .tgz) pkg.tgz
+      - name: arethetypeswrong
+        run: npx --yes @arethetypeswrong/cli ./pkg.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball
+          path: pkg.tgz
+  test_tgz:
+    runs-on: ubuntu-latest
+    needs: [create_tgz]
+    strategy:
+      matrix:
+        node: [23, 22]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: tarball
+      - run: ls
+      - run: mkdir test-dir
+      - name: setup test-dir
+        working-directory: test-dir
+        run: |
+          npm init -y
+          npm install ../pkg.tgz
+          npm install typescript
+          echo '{
+            "compilerOptions": {
+                "target": "ES2022",
+                "lib": ["ES2022"],
+                "skipLibCheck": true,
+                "strict": true,
+                "declaration": true,
+                "esModuleInterop": true,
+                "module": "NodeNext",
+                "moduleResolution": "NodeNext"
+            },
+            "include": ["*.ts"]
+          }' > tsconfig.json
+          echo '
+          import {trpcServer, TrpcCliMeta, createCli, z} from "trpc-cli"
+          const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
+
+          const router = t.router({
+            sayHello: t.procedure
+              .input(
+                z.tuple([
+                  z.string().describe("name"),
+                  z.object({
+                    enthusiasm: z.number().int().positive().describe("exclamation marks"),
+                  })
+                ])
+              )
+              .query(({input: [name, {enthusiasm}]}) => {
+                return `Hello ${name}` + "!".repeat(enthusiasm)
+              })
+          })
+
+          const cli = createCli({router})
+
+          void cli.run()
+          ' > test.ts
+
+          cat test.ts
+      - name: compile
+        working-directory: test-dir
+        run: npx tsc -p .
+      - name: run test
+        working-directory: test-dir
+        run: |
+          echo testing --help
+          node test.js --help
+
+          echo checking --help output
+          node test.js --help | grep say-hello
+
+          echo testing say-hello
+          node test.js say-hello mmkal --enthusiasm 3
+
+          echo checking say-hello output
+          node test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+      - name: tsx test
+        if: failure()
+        working-directory: test-dir
+        run: |
+          npx tsx test.ts --help
+          npx tsx test.ts say-hello mmkal --enthusiasm 3
+      - run: ls -R
+        if: always()

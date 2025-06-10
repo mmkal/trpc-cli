@@ -127,7 +127,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
   function buildProgram(runParams?: TrpcCliRunParams) {
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    const program = new Command()
+    const program = new Command(params.name)
+
+    if (params.version) program.version(params.version)
+    if (params.description) program.description(params.description)
+    if (params.usage) [params.usage].flat().forEach(usage => program.usage(usage))
+
     program.showHelpAfterError()
     program.showSuggestionAfterError()
 
