@@ -48,7 +48,7 @@ jobs:
         run: |
           npm init -y
           npm install ../pkg.tgz
-          npm install typescript
+          npm install typescript@5.8.3 @trpc/server@^11.1.1 zod@3.25.3 tsx@4.19.4
           echo '{
             "compilerOptions": {
                 "target": "ES2022",
@@ -63,10 +63,11 @@ jobs:
             "include": ["*.ts"]
           }' > tsconfig.json
           echo '
-          import {trpcServer, TrpcCliMeta, createCli, z} from "trpc-cli"
-          const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
+          import {trpcServer, z, createCli} from "trpc-cli"
 
-          const router = t.router({
+          const t = trpcServer.initTRPC.create()
+
+          export const router = t.router({
             sayHello: t.procedure
               .input(
                 z.tuple([
@@ -86,7 +87,18 @@ jobs:
           void cli.run()
           ' > test.ts
 
+
+          # let's create an equivalent file without using `trpc-cli` imports at all - we'll test the bin script on this
+          # to make sure it's possible to use the package's CLI on an existing trpc router.
+          echo '
+          import * as trpcServer from "@trpc/server"
+          import {z} from "zod"
+          ' > router.ts
+
+          cat test.ts | grep -v import | grep -v 'const cli =' | grep -v cli.run >> router.ts
+
           cat test.ts
+          cat router.ts
       - name: compile
         working-directory: test-dir
         run: npx tsc -p .
@@ -104,6 +116,20 @@ jobs:
 
           echo checking say-hello output
           node test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+      - name: test bin script
+        working-directory: test-dir
+        run: |
+          echo testing --help
+          ./node_modules/.bin/trpc-cli router.ts --help
+
+          echo checking --help output
+          ./node_modules/.bin/trpc-cli router.ts --help | grep say-hello
+
+          echo testing say-hello
+          ./node_modules/.bin/trpc-cli router.ts say-hello mmkal --enthusiasm 3
+
+          echo checking say-hello output
+          ./node_modules/.bin/trpc-cli router.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
       - name: tsx test
         if: failure()
         working-directory: test-dir
