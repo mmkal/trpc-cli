@@ -87,7 +87,7 @@ const run = async (cli: TrpcCli, argv: string[]) => {
     .run({
       argv,
       process: {exit}, // prevent process.exit
-      logger: {info: log},
+      logger: {info: log, error: log},
     })
     .catch(err => err)
   if (result.exitCode !== 0) throw result.cause
