@@ -55,10 +55,14 @@ program.action(async () => {
   }
 
   const fullpath = path.resolve(process.cwd(), filepath)
-  let importedModule = (await import(fullpath)) as {}
-  while ('module.exports' in importedModule) {
+  let importedModule = (await import(fullpath)) as Record<string, unknown>
+  while ('module.exports' in importedModule && importedModule?.['module.exports'] !== importedModule) {
     // this is a cjs-like module, possibly what tsx gives us
-    importedModule = (importedModule as {['module.exports']: {}})?.['module.exports']
+    importedModule = importedModule?.['module.exports'] as never
+  }
+  while ('default' in importedModule && importedModule?.default !== importedModule) {
+    // depending on how it's loaded we can end up with weird stuff like `{default: {default: {myRouter: ...}}}`
+    importedModule = importedModule?.default as never
   }
   let router: Trpc11RouterLike
   const isTrpcRouterLike = (value: unknown): value is Trpc11RouterLike =>
@@ -73,14 +77,9 @@ program.action(async () => {
   } else {
     const routerExports = Object.values(importedModule).filter(isTrpcRouterLike)
     if (routerExports.length !== 1) {
-      const defaultExport = (importedModule as {default?: {default?: {}}})?.default?.default
-      if (defaultExport && isTrpcRouterLike(defaultExport)) {
-        router = defaultExport
-      } else {
-        throw new Error(
-          `Expected exactly one trpc router in ${filepath}, found ${routerExports.length}. Exports: ${Object.keys(importedModule).join(', ')}`,
-        )
-      }
+      throw new Error(
+        `Expected exactly one trpc router in ${filepath}, found ${routerExports.length}. Exports: ${Object.keys(importedModule).join(', ')}`,
+      )
     }
     router = routerExports[0]
   }
