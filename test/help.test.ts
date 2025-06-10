@@ -50,6 +50,7 @@ test('options with various modifiers', async () => {
           unionWithDefault: z.union([z.literal('foo'), z.literal('bar')]).default('foo'),
           numberWithDefault: z.number().default(42),
           booleanWithDefault: z.boolean().default(true),
+          booleanOrNumber: z.union([z.boolean(), z.number()]),
           enumWithDefault: z.enum(['foo', 'bar']).default('foo'),
           arrayWithDefault: z.array(z.string()).default(['hello']),
           objectWithDefault: z.object({foo: z.string()}).default({foo: 'bar'}),
@@ -75,8 +76,10 @@ test('options with various modifiers', async () => {
       --literal-with-default [string]               Const: hi (default: "hi")
       --union-with-default [string]                 (choices: "foo", "bar", default: "foo")
       --number-with-default [number]                (default: 42)
-      --no-boolean-with-default                     Negate \`--boolean-with-default\` option.
       --boolean-with-default [boolean]              (default: true)
+      --no-boolean-with-default                     Negate \`--boolean-with-default\` option.
+      --boolean-or-number [value]                   type: boolean or number (default: false)
+      --no-boolean-or-number                        Negate \`--boolean-or-number\` option.
       --enum-with-default [string]                  (choices: "foo", "bar", default: "foo")
       --array-with-default [values...]              Type: string array (default: ["hello"])
       --object-with-default [json]                  Object (json formatted); Required: ["foo"] (default: {"foo":"bar"})
