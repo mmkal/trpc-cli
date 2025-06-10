@@ -5,5 +5,5 @@ module.exports = [
       'unicorn/prefer-switch': 'off', // mmkal
     },
   },
-  {ignores: ['**/*ignoreme*']}, //
+  // {ignores: ['**/*ignoreme*']}, //
 ]
