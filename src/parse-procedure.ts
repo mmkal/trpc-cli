@@ -336,7 +336,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
               return convertPositional(correspondingSchema.items, s)
             })
           }
-          if (typeof v !== 'string') {
+          if (typeof v !== 'string' && v !== undefined) {
             throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
           }
           return convertPositional(correspondingSchema, v)
