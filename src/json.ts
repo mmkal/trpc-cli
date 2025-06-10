@@ -40,33 +40,49 @@ export type CommandJSON = {
  */
 export const commandToJSON = (command: Command): CommandJSON => {
   const json: CommandJSON = {}
-  json.name = command.name() || undefined
-  json.version = command.version() || undefined
-  json.description = command.description() || undefined
-  json.usage = command.usage() || undefined
-  json.arguments = command.registeredArguments.map(arg => ({
-    name: arg.name(),
-    description: arg.description || undefined,
-    required: arg.required,
-    defaultValue: (arg.defaultValue as {}) || undefined,
-    defaultValueDescription: arg.defaultValueDescription || undefined,
-    variadic: arg.variadic,
-    choices: arg.argChoices || undefined,
-  }))
+  const name = command.name()
 
-  json.options = command.options.map(o => ({
-    name: o.name(),
-    flags: o.flags || undefined,
-    short: o.short || undefined,
-    description: o.description || undefined,
-    required: o.required,
-    optional: o.optional,
-    negate: o.negate,
-    defaultValue: (o.defaultValue as {}) || undefined,
-    defaultValueDescription: o.defaultValueDescription || undefined,
-    variadic: o.variadic,
-    attributeName: o.attributeName() || undefined,
-  }))
+  if (name) json.name = name
+  const version = command.version()
+  if (version) json.version = version
+  const description = command.description()
+  if (description) json.description = description
+  const usage = command.usage()
+  if (usage) json.usage = usage
+
+  json.arguments = command.registeredArguments.map(arg => {
+    const result = {name: arg.name()} as NonNullable<CommandJSON['arguments']>[number]
+
+    result.variadic = arg.variadic
+    result.required = arg.required
+
+    if (arg.description) result.description = arg.description
+    if (arg.defaultValue) result.defaultValue = arg.defaultValue as {}
+    if (arg.defaultValueDescription) result.defaultValueDescription = arg.defaultValueDescription
+    if (arg.argChoices) result.choices = arg.argChoices
+    return result
+  })
+
+  json.options = command.options.map(o => {
+    const result = {name: o.name()} as NonNullable<CommandJSON['options']>[number]
+
+    result.required = o.required
+    result.optional = o.optional
+    result.negate = o.negate
+    result.variadic = o.variadic
+
+    if (o.flags) result.flags = o.flags
+    if (o.short) result.short = o.short
+    if (o.description) result.description = o.description
+
+    const attributeName = o.attributeName()
+    if (attributeName) result.attributeName = attributeName
+
+    if (o.defaultValue) result.defaultValue = o.defaultValue as {}
+    if (o.defaultValueDescription) result.defaultValueDescription = o.defaultValueDescription
+
+    return result
+  })
 
   json.commands = command.commands.map(c => commandToJSON(c))
 

@@ -25,22 +25,22 @@ test('toJSON', async () => {
           "options": [
             {
               "name": "to",
-              "flags": "--to [string]",
-              "description": "Mark migrations up to this one as exectued",
               "required": false,
               "optional": true,
               "negate": false,
               "variadic": false,
+              "flags": "--to [string]",
+              "description": "Mark migrations up to this one as exectued",
               "attributeName": "to"
             },
             {
               "name": "step",
-              "flags": "--step [number]",
-              "description": "Mark this many migrations as executed; Exclusive minimum: 0",
               "required": false,
               "optional": true,
               "negate": false,
               "variadic": false,
+              "flags": "--step [number]",
+              "description": "Mark this many migrations as executed; Exclusive minimum: 0",
               "attributeName": "step"
             }
           ],
@@ -54,20 +54,20 @@ test('toJSON', async () => {
           "options": [
             {
               "name": "name",
-              "flags": "--name <string>",
               "required": true,
               "optional": false,
               "negate": false,
               "variadic": false,
+              "flags": "--name <string>",
               "attributeName": "name"
             },
             {
               "name": "content",
-              "flags": "--content <string>",
               "required": true,
               "optional": false,
               "negate": false,
               "variadic": false,
+              "flags": "--content <string>",
               "attributeName": "content"
             }
           ],
@@ -81,13 +81,13 @@ test('toJSON', async () => {
           "options": [
             {
               "name": "status",
-              "flags": "-s, --status [string]",
-              "short": "-s",
-              "description": "Filter to only show migrations with this status",
               "required": false,
               "optional": true,
               "negate": false,
               "variadic": false,
+              "flags": "-s, --status [string]",
+              "short": "-s",
+              "description": "Filter to only show migrations with this status",
               "attributeName": "status"
             }
           ],
@@ -108,22 +108,22 @@ test('toJSON', async () => {
               "options": [
                 {
                   "name": "status",
-                  "flags": "-s, --status [string]",
-                  "short": "-s",
-                  "description": "Filter to only show migrations with this status",
                   "required": false,
                   "optional": true,
                   "negate": false,
                   "variadic": false,
+                  "flags": "-s, --status [string]",
+                  "short": "-s",
+                  "description": "Filter to only show migrations with this status",
                   "attributeName": "status"
                 },
                 {
                   "name": "name",
-                  "flags": "--name [string]",
                   "required": false,
                   "optional": true,
                   "negate": false,
                   "variadic": false,
+                  "flags": "--name [string]",
                   "attributeName": "name"
                 }
               ],
@@ -137,23 +137,23 @@ test('toJSON', async () => {
               "options": [
                 {
                   "name": "status",
-                  "flags": "--status [string]",
-                  "description": "Filter to only show migrations with this status",
                   "required": false,
                   "optional": true,
                   "negate": false,
                   "variadic": false,
+                  "flags": "--status [string]",
+                  "description": "Filter to only show migrations with this status",
                   "attributeName": "status"
                 },
                 {
                   "name": "search-term",
-                  "flags": "-q, --search-term [string]",
-                  "short": "-q",
-                  "description": "Only show migrations whose \`content\` value contains this string",
                   "required": false,
                   "optional": true,
                   "negate": false,
                   "variadic": false,
+                  "flags": "-q, --search-term [string]",
+                  "short": "-q",
+                  "description": "Only show migrations whose \`content\` value contains this string",
                   "attributeName": "searchTerm"
                 }
               ],
