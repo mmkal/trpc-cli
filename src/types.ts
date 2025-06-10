@@ -6,6 +6,10 @@ import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-com
 export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** A tRPC router. Procedures will become CLI commands. */
   router: R
+  name?: string
+  version?: string
+  description?: string
+  usage?: string | string[]
   /** Context to be supplied when invoking the router. */
   context?: inferRouterContext<R>
   /** @deprecated this is actually **removed** not deprecated; use `aliases` on each procedure `meta` instead */
