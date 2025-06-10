@@ -412,7 +412,6 @@ test('fs copy help', async () => {
 })
 
 test('fs copy', async () => {
-  expect(await tsx('fs', ['copy', 'one'])).toMatch(/Expected string at position 1, got undefined/)
   expect(await tsx('fs', ['copy', 'one', 'uno'])).toMatchInlineSnapshot(
     `
       "{
@@ -424,8 +423,25 @@ test('fs copy', async () => {
       }"
     `,
   )
+  expect(await tsx('fs', ['copy', 'one'])).toMatchInlineSnapshot(`
+    "{
+      "source": "one",
+      "destination": "one.copy",
+      "options": {
+        "force": false
+      }
+    }"
+  `)
   expect(await tsx('fs', ['copy', 'one', '--force'])).toMatchInlineSnapshot(
-    `"Expected string at position 1, got undefined"`,
+    `
+      "{
+        "source": "one",
+        "destination": "one.copy",
+        "options": {
+          "force": true
+        }
+      }"
+    `,
   )
   expect(await tsx('fs', ['copy', 'one', 'uno', '--force'])).toMatchInlineSnapshot(
     `
