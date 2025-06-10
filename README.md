@@ -722,7 +722,7 @@ const myRouter = t.router({
 })
 
 const cli = createCli({router: myRouter, name: 'mycli', version: '1.2.3'})
-cli.toJSON() // {"name":"mycli", "version": "1.2.3", "commands": [{"name"":"hello", "options": [{"name": "firstName", "required": true, ...}]}]}
+cli.toJSON() // {"name":"mycli", "version": "1.2.3", "commands": [{"name"":"hello", "options": [{"name": "first-name", "required": true, ...}]}]}
 ```
 
 This is a _rough_ JSON representation of the CLI - useful for generating documentation etc. It returns basic information about the CLI and each command - to get any extra details you will need to use the `cli.buildProgram()` method and walk the tree of commands yourself.
