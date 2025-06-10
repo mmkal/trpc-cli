@@ -47,20 +47,19 @@ jobs:
           npm init -y
           npm install ../pkg.tgz
           npm install typescript
-          echo '
-          {
+          echo '{
             "compilerOptions": {
                 "target": "ES2022",
                 "lib": ["ES2022"],
+                "skipLibCheck": true,
+                "strict": true,
+                "declaration": true,
                 "esModuleInterop": true,
                 "module": "NodeNext",
-                "moduleResolution": "NodeNext",
-                "strict": true,
-                "skipLibCheck": true
+                "moduleResolution": "NodeNext"
             },
-            "include": ["test.ts"]
-          }
-          ' > tsconfig.json
+            "include": ["*.ts"]
+          }' > tsconfig.json
           echo '
           import {trpcServer, TrpcCliMeta, createCli, z} from "trpc-cli"
           const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
