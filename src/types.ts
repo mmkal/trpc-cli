@@ -185,8 +185,17 @@ export type CommanderProgramLike = {
 }
 
 export interface TrpcCli {
+  /** run the CLI - gets args from `process.argv` by default */
   run: (params?: TrpcCliRunParams, program?: CommanderProgramLike) => Promise<void>
+  /**
+   * Build a `Commander` program from the CLI - you can use this to manually customise the program before passing it to `.run(...)`.
+   * Note that you will need to cast the return value to `import('commander').Command` to use it as a `Command` instance.
+   */
   buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
+  /**
+   * Get a JSON representation of the CLI - useful for generating documentation etc. This function return basic information about the CLI
+   * and each command - to get any extra details you will need to use the `buildProgram` function and walk the tree of commands yourself.
+   */
   toJSON: (program?: CommanderProgramLike) => CommandJSON
 }
 
