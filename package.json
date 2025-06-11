@@ -63,6 +63,7 @@
   },
   "devDependencies": {
     "@inquirer/prompts": "7.5.1",
+    "@orpc/contract": "1.5.0",
     "@orpc/server": "1.5.0",
     "@types/json-schema": "7.0.15",
     "@types/node": "20.17.48",

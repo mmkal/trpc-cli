@@ -89,9 +89,13 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
   const entries: [string, ProcedureInfo][] = []
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const {resolveContractProcedures} = require('@orpc/server') as typeof import('@orpc/server')
+  const {resolveContractProcedures, isProcedure} = require('@orpc/server') as typeof import('@orpc/server')
   const router = params.router as import('@orpc/server').AnyRouter
   void resolveContractProcedures({path: [], router}, ({contract, path}) => {
+    let procedure: Record<string, unknown> = params.router
+    for (const p of path) procedure = procedure[p] as Record<string, unknown>
+    if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
+
     const procedureInputsResult = parseProcedureInputs([contract['~orpc'].inputSchema], {
       '@valibot/to-json-schema': params['@valibot/to-json-schema'],
       effect: params.effect,
@@ -101,19 +105,21 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
     const meta = getMeta(procedureish)
 
     if (meta.jsonInput) {
-      return [procedurePath, {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure: contract}]
+      entries.push([procedurePath, {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure}])
+      return
     }
     if (!procedureInputsResult.success) {
       const parsedProcedure = jsonProcedureInputs(
         `procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error}`,
       )
-      return [procedurePath, {meta, parsedProcedure: parsedProcedure, incompatiblePairs: [], procedure: contract}]
+      entries.push([procedurePath, {meta, parsedProcedure: parsedProcedure, incompatiblePairs: [], procedure}])
+      return
     }
 
     const parsedProcedure = procedureInputsResult.value
     const incompatiblePairs = incompatiblePropertyPairs(parsedProcedure.optionsJsonSchema)
 
-    entries.push([procedurePath, {procedure: contract, meta, incompatiblePairs, parsedProcedure}])
+    entries.push([procedurePath, {procedure, meta, incompatiblePairs, parsedProcedure}])
   })
   return entries
 }
