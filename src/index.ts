@@ -18,8 +18,8 @@ import {parseProcedureInputs} from './parse-procedure'
 import {promptify} from './prompts'
 import {prettifyStandardSchemaError} from './standard-schema/errors'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils'
-import {AnyProcedure, AnyRouter, CreateCallerFactoryLike, isTrpc11Procedure} from './trpc-compat'
-import {TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
+import {AnyProcedure, AnyRouter, CreateCallerFactoryLike} from './trpc-compat'
+import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
 
 export * from './types'
@@ -49,70 +49,51 @@ export {AnyRouter, AnyProcedure} from './trpc-compat'
  */
 // todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
 export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
-  const procedures = Object.entries<AnyProcedure>(router._def.procedures as {}).map(([procedurePath, procedure]) => {
-    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], {
-      '@valibot/to-json-schema': params['@valibot/to-json-schema'],
-      effect: params.effect,
-    })
-    // trpc types are a bit of a lie - they claim to be `router._def.procedures.foo.bar` but really they're `router._def.procedures['foo.bar']`
-    let type: 'mutation' | 'query' | 'subscription'
-    if (isTrpc11Procedure(procedure)) {
-      type = procedure._def.type
-    } else if (procedure._def.mutation) {
-      type = 'mutation'
-    } else if (procedure._def.query) {
-      type = 'query'
-    } else if (procedure._def.subscription) {
-      type = 'subscription'
-    } else {
-      const keys = Object.keys(procedure._def).join(', ')
-      throw new Error(`Unknown procedure type for procedure object with keys ${keys}`)
+  const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
+  return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
+    const meta = getMeta(procedure)
+    if (meta.jsonInput) {
+      return [procedurePath, {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure}]
     }
-
-    if (getMeta(procedure).jsonInput || !procedureInputsResult.success) {
-      return [
-        procedurePath,
-        {
-          name: procedurePath,
-          procedure,
-          meta: getMeta(procedure),
-          procedureInputs: {
-            positionalParameters: [],
-            optionsJsonSchema: {
-              type: 'object',
-              properties: {
-                input: {
-                  type: 'json' as string as 'string',
-                  description: `Input formatted as JSON${procedureInputsResult.success ? '' : ` (procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error})`}`,
-                },
-              },
-            },
-            getPojoInput: parsedCliParams => {
-              if (parsedCliParams.options.input == null) return parsedCliParams.options.input
-              return JSON.parse(parsedCliParams.options.input as string) as {}
-            },
-          },
-          incompatiblePairs: [],
-          type,
-        },
-      ] as typeof result
+    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], params)
+    if (!procedureInputsResult.success) {
+      const procedureInputs = jsonProcedureInputs(
+        `procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error}`,
+      )
+      return [procedurePath, {meta, parsedProcedure: procedureInputs, incompatiblePairs: [], procedure}]
     }
 
     const procedureInputs = procedureInputsResult.value
     const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
 
-    const result = [
-      procedurePath,
-      {name: procedurePath, meta: getMeta(procedure), procedureInputs, incompatiblePairs, type, procedure},
-    ] as const
-    return result
+    return [procedurePath, {meta: getMeta(procedure), parsedProcedure: procedureInputs, incompatiblePairs, procedure}]
   })
+}
 
-  const procedureEntries = procedures.flatMap(([k, v]) => {
-    return typeof v === 'string' ? [] : [[k, v] as const]
-  })
+/** helper to create a "ParsedProcedure" that just accepts a JSON string - for when we failed to parse the input schema or the use set jsonInput: true */
+const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
+  let description = `Input formatted as JSON`
+  if (reason) description += ` (${reason})`
+  return {
+    positionalParameters: [],
+    optionsJsonSchema: {
+      type: 'object',
+      properties: {
+        input: {type: 'json' as string as 'string', description},
+      },
+    },
+    getPojoInput: parsedCliParams => {
+      if (parsedCliParams.options.input == null) return parsedCliParams.options.input
+      return JSON.parse(parsedCliParams.options.input as string) as {}
+    },
+  }
+}
 
-  return procedureEntries
+type ProcedureInfo = {
+  meta: TrpcCliMeta
+  parsedProcedure: ParsedProcedure
+  incompatiblePairs: [string, string][]
+  procedure: {}
 }
 
 /**
@@ -156,9 +137,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const configureCommand = (
       command: Command,
       procedurePath: string,
-      {meta, procedureInputs, incompatiblePairs}: (typeof procedureEntries)[0][1],
+      {meta, parsedProcedure, incompatiblePairs}: (typeof procedureEntries)[0][1],
     ) => {
-      const optionJsonSchemaProperties = flattenedProperties(procedureInputs.optionsJsonSchema)
+      const optionJsonSchemaProperties = flattenedProperties(parsedProcedure.optionsJsonSchema)
       command.exitOverride(ec => {
         _process.exit(ec.exitCode)
         throw new FailedToExitError(`Command ${command.name()} exitOverride`, {exitCode: ec.exitCode, cause: ec})
@@ -182,7 +163,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       command.description(meta?.description || '')
 
-      procedureInputs.positionalParameters.forEach(param => {
+      parsedProcedure.positionalParameters.forEach(param => {
         const descriptionParts = [
           param.type === 'string' ? '' : param.type, // "string" is the default assumption, don't bother showing it
           param.description,
@@ -262,8 +243,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         const propertyType = rootTypes[0]
         const isValueRequired =
-          'required' in procedureInputs.optionsJsonSchema &&
-          procedureInputs.optionsJsonSchema.required?.includes(propertyKey)
+          'required' in parsedProcedure.optionsJsonSchema &&
+          parsedProcedure.optionsJsonSchema.required?.includes(propertyKey)
         const isCliOptionRequired = isValueRequired && propertyType !== 'boolean' && !defaultValue.exists
 
         function negate() {
@@ -405,19 +386,20 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
         const positionalValues = args.slice(0, -2)
 
-        const input = procedureInputs.getPojoInput({positionalValues, options})
+        const input = parsedProcedure.getPojoInput({positionalValues, options})
         const resolvedTrpcServer = await (params.trpcServer || trpcServer11)
+
+        let caller: Record<string, (input: unknown) => unknown>
 
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
         if (deprecatedCreateCaller) {
           const message = `Using deprecated \`createCallerFactory\` option. Use \`trpcServer\` instead. e.g. \`createCli({router: myRouter, trpcServer: import('@trpc/server')})\``
           logger.error?.(message)
+          caller = deprecatedCreateCaller(router)(params.context)
+        } else {
+          const createCallerFactor = resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike
+          caller = createCallerFactor(router)(params.context)
         }
-
-        const createCallerFactory =
-          deprecatedCreateCaller ||
-          (resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike)
-        const caller = createCallerFactory(router)(params.context)
 
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
           throw transformError(err, command)
