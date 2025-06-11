@@ -1,6 +1,34 @@
 import {Command} from 'commander'
-import {expect, test, vi} from 'vitest'
+import {expect, expectTypeOf, test, vi} from 'vitest'
+import {describe} from 'vitest'
 import {AnyRouter, createCli, TrpcCliParams, TrpcCliRunParams, trpcServer, z} from '../src'
+
+describe('types', () => {
+  const t = trpcServer.initTRPC.create()
+  const router = t.router({
+    hi: t.procedure.input(z.string()).query(({input}) => `hi ${input}`),
+  })
+
+  test('clack types', async () => {
+    const prompts = await import('@clack/prompts')
+    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
+  })
+
+  test('inquirer types', async () => {
+    const prompts = await import('@inquirer/prompts')
+    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
+  })
+
+  test('enquirer types', async () => {
+    const prompts = await import('enquirer')
+    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
+  })
+
+  test('prompts types', async () => {
+    const prompts = await import('prompts')
+    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
+  })
+})
 
 test('custom prompter', async () => {
   const log = vi.fn()
