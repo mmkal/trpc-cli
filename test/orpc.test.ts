@@ -102,15 +102,7 @@ test('orpc unjsonifiable schema', async () => {
   const router = o.router({
     hello: o
       .input(
-        z.custom<{foo: string; bar: number}>(
-          value =>
-            typeof value === 'object' &&
-            value !== null &&
-            'foo' in value &&
-            'bar' in value &&
-            typeof (value as any).foo === 'string' &&
-            typeof (value as any).bar === 'number',
-        ),
+        z.custom<{foo: string; bar: number}>(value => typeof value?.foo === 'string' && typeof value?.bar === 'number'),
       )
       .handler(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
   })
