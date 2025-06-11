@@ -61,7 +61,8 @@ test('lazy router', async () => {
     })),
   })
 
-  expect(await run(lazyRouter as never, ['greeting', 'casual', 'bob'])).toMatchInlineSnapshot(`"hi bob"`)
+  // @ts-expect-error - we want an error here - that means users will get a type error if they try to use a lazy router without unlazying it first
+  expect(await run(lazyRouter, ['greeting', 'casual', 'bob'])).toMatchInlineSnapshot(`"hi bob"`) // worth noting that you can actually still call the non-lazy procedures on the lazy router
 
   const {departure, ...eagerRouterSubset} = lazyRouter
   expect(await run(eagerRouterSubset, ['greeting', 'casual', 'bob'])).toMatchInlineSnapshot(`"hi bob"`)

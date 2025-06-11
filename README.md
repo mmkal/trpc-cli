@@ -332,7 +332,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L155)
+#### [createCli](./src/index.ts#L161)
 
 Run a trpc router as a CLI.
 
@@ -670,6 +670,25 @@ export const router = os.router({
 })
 
 const cli = createCli({router})
+cli.run()
+```
+
+Note: lazy procedures aren't supported right now. If you are have some, call orpc's `unlazyRouter` helper before passing the router to trpc-cli:
+
+```ts
+import {os, unlazyRouter} from '@orpc/server'
+import {z, createCli} from 'trpc-cli'
+
+export const router = os.router({
+  real: {
+    add: os.procedure
+      .input(z.object({left: z.number(), right: z.number()}))
+      .handler(({input}) => input.left + input.right),
+  },
+  imaginary: os.lazy(() => import('./imaginary-numbers-calculator')),
+})
+
+const cli = createCli({router: await unlazyRouter(router)})
 cli.run()
 ```
 
