@@ -4,7 +4,7 @@
 
 ![Demo](./docs/usage-demo.gif)
 
-trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, input validation, auto-generated help documentation, and command completion for free.
+trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, input validation, auto-generated help documentation, and command completion for free.
 
 - ✅ Get all of trpc's type safety and DX building a CLI
 - ✅ Automatic positional arguments and options via zod input types (or arktype, or valibot)
@@ -15,6 +15,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
 - ✅ Automatic shell autocompletions
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
+- ✅ oRPC support
 - ☑️ [soon] No config needed. Run on an existing router with `npx trpc-cli src/your-router.ts`
 
 ---
@@ -657,7 +658,7 @@ Note: previously, when trpc v11 was in preview, v10 was included in the dependen
 
 ## oRPC
 
-You can now also pass an [oRPC](https://orpc.unnoq.com/) router! Note that it needs to be an `@orpc/server` router, not an `@orpc/contract`. It works the exact same way:
+You can now also pass an [oRPC](https://orpc.unnoq.com/) router! Note that it needs to be an `@orpc/server` router, not an `@orpc/contract`. It works the same way as with tRPC, just pass a router:
 
 ```ts
 import {os} from '@orpc/server'
@@ -673,7 +674,7 @@ const cli = createCli({router})
 cli.run()
 ```
 
-Note: lazy procedures aren't supported right now. If you are have some, call orpc's `unlazyRouter` helper before passing the router to trpc-cli:
+Note: lazy procedures aren't supported right now. If you are using some, call orpc's `unlazyRouter` helper before passing the router to trpc-cli:
 
 ```ts
 import {os, unlazyRouter} from '@orpc/server'
