@@ -1,5 +1,6 @@
 import type {JSONSchema7} from 'json-schema'
 import {type JsonSchema7Type} from 'zod-to-json-schema'
+import {CommandJSON} from './json'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,6 +178,10 @@ export type TrpcCliRunParams = {
   }
 }
 
+/**
+ * Type that looks like a `commander` Command instance, but doesn't require a dependency on `commander` to avoid awkward typescript errors.
+ * If you need to use it as a `Command` instance, just cast it with `as` to `import('commander').Command`.
+ */
 export type CommanderProgramLike = {
   name: () => string
   parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
@@ -184,8 +189,19 @@ export type CommanderProgramLike = {
 }
 
 export interface TrpcCli {
+  /** run the CLI - gets args from `process.argv` by default */
   run: (params?: TrpcCliRunParams, program?: CommanderProgramLike) => Promise<void>
+  /**
+   * Build a `Commander` program from the CLI - you can use this to manually customise the program before passing it to `.run(...)`.
+   * Note that you will need to cast the return value to `import('commander').Command` to use it as a `Command` instance.
+   */
   buildProgram: (params?: TrpcCliRunParams) => CommanderProgramLike
+  /**
+   * @experimental
+   * Get a JSON representation of the CLI - useful for generating documentation etc. This function returns basic information about the CLI
+   * and each command - to get any extra details you will need to use the `buildProgram` function and walk the tree of commands yourself.
+   */
+  toJSON: (program?: CommanderProgramLike) => CommandJSON
 }
 
 // todo: allow these all to be async?
