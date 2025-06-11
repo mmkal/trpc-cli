@@ -89,5 +89,5 @@ export const isTrpc11Router = (router: AnyRouter): router is Trpc11RouterLike =>
 
 export const isOrpcRouter = (router: AnyRouter): router is OrpcRouterLike<any> => {
   // this could fall down if someone tries to pass a trpc router which doesn't use t.router(...) - but you're not allowed to do that ok!
-  return !('_def' in router) || (router._def && !('~orpc' in router._def))
+  return !('_def' in router) || (router._def && '~orpc' in router._def)
 }
