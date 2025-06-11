@@ -40,6 +40,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) router into a professional-grade C
    - [valibot](#valibot)
    - [effect](#effect)
 - [tRPC v10 vs v11](#trpc-v10-vs-v11)
+- [oRPC](#orpc)
 - [Output and lifecycle](#output-and-lifecycle)
 - [`.toJSON()`](#tojson)
 - [Testing your CLI](#testing-your-cli)
@@ -331,7 +332,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L107)
+#### [createCli](./src/index.ts#L155)
 
 Run a trpc router as a CLI.
 
@@ -653,6 +654,24 @@ const cli = createCli({router, trpcServer: require('@trpc/server')})
 ```
 
 Note: previously, when trpc v11 was in preview, v10 was included in the dependencies.
+
+## oRPC
+
+You can now also pass an [oRPC](https://orpc.unnoq.com/) router! Note that it needs to be an `@orpc/server` router, not an `@orpc/contract`. It works the exact same way:
+
+```ts
+import {os} from '@orpc/server'
+import {z, createCli} from 'trpc-cli'
+
+export const router = os.router({
+  add: os.procedure
+    .input(z.object({left: z.number(), right: z.number()}))
+    .handler(({input}) => input.left + input.right),
+})
+
+const cli = createCli({router})
+cli.run()
+```
 
 ## Output and lifecycle
 
