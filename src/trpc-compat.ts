@@ -52,6 +52,12 @@ export type Trpc10ProcedureLike = {
   }
 }
 
+export type TRPCErrorLike = {
+  name: 'TRPCError'
+  cause?: Error
+  code: string
+}
+
 export type OrpcProcedureLike<Ctx> = {
   '~orpc': {
     __initialContext?: (context: Ctx) => unknown

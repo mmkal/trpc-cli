@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
 import {inspect} from 'util'
 import {JsonSchema7Type} from 'zod-to-json-schema'
@@ -26,6 +25,7 @@ import {
   OrpcRouterLike,
   Trpc10RouterLike,
   Trpc11RouterLike,
+  TRPCErrorLike,
 } from './trpc-compat'
 import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
@@ -36,7 +36,6 @@ export {z} from 'zod/v4'
 export * as zod from 'zod'
 
 export * as trpcServer from '@trpc/server'
-
 export class Command extends BaseCommand {
   /** @internal track the commands that have been run, so that we can find the `__result` of the last command */
   __ran: Command[] = []
@@ -446,7 +445,23 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const positionalValues = args.slice(0, -2)
 
         const input = parsedProcedure.getPojoInput({positionalValues, options})
-        const resolvedTrpcServer = await (params.trpcServer || trpcServer11)
+        let resolvedTrpcServer = params.trpcServer
+        if (!resolvedTrpcServer && !isOrpcRouter(router)) {
+          try {
+            resolvedTrpcServer = await import('@trpc/server')
+          } catch (e) {
+            throw new Error(
+              `Failed to import "@trpc/server". If you're using a tRPC router, please install it and try again.`,
+              {cause: e},
+            )
+          }
+        }
+        if (resolvedTrpcServer && typeof (resolvedTrpcServer as Promise<unknown>).then === 'function') {
+          resolvedTrpcServer = await resolvedTrpcServer
+        }
+        if (!resolvedTrpcServer && !isOrpcRouter(router)) {
+          throw new Error('Could not resolve @trpc/server module at runtime.')
+        }
 
         let caller: Record<string, (input: unknown) => unknown>
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
@@ -460,8 +475,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         } else {
-          const createCallerFactor = resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike
-          caller = createCallerFactor(router)(params.context)
+          const trpcServerMod = resolvedTrpcServer as {initTRPC: typeof import('@trpc/server').initTRPC}
+          const createCallerFactory = trpcServerMod.initTRPC.create().createCallerFactory as CreateCallerFactoryLike
+          caller = createCallerFactory(router)(params.context)
         }
 
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
@@ -630,7 +646,7 @@ function transformError(err: unknown, command: Command) {
     )
   }
 
-  if (looksLikeInstanceof<trpcServer11.TRPCError>(err, 'TRPCError')) {
+  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError')) {
     const cause = err.cause
     if (looksLikeStandardSchemaFailure(cause)) {
       const prettyMessage = prettifyStandardSchemaError(cause)
