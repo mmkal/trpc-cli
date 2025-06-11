@@ -331,7 +331,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L126)
+#### [createCli](./src/index.ts#L107)
 
 Run a trpc router as a CLI.
 
