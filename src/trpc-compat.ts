@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import {StandardSchemaV1} from './standard-schema/contract'
+
 /**
  * Type which looks *enough* like a trpc v11(+?) router to infer its types correctly
  * This is written from scratch to avoid any kind of dependency on @trpc/server v11+
@@ -50,21 +52,42 @@ export type Trpc10ProcedureLike = {
   }
 }
 
+export type OrpcProcedureLike<Ctx> = {
+  '~orpc': {
+    __initialContext?: (context: Ctx) => unknown
+    inputSchema?: StandardSchemaV1
+  }
+}
+
+export type OrpcRouterLike<Ctx> = {
+  [key: string]: OrpcProcedureLike<Ctx> | OrpcRouterLike<Ctx>
+}
+
 export type CreateCallerFactoryLike<Procedures = Record<string, (input: unknown) => unknown>> = (
   router: any,
 ) => (context: any) => Procedures
 
-export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike
+export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any>
 
 export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike
 
-export type inferRouterContext<R extends AnyRouter> = R['_def']['_config']['$types']['ctx']
+export type inferRouterContext<R extends AnyRouter> = R extends Trpc10RouterLike | Trpc11RouterLike
+  ? R['_def']['_config']['$types']['ctx']
+  : R extends OrpcRouterLike<infer Ctx>
+    ? Ctx
+    : never
 
 export const isTrpc11Procedure = (procedure: AnyProcedure): procedure is Trpc11ProcedureLike => {
   return 'type' in procedure._def && typeof procedure._def.type === 'string'
 }
 
 export const isTrpc11Router = (router: AnyRouter): router is Trpc11RouterLike => {
+  if (isOrpcRouter(router)) return false
   const procedure = Object.values(router._def.procedures)[0] as AnyProcedure | undefined
   return Boolean(procedure && isTrpc11Procedure(procedure))
+}
+
+export const isOrpcRouter = (router: AnyRouter): router is OrpcRouterLike<any> => {
+  // this could fall down if someone tries to pass a trpc router which doesn't use t.router(...) - but you're not allowed to do that ok!
+  return !('_def' in router) || (router._def && '~orpc' in router._def)
 }
