@@ -159,11 +159,17 @@ export type EnquirerLike = {
   }) => Promise<T>
 }
 
+export type ClackPromptsLike = {
+  intro: (title: string) => void
+  outro: (title: string) => void
+}
+
 export type Promptable =
   | InquirerPromptsLike
   | EnquirerLike
   | PromptsLike
   | Prompter
+  | ClackPromptsLike
   | ((command: CommanderProgramLike) => Prompter)
 
 export type TrpcCliRunParams = {

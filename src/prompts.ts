@@ -1,6 +1,14 @@
 /* eslint-disable import-x/order */
 import {Argument, Command, Option} from 'commander'
-import {CommanderProgramLike, EnquirerLike, InquirerPromptsLike, Promptable, Prompter, PromptsLike} from './types'
+import {
+  CommanderProgramLike,
+  EnquirerLike,
+  InquirerPromptsLike,
+  Promptable,
+  Prompter,
+  PromptsLike,
+  ClackPromptsLike,
+} from './types'
 
 type UpstreamOptionInfo = {
   typeName: 'UpstreamOptionInfo'
@@ -145,6 +153,73 @@ const inquirerPrompter = (prompts: InquirerPromptsLike): Prompter => {
   return prompts as typeof import('@inquirer/prompts') satisfies InquirerPromptsLike // the `satisfies` just makes sure it's safe to cast like this - if we accidentally add a method `@inquirer/prompts` doesn't have, this will fail.
 }
 
+const clackPrompter = (prompts: ClackPromptsLike): Prompter => {
+  const clack = prompts as typeof import('@clack/prompts')
+
+  class ExitPromptError extends Error {} // we look for errors with this name specifically
+  const throwOnCancel = <T>(value: T | symbol) => {
+    if (clack.isCancel(value)) throw new ExitPromptError()
+    return value
+  }
+
+  return {
+    input: async params => {
+      return clack
+        .text({
+          message: params.message,
+          initialValue: params.default,
+          defaultValue: params.default,
+          placeholder: params.default,
+          validate: params.validate
+            ? input => {
+                const result = params.validate!(input)
+                if (result === true) return undefined
+                if (result === false) return `Invalid input`
+                return result
+              }
+            : undefined,
+        })
+        .then(throwOnCancel)
+    },
+    checkbox: async params => {
+      return clack
+        .multiselect({
+          message: params.message,
+          options: params.choices.map(c => ({
+            label: c.name,
+            value: c.value,
+          })),
+          initialValues: params.choices.flatMap(c => (c.checked ? [c.value] : [])),
+        })
+        .then(throwOnCancel)
+    },
+    confirm: async params => {
+      return clack
+        .confirm({
+          message: params.message,
+          initialValue: params.default,
+        })
+        .then(throwOnCancel)
+    },
+    select: async params => {
+      return clack
+        .select({
+          message: params.message,
+          options: params.choices.map(sorc => {
+            const c = typeof sorc === 'string' ? {name: sorc, value: sorc} : sorc
+            return {
+              label: c.name,
+              value: c.value,
+              hint: c.description,
+            }
+          }),
+          initialValue: params.default,
+        })
+        .then(throwOnCancel)
+    },
+  }
+}
+
 const promptsPrompter = (prompts: PromptsLike): Prompter => {
   const p = prompts as typeof import('prompts')
   // weirdly prompts *demands* a name but doesn't show it anywhere, it just returns `{x: 'foo'}` instead of just returning `'foo'` 🤷
@@ -274,6 +349,8 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
     prompter = enquirerPrompter(promptsInput as EnquirerLike)
   } else if (typeof promptsInput?.rawlist === 'function') {
     prompter = inquirerPrompter(promptsInput as InquirerPromptsLike)
+  } else if (typeof promptsInput?.intro === 'function') {
+    prompter = clackPrompter(promptsInput as ClackPromptsLike)
   } else if (typeof promptsInput === 'function') {
     prompter = promptsInput(program) as Prompter // some kind of custom prompter-getter
   } else {
