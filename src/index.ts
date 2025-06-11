@@ -89,9 +89,9 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
   const entries: [string, ProcedureInfo][] = []
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const {resolveContractProcedures, isProcedure} = require('@orpc/server') as typeof import('@orpc/server')
+  const {traverseContractProcedures, isProcedure} = require('@orpc/server') as typeof import('@orpc/server')
   const router = params.router as import('@orpc/server').AnyRouter
-  void resolveContractProcedures({path: [], router}, ({contract, path}) => {
+  const lazyRoutes = traverseContractProcedures({path: [], router}, ({contract, path}) => {
     let procedure: Record<string, unknown> = params.router
     for (const p of path) procedure = procedure[p] as Record<string, unknown>
     if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
@@ -121,6 +121,11 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
 
     entries.push([procedurePath, {procedure, meta, incompatiblePairs, parsedProcedure}])
   })
+  if (lazyRoutes.length) {
+    const suggestion = `Please use \`import {unlazyRouter} from '@orpc/server'\` to unlazy the router before passing it to trpc-cli`
+    const routes = lazyRoutes.map(({path}) => path.join('.')).join(', ')
+    throw new Error(`Lazy routers are not supported. ${suggestion}. Lazy routes detected: ${routes}`)
+  }
   return entries
 }
 
