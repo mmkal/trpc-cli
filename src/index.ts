@@ -455,8 +455,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
         } else if (isOrpcRouter(router)) {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const {call} = require('@orpc/server') as typeof import('@orpc/server')
+          const {call} = eval(`require('@orpc/server')`) as typeof import('@orpc/server')
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         } else {
