@@ -57,9 +57,8 @@ export {AnyRouter, AnyProcedure} from './trpc-compat'
  */
 // todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
 export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
-  if (isOrpcRouter(router)) {
-    return parseOrpcRouter({router, ...params})
-  }
+  if (isOrpcRouter(router)) return parseOrpcRouter({router, ...params})
+
   return parseTrpcRouter({router, ...params})
 }
 
@@ -85,35 +84,9 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
   })
 }
 
-/** helper to create a "ParsedProcedure" that just accepts a JSON string - for when we failed to parse the input schema or the use set jsonInput: true */
-const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
-  let description = `Input formatted as JSON`
-  if (reason) description += ` (${reason})`
-  return {
-    positionalParameters: [],
-    optionsJsonSchema: {
-      type: 'object',
-      properties: {
-        input: {type: 'json' as string as 'string', description},
-      },
-    },
-    getPojoInput: parsedCliParams => {
-      if (parsedCliParams.options.input == null) return parsedCliParams.options.input
-      return JSON.parse(parsedCliParams.options.input as string) as {}
-    },
-  }
-}
-
-type ProcedureInfo = {
-  meta: TrpcCliMeta
-  parsedProcedure: ParsedProcedure
-  incompatiblePairs: [string, string][]
-  procedure: {}
-}
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
-  const entries: ReturnType<typeof parseTrpcRouter<never>> = []
+  const entries: [string, ProcedureInfo][] = []
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const {resolveContractProcedures} = require('@orpc/server') as typeof import('@orpc/server')
@@ -143,6 +116,32 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
     entries.push([procedurePath, {procedure: contract, meta, incompatiblePairs, parsedProcedure}])
   })
   return entries
+}
+
+/** helper to create a "ParsedProcedure" that just accepts a JSON string - for when we failed to parse the input schema or the use set jsonInput: true */
+const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
+  let description = `Input formatted as JSON`
+  if (reason) description += ` (${reason})`
+  return {
+    positionalParameters: [],
+    optionsJsonSchema: {
+      type: 'object',
+      properties: {
+        input: {type: 'json' as string as 'string', description},
+      },
+    },
+    getPojoInput: parsedCliParams => {
+      if (parsedCliParams.options.input == null) return parsedCliParams.options.input
+      return JSON.parse(parsedCliParams.options.input as string) as {}
+    },
+  }
+}
+
+type ProcedureInfo = {
+  meta: TrpcCliMeta
+  parsedProcedure: ParsedProcedure
+  incompatiblePairs: [string, string][]
+  procedure: {}
 }
 
 /**

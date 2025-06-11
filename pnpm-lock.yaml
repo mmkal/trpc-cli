@@ -36,9 +36,6 @@ importers:
       '@inquirer/prompts':
         specifier: 7.5.1
         version: 7.5.1(@types/node@20.17.48)
-      '@orpc/contract':
-        specifier: 1.5.0
-        version: 1.5.0
       '@orpc/server':
         specifier: 1.5.0
         version: 1.5.0
