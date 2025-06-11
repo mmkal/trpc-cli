@@ -1,8 +1,7 @@
-import {os, resolveContractProcedures, call} from '@orpc/server'
+import {os} from '@orpc/server'
 import * as v from 'valibot'
 import {expect, test} from 'vitest'
 import {z} from 'zod/v4'
-import {inferRouterContext, OrpcProcedureLike, OrpcRouterLike} from '../src/trpc-compat'
 import {run, snapshotSerializer} from './test-run'
 
 expect.addSnapshotSerializer({
