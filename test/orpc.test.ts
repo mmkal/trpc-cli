@@ -102,7 +102,7 @@ test('orpc unjsonifiable schema', async () => {
   const router = o.router({
     hello: o
       .input(
-        z.custom<{foo: string; bar: number}>(value => typeof value?.foo === 'string' && typeof value.bar === 'number'),
+        z.custom<{foo: string; bar: number}>(value => typeof value?.foo === 'string' && typeof value?.bar === 'number'),
       )
       .handler(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
   })
@@ -113,7 +113,7 @@ test('orpc unjsonifiable schema', async () => {
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
                       converted to CLI arguments: Invalid input type { '$schema':
-                      'https://json-schema.org/draft-2020-12/schema' }, expected
+                      'https://json-schema.org/draft/2020-12/schema' }, expected
                       object or tuple.)
       -h, --help      display help for command
     "

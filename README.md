@@ -66,7 +66,7 @@ This isn't just the easiest and safest way to build a CLI, but you also get all 
 ## Installation
 
 ```
-npm install trpc-cli
+npm install trpc-cli @trpc/server
 ```
 
 ## Usage
