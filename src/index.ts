@@ -88,8 +88,7 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
 const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
   const entries: [string, ProcedureInfo][] = []
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const {traverseContractProcedures, isProcedure} = require('@orpc/server') as typeof import('@orpc/server')
+  const {traverseContractProcedures, isProcedure} = eval(`require('@orpc/server')`) as typeof import('@orpc/server')
   const router = params.router as import('@orpc/server').AnyRouter
   const lazyRoutes = traverseContractProcedures({path: [], router}, ({contract, path}) => {
     let procedure: Record<string, unknown> = params.router
