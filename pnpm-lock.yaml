@@ -37,8 +37,8 @@ importers:
         specifier: 0.11.0
         version: 0.11.0
       '@inquirer/prompts':
-        specifier: 7.5.1
-        version: 7.5.1(@types/node@20.19.0)
+        specifier: 7.5.3
+        version: 7.5.3(@types/node@20.19.0)
       '@orpc/contract':
         specifier: 1.5.0
         version: 1.5.0
@@ -608,8 +608,8 @@ packages:
       '@types/node':
         optional: true
 
-  '@inquirer/prompts@7.5.1':
-    resolution: {integrity: sha512-5AOrZPf2/GxZ+SDRZ5WFplCA2TAQgK3OYrXCYmJL5NaTu4ECcoWFlfUZuw7Es++6Njv7iu/8vpYJhuzxUH76Vg==}
+  '@inquirer/prompts@7.5.3':
+    resolution: {integrity: sha512-8YL0WiV7J86hVAxrh3fE5mDCzcTDe1670unmJRz6ArDgN+DBK1a0+rbnNWp4DUB5rPMwqD5ZP6YHl9KK1mbZRg==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': '>=18'
@@ -4500,7 +4500,7 @@ snapshots:
     optionalDependencies:
       '@types/node': 20.19.0
 
-  '@inquirer/prompts@7.5.1(@types/node@20.19.0)':
+  '@inquirer/prompts@7.5.3(@types/node@20.19.0)':
     dependencies:
       '@inquirer/checkbox': 4.1.8(@types/node@20.19.0)
       '@inquirer/confirm': 5.1.12(@types/node@20.19.0)
@@ -6860,7 +6860,7 @@ snapshots:
   inquirer@12.5.0(@types/node@20.19.0):
     dependencies:
       '@inquirer/core': 10.1.13(@types/node@20.19.0)
-      '@inquirer/prompts': 7.5.1(@types/node@20.19.0)
+      '@inquirer/prompts': 7.5.3(@types/node@20.19.0)
       '@inquirer/type': 3.0.7(@types/node@20.19.0)
       ansi-escapes: 4.3.2
       mute-stream: 2.0.0
