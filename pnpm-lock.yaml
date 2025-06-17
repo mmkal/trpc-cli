@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  eslint-plugin-codegen: https://pkg.pr.new/mmkal/eslint-plugin-codegen@28
-
 importers:
 
   .:
@@ -70,8 +67,8 @@ importers:
         specifier: '8'
         version: 8.57.1
       eslint-plugin-mmkal:
-        specifier: https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb
-        version: https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb(eslint@8.57.1)(typescript@5.8.3)(vitest@3.2.3(@types/node@20.19.0))
+        specifier: https://pkg.pr.new/mmkal/eslint-plugin-codegen/eslint-plugin-mmkal@52f4b40
+        version: https://pkg.pr.new/mmkal/eslint-plugin-codegen/eslint-plugin-mmkal@52f4b40(eslint@8.57.1)(typescript@5.8.3)(vitest@3.1.4(@types/node@20.17.48))
       execa:
         specifier: 9.3.1
         version: 9.3.1
@@ -998,11 +995,6 @@ packages:
     peerDependencies:
       typescript: '>=5.7.2'
 
-  '@trpc/server@11.3.1':
-    resolution: {integrity: sha512-5Rjigjqwl9ieXL91ebZ1M4FPFXQJ5qipRyZuBoNzvqkq7Qlig+2F4WwLELyiTSNk2bGzdJTXJMKLhRE9Z56D8w==}
-    peerDependencies:
-      typescript: '>=5.7.2'
-
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
 
@@ -1014,9 +1006,6 @@ packages:
 
   '@types/babel__traverse@7.20.7':
     resolution: {integrity: sha512-dkO5fhS7+/oos4ciWxyEyjWe48zmG6wbCheo/G2ZnHx4fs3EU6YC6UM8rk56gAjNJ9P3MTH2jo5jb92/K6wbng==}
-
-  '@types/chai@5.2.2':
-    resolution: {integrity: sha512-8kB30R7Hwqf40JPiKhVzodJs2Qc1ZJ5zuT3uzw5Hq/dhNCl3G3l83jfpdI1e20BP348+fV7VIL/+FxaXkqBmWg==}
 
   '@types/dedent@0.7.0':
     resolution: {integrity: sha512-EGlKlgMhnLt/cM4DbUSafFdrkeJoC9Mvnj0PUCU7tFmTjMjNRT957kXCx0wYm3JuEq4o4ZsS5vG+NlkM2DMd2A==}
@@ -1994,9 +1983,9 @@ packages:
   eslint-import-resolver-node@0.3.9:
     resolution: {integrity: sha512-WFj2isz22JahUv+B788TlO3N6zL3nNJGU8CcZbPZvVEkBPaJdCV4vy5wyghty5ROFbCRnm132v8BScu5/1BQ8g==}
 
-  eslint-plugin-codegen@https://pkg.pr.new/mmkal/eslint-plugin-codegen@28:
-    resolution: {tarball: https://pkg.pr.new/mmkal/eslint-plugin-codegen@28}
-    version: 0.31.0
+  eslint-plugin-codegen@https://pkg.pr.new/mmkal/eslint-plugin-codegen@52f4b40:
+    resolution: {tarball: https://pkg.pr.new/mmkal/eslint-plugin-codegen@52f4b40}
+    version: 0.33.0
     engines: {node: '>=18.0.0'}
 
   eslint-plugin-functional@7.3.0:
@@ -2033,8 +2022,8 @@ packages:
     peerDependencies:
       eslint: '>=8'
 
-  eslint-plugin-mmkal@https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb:
-    resolution: {tarball: https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb}
+  eslint-plugin-mmkal@https://pkg.pr.new/mmkal/eslint-plugin-codegen/eslint-plugin-mmkal@52f4b40:
+    resolution: {tarball: https://pkg.pr.new/mmkal/eslint-plugin-codegen/eslint-plugin-mmkal@52f4b40}
     version: 0.10.1
     engines: {node: '>=18'}
 
@@ -4106,8 +4095,16 @@ packages:
     peerDependencies:
       zod: ^3.24.1
 
-  zod@3.25.58:
-    resolution: {integrity: sha512-DVLmMQzSZwNYzQoMaM3MQWnxr2eq+AtM9Hx3w1/Yl0pH8sLTSjN4jGP7w6f7uand6Hw44tsnSu1hz1AOA6qI2Q==}
+  zod@3.25.67:
+    resolution: {integrity: sha512-idA2YXwpCdqUSKRCACDE6ItZD9TZzy3OZMtpfLoh6oPR47lipysRrJfjzMqFxQ3uJuUPyUeWe1r9vLH33xO/Qw==}
+
+  zod@3.25.7:
+    resolution: {integrity: sha512-YGdT1cVRmKkOg6Sq7vY7IkxdphySKnXhaUmFI4r4FcuFVNgpCb9tZfNwXbT6BPjD5oz0nubFsoo9pIqKrDcCvg==}
+
+  zx@8.5.5:
+    resolution: {integrity: sha512-kzkjV3uqyEthw1IBDbA7Co2djji77vCP1DRvt58aYSMwiX4nyvAkFE8OBSEsOUbDJAst0Yo4asNvMTGG5HGPXA==}
+    engines: {node: '>= 12.17.0'}
+    hasBin: true
 
 snapshots:
 
@@ -4159,15 +4156,15 @@ snapshots:
     dependencies:
       '@babel/parser': 7.27.5
       '@babel/types': 7.27.6
-      '@jridgewell/gen-mapping': 0.3.8
+      '@jridgewell/gen-mapping': 0.3.5
       '@jridgewell/trace-mapping': 0.3.25
-      jsesc: 3.1.0
+      jsesc: 3.0.2
 
   '@babel/helper-compilation-targets@7.27.2':
     dependencies:
       '@babel/compat-data': 7.27.5
       '@babel/helper-validator-option': 7.27.1
-      browserslist: 4.25.0
+      browserslist: 4.24.4
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -4177,6 +4174,28 @@ snapshots:
       '@babel/types': 7.27.6
     transitivePeerDependencies:
       - supports-color
+
+  '@babel/helper-module-transforms@7.27.3(@babel/core@7.27.4)':
+    dependencies:
+      '@babel/core': 7.27.4
+      '@babel/helper-module-imports': 7.27.1
+      '@babel/helper-validator-identifier': 7.27.1
+      '@babel/traverse': 7.27.4
+    transitivePeerDependencies:
+      - supports-color
+
+  '@babel/helper-string-parser@7.27.1': {}
+
+  '@babel/helper-validator-identifier@7.24.5': {}
+
+  '@babel/helper-validator-identifier@7.27.1': {}
+
+  '@babel/helper-validator-option@7.27.1': {}
+
+  '@babel/helpers@7.27.6':
+    dependencies:
+      '@babel/template': 7.27.2
+      '@babel/types': 7.27.6
 
   '@babel/helper-module-transforms@7.27.3(@babel/core@7.27.4)':
     dependencies:
@@ -4228,7 +4247,7 @@ snapshots:
       '@babel/parser': 7.27.5
       '@babel/template': 7.27.2
       '@babel/types': 7.27.6
-      debug: 4.4.1
+      debug: 4.4.0
       globals: 11.12.0
     transitivePeerDependencies:
       - supports-color
@@ -4933,10 +4952,6 @@ snapshots:
     dependencies:
       typescript: 5.8.3
 
-  '@trpc/server@11.3.1(typescript@5.8.3)':
-    dependencies:
-      typescript: 5.8.3
-
   '@types/babel__core@7.20.5':
     dependencies:
       '@babel/parser': 7.27.5
@@ -4957,10 +4972,6 @@ snapshots:
   '@types/babel__traverse@7.20.7':
     dependencies:
       '@babel/types': 7.27.6
-
-  '@types/chai@5.2.2':
-    dependencies:
-      '@types/deep-eql': 4.0.2
 
   '@types/dedent@0.7.0': {}
 
@@ -6154,7 +6165,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-codegen@https://pkg.pr.new/mmkal/eslint-plugin-codegen@28(eslint@8.57.1):
+  eslint-plugin-codegen@https://pkg.pr.new/mmkal/eslint-plugin-codegen@52f4b40(eslint@8.57.1):
     dependencies:
       '@babel/core': 7.27.4
       '@babel/generator': 7.27.5
@@ -6185,7 +6196,8 @@ snapshots:
       read-pkg-up: 7.0.1
       safe-stringify: 1.2.0
       strip-ansi: 6.0.1
-      zod: 3.25.58
+      zod: 3.25.67
+      zx: 8.5.5
     transitivePeerDependencies:
       - babel-plugin-macros
       - eslint
@@ -6259,7 +6271,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-mmkal@https://pkg.pr.new/mmkal/eslint-plugin-mmkal@899fddb(eslint@8.57.1)(typescript@5.8.3)(vitest@3.2.3(@types/node@20.19.0)):
+  eslint-plugin-mmkal@https://pkg.pr.new/mmkal/eslint-plugin-codegen/eslint-plugin-mmkal@52f4b40(eslint@8.57.1)(typescript@5.8.3)(vitest@3.1.4(@types/node@20.17.48)):
     dependencies:
       '@eslint/js': 9.21.0
       '@next/eslint-plugin-next': 14.2.3
@@ -6272,7 +6284,7 @@ snapshots:
       eslint-config-xo: 0.46.0(eslint@8.57.1)(typescript@5.8.3)
       eslint-config-xo-react: 0.27.0(eslint-plugin-react-hooks@4.6.2(eslint@8.57.1))(eslint-plugin-react@7.34.1(eslint@8.57.1))(eslint@8.57.1)
       eslint-config-xo-typescript: 7.0.0(eslint@8.57.1)(typescript@5.8.3)
-      eslint-plugin-codegen: https://pkg.pr.new/mmkal/eslint-plugin-codegen@28(eslint@8.57.1)
+      eslint-plugin-codegen: https://pkg.pr.new/mmkal/eslint-plugin-codegen@52f4b40(eslint@8.57.1)
       eslint-plugin-functional: 7.3.0(eslint@8.57.1)(typescript@5.8.3)
       eslint-plugin-import-x: 4.6.1(eslint@8.57.1)(typescript@5.8.3)
       eslint-plugin-jsx-a11y: 6.8.0(eslint@8.57.1)
@@ -8527,4 +8539,8 @@ snapshots:
     dependencies:
       zod: 3.25.58
 
-  zod@3.25.58: {}
+  zod@3.25.67: {}
+
+  zod@3.25.7: {}
+
+  zx@8.5.5: {}

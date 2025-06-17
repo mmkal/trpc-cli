@@ -35,7 +35,7 @@ export const runWith = async <R extends AnyRouter>(
   return result
 }
 
-export const snapshotSerializer: Parameters<typeof expect.addSnapshotSerializer>[0] = {
+export const snapshotSerializer = {
   test: val => looksLikeInstanceof(val, Error),
   serialize(val, config, indentation, depth, refs, printer) {
     let topLine = `${val.constructor.name}: ${val.message}`
@@ -47,4 +47,4 @@ export const snapshotSerializer: Parameters<typeof expect.addSnapshotSerializer>
       .split(/(---|Usage:)/)[0] // strip out the usage line and the --- line which is added for debugging when tests fail
       .trim()
   },
-}
+} satisfies Parameters<typeof expect.addSnapshotSerializer>[0]

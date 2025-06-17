@@ -13,6 +13,12 @@ expect.addSnapshotSerializer({
 
 expect.addSnapshotSerializer(snapshotSerializer)
 
+expect.addSnapshotSerializer({
+  test: val => typeof val === 'string',
+  serialize: val =>
+    `"${val}"`.replaceAll('json-schema.org/draft-2020-12/schema', 'json-schema.org/draft/2020-12/schema'),
+})
+
 const o = os.$context<{x: number}>()
 const router = o.router({
   hello: o
@@ -113,7 +119,7 @@ test('orpc unjsonifiable schema', async () => {
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
                       converted to CLI arguments: Invalid input type { '$schema':
-                      'https://json-schema.org/draft-2020-12/schema' }, expected
+                      'https://json-schema.org/draft/2020-12/schema' }, expected
                       object or tuple.)
       -h, --help      display help for command
     "
