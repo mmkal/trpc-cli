@@ -137,7 +137,7 @@ const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
     optionsJsonSchema: {
       type: 'object',
       properties: {
-        input: {type: 'string', format: 'json' as never, description},
+        input: {description}, // omit `type` - this is json input, it could be anything
       },
     },
     getPojoInput: parsedCliParams => parsedCliParams.options.input,
@@ -289,6 +289,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             type: 'object',
             parser: (value: string) => {
               const parsed = parseJson(value)
+              if (!types.length) return parsed // if types is empty, it means any type is allowed - e.g. for json input
               const jsonSchemaType = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed
               if (!types.includes(jsonSchemaType)) {
                 throw new InvalidArgumentError(`Got ${jsonSchemaType} but expected ${types.join(' or ')}`)
@@ -338,7 +339,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
 
         if (rootTypes.length !== 1) {
-          const option = new Option(`${flags} ${bracketise('json')}`, `${description} (value will be parsed as JSON)`)
+          const option = new Option(`${flags} ${bracketise('json')}`, description)
           option.argParser(getValueParser(rootTypes).parser!)
           command.addOption(option)
           return
@@ -364,8 +365,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         // eslint-disable-next-line unicorn/prefer-switch
         if (propertyType === 'string' && 'format' in propertyValue && (propertyValue.format as string) === 'json') {
-          option = new Option(`${flags} ${bracketise('json')}`, description)
-          option.argParser(value => parseJson(value, InvalidOptionArgumentError))
+          // option = new Option(`${flags} ${bracketise('json')}`, description)
+          // option.argParser(value => parseJson(value, InvalidOptionArgumentError))
         } else if (propertyType === 'string') {
           option = new Option(`${flags} ${bracketise('string')}`, description)
         } else if (propertyType === 'boolean') {
@@ -396,7 +397,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
         if (!option) {
           option = new Option(`${flags} [json]`, description)
-          option.argParser(getValueParser(rootTypes).parser!)
+          option.argParser(value => parseJson(value, InvalidOptionArgumentError))
         }
         if (defaultValue.exists && option.defaultValue !== defaultValue.value) {
           option.default(defaultValue.value)
