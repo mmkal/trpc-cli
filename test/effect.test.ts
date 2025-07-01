@@ -1,3 +1,5 @@
+globalThis.require = require
+
 import {Schema} from 'effect'
 import {initTRPC} from 'trpcserver11'
 import {expect, test} from 'vitest'

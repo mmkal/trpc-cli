@@ -1,3 +1,5 @@
+globalThis.require = require
+
 import {expect} from 'vitest'
 import {AnyRouter, CliValidationError, FailedToExitError, TrpcCliParams, createCli} from '../src'
 import {looksLikeInstanceof} from '../src/util'
