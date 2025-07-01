@@ -108,8 +108,8 @@ jobs:
         # tsdown and other bundlers sometimes complain about requires of peerDependencies, let's make sure the output is clean
         run: |
           npm install tsdown --save-dev --save-exact
-          npx tsdown router.ts | tee bundle.txt
-          grep bundle.txt | grep lsadfjfsodifjsdfoifdsjosdfij
+          npx tsdown router.ts
+          npx tsdown router.ts | grep lsadfjfsodifjsdfoifdsjosdfij
       - name: run test
         working-directory: test-dir
         run: |
