@@ -49,7 +49,7 @@ export class Command extends BaseCommand {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 
-export {AnyRouter, AnyProcedure} from './trpc-compat'
+export {type AnyRouter, type AnyProcedure} from './trpc-compat'
 
 /**
  * @internal takes a trpc router and returns an object that you **could** use to build a CLI, or UI, or a bunch of other things with.
