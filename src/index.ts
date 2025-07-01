@@ -84,13 +84,16 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
   })
 }
 
-const _eval_ = eval
+// We're going to use eval to require some optional dependencies. It's hard-coded, so safe, but some bundlers like tsdown will emit warnings unless we disguise it.
+const disguisedEval = eval
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
   const entries: [string, ProcedureInfo][] = []
 
-  const {traverseContractProcedures, isProcedure} = _eval_(`require('@orpc/server')`) as typeof import('@orpc/server')
+  const {traverseContractProcedures, isProcedure} = disguisedEval(
+    `require('@orpc/server')`,
+  ) as typeof import('@orpc/server')
   const router = params.router as import('@orpc/server').AnyRouter
   const lazyRoutes = traverseContractProcedures({path: [], router}, ({contract, path}) => {
     let procedure: Record<string, unknown> = params.router
@@ -462,7 +465,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
         } else if (isOrpcRouter(router)) {
-          const {call} = _eval_(`require('@orpc/server')`) as typeof import('@orpc/server')
+          const {call} = disguisedEval(`require('@orpc/server')`) as typeof import('@orpc/server')
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         } else {
