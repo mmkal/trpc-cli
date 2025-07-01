@@ -1,5 +1,5 @@
 import {expect} from 'vitest'
-import {AnyRouter, TrpcCliParams, createCli} from '../src'
+import {AnyRouter, CliValidationError, FailedToExitError, TrpcCliParams, createCli} from '../src'
 import {looksLikeInstanceof} from '../src/util'
 
 export const run = <R extends AnyRouter>(router: R, argv: string[], {expectJsonInput = false} = {}) => {
@@ -19,9 +19,20 @@ export const runWith = async <R extends AnyRouter>(
       logger: {info: addLogs, error: addLogs},
       process: {exit: _ => 0 as never},
     })
-    .catch(e => {
-      if (e.exitCode === 0 && e.cause.message === '(outputHelp)') return logs[0][0] // should be the help text
-      if (e.exitCode === 0) return e.cause
+    .then(String)
+    .catch(async e => {
+      if (e instanceof FailedToExitError) {
+        if (e.exitCode === 0 && (e.cause as any).message === '(outputHelp)') return logs[0][0] as string // should be the help text
+        if (e.exitCode === 0) return e.cause as string
+        // eslint-disable-next-line promise/no-nesting
+        const help = argv.includes('--help') ? '' : await runWith(params, argv.concat(['--help'])).catch(String)
+        const print = (obj: Record<string, string>) => {
+          const lines = Object.entries(obj).map(([k, v]) => `<${k}>\n${v.trim()}\n</${k}>`)
+          return lines.join('\n\n')
+        }
+        // add to the FailedToExitError message so it's easier to debug when tests fail
+        e.message = print({argv: argv.join(' '), FailedToExitError: String(e), cause: String(e.cause), help})
+      }
       throw e
     })
 
