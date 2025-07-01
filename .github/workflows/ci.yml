@@ -105,8 +105,12 @@ jobs:
         # tsdown and other bundlers sometimes complain about requires of peerDependencies, let's make sure the output is clean
         run: |
           npm install tsdown --save-dev --save-exact
-          npx tsdown trpc-cli-test.ts
-          npx tsdown trpc-cli-test.ts | grep lsadfjfsodifjsdfoifdsjosdfij
+          npx tsdown trpc-cli-test.ts | tee tsdown-output.txt
+
+          if grep -i "warning" tsdown-output.txt || grep -i "error" tsdown-output.txt; then
+            echo "tsdown output had problems"
+            exit 1
+          fi
       - name: compile
         working-directory: test-dir
         run: npx tsc -p .
