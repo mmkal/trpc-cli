@@ -142,7 +142,7 @@ jobs:
           ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3
 
           echo checking say-hello output
-          ./node_modules/.bin/trpc-cli router.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+          ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
       - name: tsx test
         if: failure()
         working-directory: test-dir
