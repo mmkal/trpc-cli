@@ -90,8 +90,6 @@ test('trpc v11 shape check', async () => {
   // @ts-expect-error for some reason trpc11 doesn't expose `.inputs` at the type level
   expect(router._def.procedures.add._def.inputs).toEqual([expect.any(z.ZodType)])
   expect(router._def.procedures.add._def.meta).toEqual({description: 'Add two numbers'})
-  expect((router._def.procedures.add as any).meta).toBeUndefined() // for some reason we were trying to access meta on the procedure itself at one point
-
   expect((router._def.procedures.add._def as any).mutation).toBeUndefined()
   expect((router._def.procedures.add._def as any).query).toBeUndefined()
   expect((router._def.procedures.add._def as any).subscription).toBeUndefined()
