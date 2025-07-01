@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
-import {Argument, Command as BaseCommand, InvalidArgumentError, Option} from 'commander'
+import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError, Option} from 'commander'
 import {inspect} from 'util'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import {addCompletions} from './completions'
@@ -137,13 +137,10 @@ const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
     optionsJsonSchema: {
       type: 'object',
       properties: {
-        input: {type: 'json' as string as 'string', description},
+        input: {description}, // omit `type` - this is json input, it could be anything
       },
     },
-    getPojoInput: parsedCliParams => {
-      if (parsedCliParams.options.input == null) return parsedCliParams.options.input
-      return JSON.parse(parsedCliParams.options.input as string) as {}
-    },
+    getPojoInput: parsedCliParams => parsedCliParams.options.input,
   }
 }
 
@@ -263,6 +260,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         const rootTypes = getSchemaTypes(propertyValue).sort()
 
+        const parseJson = (value: string, ErrorClass: new (message: string) => Error = InvalidArgumentError) => {
+          try {
+            return JSON.parse(value) as {}
+          } catch {
+            throw new ErrorClass(`Malformed JSON.`)
+          }
+        }
         /** try to get a parser that can confidently parse a string into the correct type. Returns null if it can't confidently parse */
         const getValueParser = (types: ReturnType<typeof getSchemaTypes>) => {
           types = types.map(t => (t === 'integer' ? 'number' : t))
@@ -282,14 +286,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             return {type: 'string', parser: null} as const
           }
           return {
-            type: 'json',
+            type: 'object',
             parser: (value: string) => {
-              let parsed: unknown
-              try {
-                parsed = JSON.parse(value) as {}
-              } catch {
-                throw new InvalidArgumentError(`Malformed JSON.`)
-              }
+              const parsed = parseJson(value)
+              if (!types.length) return parsed // if types is empty, it means any type is allowed - e.g. for json input
               const jsonSchemaType = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed
               if (!types.includes(jsonSchemaType)) {
                 throw new InvalidArgumentError(`Got ${jsonSchemaType} but expected ${types.join(' or ')}`)
@@ -339,7 +339,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
 
         if (rootTypes.length !== 1) {
-          const option = new Option(`${flags} ${bracketise('json')}`, `${description} (value will be parsed as JSON)`)
+          const option = new Option(`${flags} ${bracketise('json')}`, description)
           option.argParser(getValueParser(rootTypes).parser!)
           command.addOption(option)
           return
@@ -361,10 +361,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           return
         }
 
-        let option: Option
+        let option: Option | null = null
 
         // eslint-disable-next-line unicorn/prefer-switch
-        if (propertyType === 'string') {
+        if (propertyType === 'string' && 'format' in propertyValue && (propertyValue.format as string) === 'json') {
+          // option = new Option(`${flags} ${bracketise('json')}`, description)
+          // option.argParser(value => parseJson(value, InvalidOptionArgumentError))
+        } else if (propertyType === 'string') {
           option = new Option(`${flags} ${bracketise('string')}`, description)
         } else if (propertyType === 'boolean') {
           option = new Option(flags, description)
@@ -392,7 +395,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             })
           }
         }
-        option ||= new Option(`${flags} [json]`, description)
+        if (!option) {
+          option = new Option(`${flags} [json]`, description)
+          option.argParser(value => parseJson(value, InvalidOptionArgumentError))
+        }
         if (defaultValue.exists && option.defaultValue !== defaultValue.value) {
           option.default(defaultValue.value)
         }

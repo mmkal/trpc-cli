@@ -80,6 +80,54 @@ test('required positional', async () => {
   expect(await output(cli, ['foo', 'def'])).toMatchInlineSnapshot(`"["def",{}]"`)
 })
 
+test('json option', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(
+        z.object({
+          obj: z.object({
+            abc: z.string(),
+            def: z.number(),
+          }),
+        }),
+      )
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  const cli = createCli({router})
+
+  expect(await output(cli, ['foo', '--obj', '{"abc":"abc","def":1}'])).toMatchInlineSnapshot(
+    `"{"obj":{"abc":"abc","def":1}}"`,
+  )
+  expect(await output(cli, ['foo', '--obj', `{abc: 'abc', def: 1}`])).toMatchInlineSnapshot(
+    `"CommanderError: error: option '--obj [json]' argument '{abc: 'abc', def: 1}' is invalid. Malformed JSON."`,
+  )
+  expect(await output(cli, ['foo', '--obj', '{"abc":"abc"}'])).toMatchInlineSnapshot(
+    `
+      "Error: ✖ Invalid input: expected number, received undefined → at obj.def
+
+      Usage: program foo [options]
+
+      Options:
+        --obj [json]  Object (json formatted); Required: ["abc","def"]
+        -h, --help    display help for command
+      "
+    `,
+  )
+  expect(await output(cli, ['foo', '--obj', '{"def":1}'])).toMatchInlineSnapshot(
+    `
+      "Error: ✖ Invalid input: expected string, received undefined → at obj.abc
+
+      Usage: program foo [options]
+
+      Options:
+        --obj [json]  Object (json formatted); Required: ["abc","def"]
+        -h, --help    display help for command
+      "
+    `,
+  )
+})
+
 const run = async (cli: TrpcCli, argv: string[]) => {
   const exit = vi.fn() as any
   const log = vi.fn()
