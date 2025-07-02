@@ -40,8 +40,8 @@ importers:
         specifier: 1.5.0
         version: 1.5.0
       '@orpc/server':
-        specifier: 1.6.2
-        version: 1.6.2
+        specifier: 1.6.3
+        version: 1.6.3
       '@types/json-schema':
         specifier: 7.0.15
         version: 7.0.15
@@ -641,17 +641,17 @@ packages:
   '@orpc/client@1.5.0':
     resolution: {integrity: sha512-ZMpPGxDIkKd2HJNKJ+7YcNjr4cZdBCYeFQxZ+gEEZNt0bMnT4MWUMyR0/gq7SGWoUmdVBe6ocRKIlz45V04U9Q==}
 
-  '@orpc/client@1.6.2':
-    resolution: {integrity: sha512-VrNC60l/rhckDyNbmDd2W4QCGE2vMEAP2+w29vuRCPuDFgoy7S2ziblcIFwfQHyb/XARhcPlURfencDa3GTaNA==}
+  '@orpc/client@1.6.3':
+    resolution: {integrity: sha512-bsUj4zm+g9xfC8rLwd9ZkETtRTDRUJW/ss6TdvrLJ1GNfnc2X1ahGmZtVESCJkoDfVmCDtre5hBdpIuYk7/ttw==}
 
   '@orpc/contract@1.5.0':
     resolution: {integrity: sha512-rUDc9lhPXLn9y9upIWSA22XSmAiAC8SUb9CZDUf2ZSr2HowPsRuN0vFcmUtoh3zRkhy9q7Q0UG+X0KZsU6yeqQ==}
 
-  '@orpc/contract@1.6.2':
-    resolution: {integrity: sha512-gzZsiulHEr6FzUHNPPtATTdPZhA59vopxaTwLAeKCO2FZDj3BDEkTfJgczJ1zQEADM3Vqd6iM0NapXipa81FTQ==}
+  '@orpc/contract@1.6.3':
+    resolution: {integrity: sha512-RYQuLgYSnSWdjEhiO/BGdHqRLQTsM84vI5tlzzelKvGQlmrUkXRhymzS2NEHu4hnW1FkknfjMK+qYTdlMQE/jQ==}
 
-  '@orpc/server@1.6.2':
-    resolution: {integrity: sha512-b/xybHuEZXEyV9nJ+72hFQx/sNsxYUClLVrtAAFuZ3ryczoD0a+Vmq+gjcwxjN7ZphIi7miIk8hHH5nX+RphNQ==}
+  '@orpc/server@1.6.3':
+    resolution: {integrity: sha512-OXb3sDdIhEFeGhnM/l/sV6IoJUxHH7ZwGy4rta9S6uDawRte0GzUV9x6dkPmV3na6WHidg39c9seTmoKc2Y7kQ==}
     peerDependencies:
       crossws: '>=0.3.4'
       ws: '>=8.18.1'
@@ -664,32 +664,32 @@ packages:
   '@orpc/shared@1.5.0':
     resolution: {integrity: sha512-DuK75RB0MaZJlh0Mn38Mf0w1YIEfvFmDHEJLuq4RbjrcLA0zd04sLhv3upcPTFionutomopzRwCWLULP/mxBqA==}
 
-  '@orpc/shared@1.6.2':
-    resolution: {integrity: sha512-xss51qR03qlwYIV4heHgumFoL4L6RhXixwHSHgzqXYomAICoJbKaz8VE2Lqa36emApLQpktk7mi3SZ2HeFOJPg==}
+  '@orpc/shared@1.6.3':
+    resolution: {integrity: sha512-8sAcnhLTRa6dHAYCmi5sB4rrJ3PpTgzfzz3CVeGud7wgMud+jaefTsDLF89rPOFPOgYJx4fBMFIjrFtR3NqGfQ==}
 
-  '@orpc/standard-server-aws-lambda@1.6.2':
-    resolution: {integrity: sha512-a3+AJmWYWbyMGQledaTRUF3dUrDrXkA7p81jM7E3Zab1ZLSa+RD1hqf1NGvzAeeFGTO8dG4ONcaOKG5GfogayA==}
+  '@orpc/standard-server-aws-lambda@1.6.3':
+    resolution: {integrity: sha512-35qhL7uHkb2qF5rAWy6pT1bHZNU4LyhlbEJkyRBvJKNKcr7eEOY4r9B7umKTbO5xic+GgmkgNyJaq5mm/O3X8g==}
 
   '@orpc/standard-server-fetch@1.5.0':
     resolution: {integrity: sha512-Xz4zmwT/BPw9TFgLOKQzcIliAJpt2N+kBSIr/TZj8I7YrOJg2J3mbtOMHHLtv1YYw0ZqPBsNueBs0w2fOzMlHA==}
 
-  '@orpc/standard-server-fetch@1.6.2':
-    resolution: {integrity: sha512-cl0Nc75jUXD+2ISLIEUMXQGSoie+oGhp3LMbZ1wAukESO2gW3B4EceY2SP+/bZg/Mt1CmrhzXdpMCBWo8KkMow==}
+  '@orpc/standard-server-fetch@1.6.3':
+    resolution: {integrity: sha512-tErF3Na5q1WN86iv6qUr3sivtw76tBu2fwwue/qjlAwhaKoqOTxII+QtVk5DtYOYYf3ipBpURwIM0KqsjWOjQQ==}
 
-  '@orpc/standard-server-node@1.6.2':
-    resolution: {integrity: sha512-vKsSub0FXcIVcEDtFbuA5XzWncSXGq9nUalmBCudDBJKRYOCTxl5z1tL3vsFY5Pnjy5aodWxWDO0G0rRLgvjfw==}
+  '@orpc/standard-server-node@1.6.3':
+    resolution: {integrity: sha512-nyrqmhAWBfkgwDexOKXXmOo3CwcY3WPB9S3JYSxAVAtE7Ygn3qxzsfyWKLb3AATLhy9VfP7aLA8I2226otwqDw==}
 
   '@orpc/standard-server-peer@1.5.0':
     resolution: {integrity: sha512-f8Hr3GzaA+LWut8IjE6owi3pAdlVRPk6LJedeZeoRHMcnaR6be0AsM2qyhmbDqnR1GECNIDHOMmRp9Xc7o8TWQ==}
 
-  '@orpc/standard-server-peer@1.6.2':
-    resolution: {integrity: sha512-uyzGeLD9c5/Wq7vCrZYci+ue7T4yJuOEB9TPXZ+5C0sD9nCYuXuFods0h3FEY8gEAI7MJSfkP74tSxn7BmVyXA==}
+  '@orpc/standard-server-peer@1.6.3':
+    resolution: {integrity: sha512-3BWg22pMuD/4BoDfvf9oVMuw7BfF7NCzXLtR6GLqN6xe2RuXJKxbtOdn/HWKxa6t/pnQCZsa5IE/8GdcCg4PlA==}
 
   '@orpc/standard-server@1.5.0':
     resolution: {integrity: sha512-GVIHbnq/1vc9+CjEV/pV8d9AXUqAFsL/F3eicgl8c+dckbzQ1gqKAkCb3FvCI9vfZtYZFxtj50CF3i8V7FrUKA==}
 
-  '@orpc/standard-server@1.6.2':
-    resolution: {integrity: sha512-csNB8qx6tFZopmy1T1zXS+ACIeojQ4K72z/xztIFg3Bud9l0wn6eBpPxqg/CuWfeI6vjWUGXrn8l4W7ikCO8HQ==}
+  '@orpc/standard-server@1.6.3':
+    resolution: {integrity: sha512-6pm8lobrb/RFcGgwqIwBVeakLEWJSFpaztrnpG9f6+LD0FN4rQNGlCJ3QnrCo4ITqwKhWoL4L2PtyTqG8p6cCA==}
 
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
@@ -4668,12 +4668,12 @@ snapshots:
       '@orpc/standard-server-fetch': 1.5.0
       '@orpc/standard-server-peer': 1.5.0
 
-  '@orpc/client@1.6.2':
+  '@orpc/client@1.6.3':
     dependencies:
-      '@orpc/shared': 1.6.2
-      '@orpc/standard-server': 1.6.2
-      '@orpc/standard-server-fetch': 1.6.2
-      '@orpc/standard-server-peer': 1.6.2
+      '@orpc/shared': 1.6.3
+      '@orpc/standard-server': 1.6.3
+      '@orpc/standard-server-fetch': 1.6.3
+      '@orpc/standard-server-peer': 1.6.3
 
   '@orpc/contract@1.5.0':
     dependencies:
@@ -4682,74 +4682,74 @@ snapshots:
       '@standard-schema/spec': 1.0.0
       openapi-types: 12.1.3
 
-  '@orpc/contract@1.6.2':
+  '@orpc/contract@1.6.3':
     dependencies:
-      '@orpc/client': 1.6.2
-      '@orpc/shared': 1.6.2
+      '@orpc/client': 1.6.3
+      '@orpc/shared': 1.6.3
       '@standard-schema/spec': 1.0.0
       openapi-types: 12.1.3
 
-  '@orpc/server@1.6.2':
+  '@orpc/server@1.6.3':
     dependencies:
-      '@orpc/client': 1.6.2
-      '@orpc/contract': 1.6.2
-      '@orpc/shared': 1.6.2
-      '@orpc/standard-server': 1.6.2
-      '@orpc/standard-server-aws-lambda': 1.6.2
-      '@orpc/standard-server-fetch': 1.6.2
-      '@orpc/standard-server-node': 1.6.2
-      '@orpc/standard-server-peer': 1.6.2
+      '@orpc/client': 1.6.3
+      '@orpc/contract': 1.6.3
+      '@orpc/shared': 1.6.3
+      '@orpc/standard-server': 1.6.3
+      '@orpc/standard-server-aws-lambda': 1.6.3
+      '@orpc/standard-server-fetch': 1.6.3
+      '@orpc/standard-server-node': 1.6.3
+      '@orpc/standard-server-peer': 1.6.3
 
   '@orpc/shared@1.5.0':
     dependencies:
       radash: 12.1.0
       type-fest: 4.41.0
 
-  '@orpc/shared@1.6.2':
+  '@orpc/shared@1.6.3':
     dependencies:
       radash: 12.1.1
       type-fest: 4.41.0
 
-  '@orpc/standard-server-aws-lambda@1.6.2':
+  '@orpc/standard-server-aws-lambda@1.6.3':
     dependencies:
-      '@orpc/shared': 1.6.2
-      '@orpc/standard-server': 1.6.2
-      '@orpc/standard-server-fetch': 1.6.2
-      '@orpc/standard-server-node': 1.6.2
+      '@orpc/shared': 1.6.3
+      '@orpc/standard-server': 1.6.3
+      '@orpc/standard-server-fetch': 1.6.3
+      '@orpc/standard-server-node': 1.6.3
 
   '@orpc/standard-server-fetch@1.5.0':
     dependencies:
       '@orpc/shared': 1.5.0
       '@orpc/standard-server': 1.5.0
 
-  '@orpc/standard-server-fetch@1.6.2':
+  '@orpc/standard-server-fetch@1.6.3':
     dependencies:
-      '@orpc/shared': 1.6.2
-      '@orpc/standard-server': 1.6.2
+      '@orpc/shared': 1.6.3
+      '@orpc/standard-server': 1.6.3
 
-  '@orpc/standard-server-node@1.6.2':
+  '@orpc/standard-server-node@1.6.3':
     dependencies:
-      '@orpc/shared': 1.6.2
-      '@orpc/standard-server': 1.6.2
-      '@orpc/standard-server-fetch': 1.6.2
+      '@orpc/shared': 1.6.3
+      '@orpc/standard-server': 1.6.3
+      '@orpc/standard-server-fetch': 1.6.3
 
   '@orpc/standard-server-peer@1.5.0':
     dependencies:
       '@orpc/shared': 1.5.0
       '@orpc/standard-server': 1.5.0
 
-  '@orpc/standard-server-peer@1.6.2':
+  '@orpc/standard-server-peer@1.6.3':
     dependencies:
-      '@orpc/shared': 1.6.2
-      '@orpc/standard-server': 1.6.2
+      '@orpc/shared': 1.6.3
+      '@orpc/standard-server': 1.6.3
 
   '@orpc/standard-server@1.5.0':
     dependencies:
       '@orpc/shared': 1.5.0
 
-  '@orpc/standard-server@1.6.2':
+  '@orpc/standard-server@1.6.3':
     dependencies:
-      '@orpc/shared': 1.6.2
+      '@orpc/shared': 1.6.3
 
   '@pkgjs/parseargs@0.11.0':
     optional: true
