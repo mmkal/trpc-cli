@@ -6,5 +6,12 @@
   "extends": [
     "config:recommended"
   ],
+  "packageRules": [
+    {
+      "groupName": "orpc dependencies",
+      "groupSlug": "orpc",
+      "matchPackageNames": ["@orpc/*"]
+    }
+  ],
   "fetchChangeLogs": "branch"
 }
