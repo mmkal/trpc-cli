@@ -48,7 +48,7 @@ jobs:
         working-directory: test-dir
         run: |
           npm init -y
-          npm install ../pkg.tgz
+          npm install ../pkg.tgz --save-dev --save-exact
           npm install typescript@5.8.3 @trpc/server@^11.1.1 zod@3.25.3 tsx@4.19.4
           echo '{
             "compilerOptions": {
@@ -86,7 +86,7 @@ jobs:
           const cli = createCli({router})
 
           void cli.run()
-          ' > test.ts
+          ' > trpc-cli-test.ts
 
 
           # let's create an equivalent file without using `trpc-cli` imports at all - we'll test the bin script on this
@@ -94,48 +94,60 @@ jobs:
           echo '
           import * as trpcServer from "@trpc/server"
           import {z} from "zod"
-          ' > router.ts
+          ' > normal-router-test.ts
 
-          cat test.ts | grep -v import | grep -v 'const cli =' | grep -v cli.run >> router.ts
+          cat trpc-cli-test.ts | grep -v import | grep -v 'const cli =' | grep -v cli.run >> normal-router-test.ts
 
-          cat test.ts
-          cat router.ts
+          cat trpc-cli-test.ts
+          cat normal-router-test.ts
+      - name: bundle
+        working-directory: test-dir
+        # tsdown and other bundlers sometimes complain about requires of peerDependencies, let's make sure the output is clean
+        run: |
+          npm install tsdown --save-dev --save-exact
+          npx tsdown trpc-cli-test.ts | tee tsdown-output.txt
+
+          if grep -i "warning" tsdown-output.txt || grep -i "error" tsdown-output.txt; then
+            echo "tsdown output had problems"
+            exit 1
+          fi
       - name: compile
         working-directory: test-dir
         run: npx tsc -p .
+
       - name: run test
         working-directory: test-dir
         run: |
           echo testing --help
-          node test.js --help
+          node trpc-cli-test.js --help
 
           echo checking --help output
-          node test.js --help | grep say-hello
+          node trpc-cli-test.js --help | grep say-hello
 
           echo testing say-hello
-          node test.js say-hello mmkal --enthusiasm 3
+          node trpc-cli-test.js say-hello mmkal --enthusiasm 3
 
           echo checking say-hello output
-          node test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+          node trpc-cli-test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
       - name: test bin script
         working-directory: test-dir
         run: |
           echo testing --help
-          ./node_modules/.bin/trpc-cli router.ts --help
+          ./node_modules/.bin/trpc-cli normal-router-test.ts --help
 
           echo checking --help output
-          ./node_modules/.bin/trpc-cli router.ts --help | grep say-hello
+          ./node_modules/.bin/trpc-cli normal-router-test.ts --help | grep say-hello
 
           echo testing say-hello
-          ./node_modules/.bin/trpc-cli router.ts say-hello mmkal --enthusiasm 3
+          ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3
 
           echo checking say-hello output
-          ./node_modules/.bin/trpc-cli router.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+          ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
       - name: tsx test
         if: failure()
         working-directory: test-dir
         run: |
-          npx tsx test.ts --help
-          npx tsx test.ts say-hello mmkal --enthusiasm 3
+          npx tsx normal-router-test.ts --help
+          npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
       - run: ls -R
         if: always()
