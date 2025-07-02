@@ -1,3 +1,5 @@
+globalThis.require = require
+
 /* eslint-disable @typescript-eslint/no-shadow */
 import {oc} from '@orpc/contract'
 import {implement, os, unlazyRouter} from '@orpc/server'
