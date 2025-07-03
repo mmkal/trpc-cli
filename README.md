@@ -489,7 +489,7 @@ When passing a command along with its options, the return value will be logged t
 
 Invalid inputs are helpfully displayed, along with help text for the associated command:
 
-<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add 2 notanumber', reject: false} -->
+<!-- TODO:reenable codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add 2 notanumber', reject: false} -->
 `node path/to/calculator add 2 notanumber` output:
 
 ```
