@@ -493,21 +493,6 @@ Invalid inputs are helpfully displayed, along with help text for the associated 
 `node path/to/calculator add 2 notanumber` output:
 
 ```
-error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
-
-
-
-Usage: calculator add [options] <parameter_1> <parameter_2>
-
-Add two numbers. Use this if you and your friend both have apples, and you want
-to know how many apples there are in total.
-
-Arguments:
-  parameter_1  number (required)
-  parameter_2  number (required)
-
-Options:
-  -h, --help   display help for command
 
 ```
 <!-- codegen:end -->
