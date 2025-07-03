@@ -331,6 +331,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option.argParser(value => {
             const definitelyPrimitive = rootTypes.every(t => t === 'boolean' || t === 'number' || t === 'string')
             if (!definitelyPrimitive) {
+              // parse this as JSON - too risky to fall back to a string because that will probably do the wrong thing if someone passes malformed JSON like `{"foo": 1,}` (trailing comma)
               const hint = `Malformed JSON. If passing a string, pass it as a valid JSON string with quotes (${JSON.stringify(value)})`
               return parseJson(value, InvalidOptionArgumentError, hint)
             }
@@ -338,7 +339,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
               const parsed = booleanParser(value, {fallback: null})
               if (parsed !== null) return parsed
             }
-            if (rootTypes.includes('number')) {
+            if (rootTypes.includes('number') || rootTypes.includes('integer')) {
               const parsed = numberParser(value, {fallback: null})
               if (parsed !== null) return parsed
             }

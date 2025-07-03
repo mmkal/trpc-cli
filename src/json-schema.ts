@@ -100,7 +100,7 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
 
 export const getSchemaTypes = (
   propertyValue: JsonSchema7Type,
-): Array<'string' | 'boolean' | 'number' | (string & {})> => {
+): Array<'string' | 'boolean' | 'number' | 'integer' | (string & {})> => {
   const array: string[] = []
   if ('type' in propertyValue) {
     array.push(...[propertyValue.type].flat())
