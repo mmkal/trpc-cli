@@ -661,3 +661,18 @@ test('use zod4 meta', async () => {
 })
 
 // todo: either create a meta registry or use module augmentation to allow adding aliases for options etc.
+
+test('non-negatable boolean', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.object({foo: z.boolean().meta({negatable: false})}))
+      .query(({input}) => `${inspect(input)}`),
+  })
+
+  expect(await run(router, ['test', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  await expect(run(router, ['test', '--no-foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)
+  `)
+})
