@@ -164,6 +164,53 @@ test('primitive option union', async () => {
   expect(await output(cli, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
 })
 
+test('option union array with enum', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.object({foo: z.union([z.boolean(), z.number(), z.enum(['abc', 'def'])]).array()}))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  const cli = createCli({router})
+
+  expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`
+    "Error: ✖ Invalid input: expected array, received boolean → at foo
+
+    Usage: program foo [options]
+
+    Options:
+      --foo [values...]  Any of:
+                         [{"type":"boolean"},{"type":"number"},{"enum":["abc","def"]}]
+                         array (default: [])
+      -h, --help         display help for command
+    "
+  `)
+  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":[]}"`)
+  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":[true]}"`)
+  expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":[false]}"`)
+  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
+    "CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)"
+  `)
+  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":[1]}"`)
+  expect(await output(cli, ['foo', '--foo', 'abc'])).toMatchInlineSnapshot(`"{"foo":["abc"]}"`)
+  expect(await output(cli, ['foo', '--foo', 'abc', '--foo', 'true', '--foo', '1'])).toMatchInlineSnapshot(
+    `"{"foo":["abc",true,1]}"`,
+  )
+  expect(await output(cli, ['foo', '--foo', 'wrong'])).toMatchInlineSnapshot(`
+    "Error: ✖ Invalid input → at foo[0]
+
+    Usage: program foo [options]
+
+    Options:
+      --foo [values...]  Any of:
+                         [{"type":"boolean"},{"type":"number"},{"enum":["abc","def"]}]
+                         array (default: [])
+      -h, --help         display help for command
+    "
+  `)
+})
+
 test('non-primitive option union', async () => {
   const router = t.router({
     foo: t.procedure
