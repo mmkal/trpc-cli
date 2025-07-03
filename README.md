@@ -224,14 +224,22 @@ Booleans:
    - no option supplied to `{foo: false}`
    - `--foo` `{foo: true}`
 
+
 - `z.object({foo: z.boolean().default(true)})` will map:
    - no option supplied to `{foo: true}`
-   - `--no-foo` `{foo: false}`
+   - `--foo false` or `--foo=false` to `{foo: false}`
 
 - `z.object({foo: z.boolean().optional()})` will map:
   - no option supplied to `{}` (foo is undefined)
   - `--foo` to `{foo: true}`
-  - `--foo false` to `{foo: false}` (note: `--no-foo` doesn't work here, because its existence prevents `{}` from being the default value)
+  - `--foo false` to `{foo: false}`
+
+Negated options can be useful for default-true booleans:
+
+- `z.object({foo: z.boolean().default(true).meta({negatable: true})})` will map:
+  - no option supplied to `{foo: true}`
+  - `--no-foo` to `{foo: false}`
+  - `--foo false` to `{foo: false}`
 
 Numbers:
 

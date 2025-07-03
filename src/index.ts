@@ -274,9 +274,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const isCliOptionRequired = isValueRequired && propertyType !== 'boolean' && !defaultValue.exists
 
         function negate() {
-          if ('negatable' in propertyValue && !propertyValue.negatable) return
-          const negation = new Option(longOption.replace('--', '--no-'), `Negate \`${longOption}\` option.`.trim())
-          command.addOption(negation)
+          if ('negatable' in propertyValue && propertyValue.negatable === true) {
+            const negation = new Option(longOption.replace('--', '--no-'), `Negate \`${longOption}\` option.`.trim())
+            command.addOption(negation)
+          }
         }
 
         const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
@@ -298,17 +299,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           return
         }
 
-        if (propertyType === 'boolean' && isValueRequired) {
-          const option = new Option(flags, description)
-          option.default(defaultValue.exists ? defaultValue.value : false)
-          command.addOption(option)
-          negate()
-          return
-        } else if (propertyType === 'boolean') {
+        if (propertyType === 'boolean') {
           const option = new Option(`${flags} [boolean]`, description)
           option.argParser(value => booleanParser(value))
           // don't set a default value of `false`, because `undefined` is accepted by the procedure
-          if (defaultValue.exists) option.default(defaultValue.value)
+          if (isValueRequired) option.default(false)
+          else if (defaultValue.exists) option.default(defaultValue.value)
           command.addOption(option)
           negate()
           return

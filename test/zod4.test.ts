@@ -561,12 +561,10 @@ test('defaults and negations', async () => {
 
   expect(await run(router, ['optional-boolean'])).toMatchInlineSnapshot(`"{}"`)
   expect(await run(router, ['optional-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['optional-boolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['optional-boolean', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
   expect(await run(router, ['optional-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-true-boolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  expect(await run(router, ['default-true-boolean', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-false-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['default-false-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
@@ -660,19 +658,17 @@ test('use zod4 meta', async () => {
   `)
 })
 
-// todo: either create a meta registry or use module augmentation to allow adding aliases for options etc.
-
-test('non-negatable boolean', async () => {
+test('negatable boolean', async () => {
   const router = t.router({
     test: t.procedure
-      .input(z.object({foo: z.boolean().meta({negatable: false})}))
+      .input(z.object({foo: z.boolean().meta({negatable: true})}))
       .query(({input}) => `${inspect(input)}`),
   })
 
   expect(await run(router, ['test', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
-  await expect(run(router, ['test', '--no-foo'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CommanderError: error: unknown option '--no-foo'
-    (Did you mean --foo?)
-  `)
+  expect(await run(router, ['test', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['test', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['test', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 })
+
+// todo: either create a meta registry or use module augmentation to allow adding aliases for options etc.

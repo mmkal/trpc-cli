@@ -159,7 +159,10 @@ test('primitive option union', async () => {
   expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
   expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
   expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
-  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
+    "CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)"
+  `)
   expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
   expect(await output(cli, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
 })
@@ -224,7 +227,10 @@ test('non-primitive option union', async () => {
   expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
   expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
   expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
-  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
+    "CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)"
+  `)
   expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
   expect(await output(cli, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
   await expect(output(cli, ['foo', '--foo', 'abc123'])).resolves.toMatchInlineSnapshot(
