@@ -1,17 +1,18 @@
 import {createHash} from 'crypto'
-import {execaCommandSync} from 'execa'
 import stripAnsi from 'strip-ansi'
 
 export const command: import('eslint-plugin-mmkal').CodegenPreset<{command: string; reject?: false}> = ({
   options,
   meta,
+  dependencies: {zx},
 }) => {
-  const result = execaCommandSync(options.command, {all: true, reject: options.reject})
+  const $ = zx.$({nothrow: !options.reject, sync: true})
+  const result = $`sh -c ${options.command}`
   const output = [
     `\`${options.command.replace(/.* test\/fixtures\//, 'node path/to/')}\` output:`,
     '',
     '```',
-    stripAnsi(result.all), // includes stderr
+    stripAnsi(result.stdout), // includes stderr
     '```',
   ].join('\n')
 
