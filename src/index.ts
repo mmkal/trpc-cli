@@ -12,6 +12,7 @@ import {
   getDescription,
   getSchemaTypes,
   getEnumChoices,
+  getAllowedSchemas,
 } from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
@@ -258,18 +259,23 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           delete unusedOptionAliases[propertyKey]
         }
 
-        const defaultValue =
-          'default' in propertyValue
-            ? ({exists: true, value: propertyValue.default} as const)
-            : ({exists: false} as const)
+        const allowedSchemas = getAllowedSchemas(propertyValue)
+        const firstSchemaWithDefault = allowedSchemas.find(subSchema => 'default' in subSchema)
+        const defaultValue = firstSchemaWithDefault
+          ? ({exists: true, value: firstSchemaWithDefault.default} as const)
+          : ({exists: false} as const)
 
         const rootTypes = getSchemaTypes(propertyValue).sort()
 
-        const parseJson = (value: string, ErrorClass: new (message: string) => Error = InvalidArgumentError) => {
+        const parseJson = (
+          value: string,
+          ErrorClass: new (message: string) => Error = InvalidArgumentError,
+          hint = `Malformed JSON.`,
+        ) => {
           try {
             return JSON.parse(value) as {}
           } catch {
-            throw new ErrorClass(`Malformed JSON.`)
+            throw new ErrorClass(hint)
           }
         }
         /** try to get a parser that can confidently parse a string into the correct type. Returns null if it can't confidently parse */
@@ -318,29 +324,28 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
 
-        if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'string') {
+        if (allowedSchemas.length > 1) {
           const option = new Option(`${flags} [value]`, description)
-          option.default(defaultValue.exists ? defaultValue.value : false)
-          command.addOption(option)
-          negate()
-          return
-        }
-        if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'number') {
-          const option = new Option(`${flags} [value]`, description)
-          option.argParser(getValueParser(rootTypes).parser!)
-          option.default(defaultValue.exists ? defaultValue.value : false)
-          command.addOption(option)
-          negate()
-          return
-        }
-        if (rootTypes.length === 2 && rootTypes[0] === 'number' && rootTypes[1] === 'string') {
-          const option = new Option(`${flags} ${bracketise('value')}`, description)
-          option.argParser(value => {
-            const number = numberParser(value, {fallback: null})
-            return number ?? value
-          })
           if (defaultValue.exists) option.default(defaultValue.value)
+          else if (rootTypes.includes('boolean')) option.default(false)
+          option.argParser(value => {
+            const definitelyPrimitive = rootTypes.every(t => t === 'boolean' || t === 'number' || t === 'string')
+            if (!definitelyPrimitive) {
+              const hint = `Malformed JSON. If passing a string, pass it as a valid JSON string with quotes (${JSON.stringify(value)})`
+              return parseJson(value, InvalidOptionArgumentError, hint)
+            }
+            if (rootTypes.includes('boolean')) {
+              const parsed = booleanParser(value, {fallback: null})
+              if (parsed !== null) return parsed
+            }
+            if (rootTypes.includes('number')) {
+              const parsed = numberParser(value, {fallback: null})
+              if (parsed !== null) return parsed
+            }
+            return value
+          })
           command.addOption(option)
+          if (rootTypes.includes('boolean')) negate()
           return
         }
 

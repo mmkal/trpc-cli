@@ -123,6 +123,18 @@ export const getSchemaTypes = (
   return [...new Set(array)]
 }
 
+/** Returns a list of all allowed subschemas. If the schema is not a union, returns a list with a single item. */
+export const getAllowedSchemas = (schema: JsonSchema7Type): JsonSchema7Type[] => {
+  if (!schema) return []
+  if ('anyOf' in schema && Array.isArray(schema.anyOf))
+    return (schema.anyOf as JsonSchema7Type[]).flatMap(getAllowedSchemas)
+  if ('oneOf' in schema && Array.isArray(schema.oneOf))
+    return (schema.oneOf as JsonSchema7Type[]).flatMap(getAllowedSchemas)
+  const types = getSchemaTypes(schema)
+  if (types.length === 1) return [schema]
+  return types.map(type => ({...schema, type}))
+}
+
 export const getEnumChoices = (propertyValue: JsonSchema7Type) => {
   if (!propertyValue) return null
   if (!('enum' in propertyValue && Array.isArray(propertyValue.enum))) {
