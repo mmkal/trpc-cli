@@ -128,6 +128,116 @@ test('json option', async () => {
   )
 })
 
+test('default value in union subtype', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(
+        z.object({
+          foo: z.union([z.boolean().default(true), z.number().default(1)]),
+        }),
+      )
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  const cli = createCli({router})
+
+  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
+})
+
+test('primitive option union', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.object({foo: z.union([z.boolean(), z.number(), z.object({bar: z.string()})])}))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  const cli = createCli({router})
+
+  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
+    "CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)"
+  `)
+  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
+  expect(await output(cli, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
+})
+
+test('option union array with enum', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.object({foo: z.union([z.boolean(), z.number(), z.enum(['abc', 'def'])]).array()}))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  const cli = createCli({router})
+
+  expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`
+    "Error: ✖ Invalid input: expected array, received boolean → at foo
+
+    Usage: program foo [options]
+
+    Options:
+      --foo [values...]  Any of:
+                         [{"type":"boolean"},{"type":"number"},{"enum":["abc","def"]}]
+                         array (default: [])
+      -h, --help         display help for command
+    "
+  `)
+  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":[]}"`)
+  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":[true]}"`)
+  expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":[false]}"`)
+  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
+    "CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)"
+  `)
+  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":[1]}"`)
+  expect(await output(cli, ['foo', '--foo', 'abc'])).toMatchInlineSnapshot(`"{"foo":["abc"]}"`)
+  expect(await output(cli, ['foo', '--foo', 'abc', '--foo', 'true', '--foo', '1'])).toMatchInlineSnapshot(
+    `"{"foo":["abc",true,1]}"`,
+  )
+  expect(await output(cli, ['foo', '--foo', 'wrong'])).toMatchInlineSnapshot(`
+    "Error: ✖ Invalid input → at foo[0]
+
+    Usage: program foo [options]
+
+    Options:
+      --foo [values...]  Any of:
+                         [{"type":"boolean"},{"type":"number"},{"enum":["abc","def"]}]
+                         array (default: [])
+      -h, --help         display help for command
+    "
+  `)
+})
+
+test('non-primitive option union', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.object({foo: z.union([z.boolean(), z.number(), z.string(), z.object({bar: z.string()})])}))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  const cli = createCli({router})
+
+  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
+    "CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)"
+  `)
+  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
+  expect(await output(cli, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
+  await expect(output(cli, ['foo', '--foo', 'abc123'])).resolves.toMatchInlineSnapshot(
+    `"CommanderError: error: option '--foo [value]' argument 'abc123' is invalid. Malformed JSON. If passing a string, pass it as a valid JSON string with quotes ("abc123")"`,
+  )
+})
+
 const run = async (cli: TrpcCli, argv: string[]) => {
   const exit = vi.fn() as any
   const log = vi.fn()
