@@ -7,6 +7,7 @@ export const command: import('eslint-plugin-mmkal').CodegenPreset<{command: stri
   meta,
 }) => {
   const result = execaCommandSync(options.command, {all: true, reject: options.reject})
+  if (!stripAnsi(result.all)) throw new Error(`Command ${options.command} had no output`)
   const output = [
     `\`${options.command.replace(/.* test\/fixtures\//, 'node path/to/')}\` output:`,
     '',
