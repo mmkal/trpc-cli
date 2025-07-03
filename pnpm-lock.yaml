@@ -58,8 +58,8 @@ importers:
         specifier: ^2.1.20
         version: 2.1.20
       effect:
-        specifier: 3.16.11
-        version: 3.16.11
+        specifier: 3.16.12
+        version: 3.16.12
       enquirer:
         specifier: 2.4.1
         version: 2.4.1
@@ -1825,8 +1825,8 @@ packages:
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
 
-  effect@3.16.11:
-    resolution: {integrity: sha512-1RE45aGnZ2+vTSysFwZy4GGqq4ho1V+Ve5QS8stK6VhDnmhItU1pMyy9t6diIJ8I9EdRza0RbMFZc7EkVyD/BQ==}
+  effect@3.16.12:
+    resolution: {integrity: sha512-N39iBk0K71F9nb442TLbTkjl24FLUzuvx2i1I2RsEAQsdAdUTuUoW0vlfUXgkMTUOnYqKnWcFfqw4hK4Pw27hg==}
 
   electron-to-chromium@1.5.179:
     resolution: {integrity: sha512-UWKi/EbBopgfFsc5k61wFpV7WrnnSlSzW/e2XcBmS6qKYTivZlLtoll5/rdqRTxGglGHkmkW0j0pFNJG10EUIQ==}
@@ -5893,7 +5893,7 @@ snapshots:
 
   eastasianwidth@0.2.0: {}
 
-  effect@3.16.11:
+  effect@3.16.12:
     dependencies:
       '@standard-schema/spec': 1.0.0
       fast-check: 3.23.2
