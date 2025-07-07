@@ -274,7 +274,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const isCliOptionRequired = isValueRequired && propertyType !== 'boolean' && !defaultValue.exists
 
         function negate() {
-          if ('negatable' in propertyValue && propertyValue.negatable === true) {
+          const shouldNegate = 'negatable' in propertyValue ? propertyValue.negatable : meta.negateBooleans
+          if (shouldNegate) {
             const negation = new Option(longOption.replace('--', '--no-'), `Negate \`${longOption}\` option.`.trim())
             command.addOption(negation)
           }
