@@ -241,6 +241,8 @@ Negated options can be useful for default-true booleans:
   - `--no-foo` to `{foo: false}`
   - `--foo false` to `{foo: false}`
 
+(Note: you can set booleans to negatable-by-default by setting `negateBooleans: true` on the procedure's `meta`)
+
 Numbers:
 
 - `z.object({foo: z.number()})` will map:
