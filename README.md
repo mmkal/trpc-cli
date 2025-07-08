@@ -224,14 +224,24 @@ Booleans:
    - no option supplied to `{foo: false}`
    - `--foo` `{foo: true}`
 
+
 - `z.object({foo: z.boolean().default(true)})` will map:
    - no option supplied to `{foo: true}`
-   - `--no-foo` `{foo: false}`
+   - `--foo false` or `--foo=false` to `{foo: false}`
 
 - `z.object({foo: z.boolean().optional()})` will map:
   - no option supplied to `{}` (foo is undefined)
   - `--foo` to `{foo: true}`
-  - `--foo false` to `{foo: false}` (note: `--no-foo` doesn't work here, because its existence prevents `{}` from being the default value)
+  - `--foo false` to `{foo: false}`
+
+Negated options can be useful for default-true booleans:
+
+- `z.object({foo: z.boolean().default(true).meta({negatable: true})})` will map:
+  - no option supplied to `{foo: true}`
+  - `--no-foo` to `{foo: false}`
+  - `--foo false` to `{foo: false}`
+
+(Note: you can set booleans to negatable-by-default by setting `negateBooleans: true` on the procedure's `meta`)
 
 Numbers:
 
@@ -333,7 +343,7 @@ You can also explicitly opt into this behavior for any procedure by setting `jso
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L167)
+#### [createCli](./src/index.ts#L168)
 
 Run a trpc router as a CLI.
 
@@ -489,7 +499,7 @@ When passing a command along with its options, the return value will be logged t
 
 Invalid inputs are helpfully displayed, along with help text for the associated command:
 
-<!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add 2 notanumber', reject: false} -->
+<!-- TODO:reenable codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: command, command: './node_modules/.bin/tsx test/fixtures/calculator add 2 notanumber', reject: false} -->
 `node path/to/calculator add 2 notanumber` output:
 
 ```

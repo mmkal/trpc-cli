@@ -12,6 +12,7 @@ import {
   getDescription,
   getSchemaTypes,
   getEnumChoices,
+  getAllowedSchemas,
 } from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
 import {parseProcedureInputs} from './parse-procedure'
@@ -258,51 +259,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           delete unusedOptionAliases[propertyKey]
         }
 
-        const defaultValue =
-          'default' in propertyValue
-            ? ({exists: true, value: propertyValue.default} as const)
-            : ({exists: false} as const)
+        const allowedSchemas = getAllowedSchemas(propertyValue)
+        const firstSchemaWithDefault = allowedSchemas.find(subSchema => 'default' in subSchema)
+        const defaultValue = firstSchemaWithDefault
+          ? ({exists: true, value: firstSchemaWithDefault.default} as const)
+          : ({exists: false} as const)
 
         const rootTypes = getSchemaTypes(propertyValue).sort()
-
-        const parseJson = (value: string, ErrorClass: new (message: string) => Error = InvalidArgumentError) => {
-          try {
-            return JSON.parse(value) as {}
-          } catch {
-            throw new ErrorClass(`Malformed JSON.`)
-          }
-        }
-        /** try to get a parser that can confidently parse a string into the correct type. Returns null if it can't confidently parse */
-        const getValueParser = (types: ReturnType<typeof getSchemaTypes>) => {
-          types = types.map(t => (t === 'integer' ? 'number' : t))
-          if (types.length === 2 && types[0] === 'boolean' && types[1] === 'number') {
-            return {
-              type: 'boolean|number',
-              parser: (value: string) => booleanParser(value, {fallback: null}) ?? numberParser(value),
-            } as const
-          }
-          if (types.length === 1 && types[0] === 'boolean') {
-            return {type: 'boolean', parser: (value: string) => booleanParser(value)} as const
-          }
-          if (types.length === 1 && types[0] === 'number') {
-            return {type: 'number', parser: (value: string) => numberParser(value)} as const
-          }
-          if (types.length === 1 && types[0] === 'string') {
-            return {type: 'string', parser: null} as const
-          }
-          return {
-            type: 'object',
-            parser: (value: string) => {
-              const parsed = parseJson(value)
-              if (!types.length) return parsed // if types is empty, it means any type is allowed - e.g. for json input
-              const jsonSchemaType = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed
-              if (!types.includes(jsonSchemaType)) {
-                throw new InvalidArgumentError(`Got ${jsonSchemaType} but expected ${types.join(' or ')}`)
-              }
-              return parsed
-            },
-          } as const
-        }
 
         const propertyType = rootTypes[0]
         const isValueRequired =
@@ -311,56 +274,38 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const isCliOptionRequired = isValueRequired && propertyType !== 'boolean' && !defaultValue.exists
 
         function negate() {
-          const negation = new Option(longOption.replace('--', '--no-'), `Negate \`${longOption}\` option.`.trim())
-          command.addOption(negation)
+          const shouldNegate = 'negatable' in propertyValue ? propertyValue.negatable : meta.negateBooleans
+          if (shouldNegate) {
+            const negation = new Option(longOption.replace('--', '--no-'), `Negate \`${longOption}\` option.`.trim())
+            command.addOption(negation)
+          }
         }
 
         const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
 
-        if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'string') {
+        if (allowedSchemas.length > 1) {
           const option = new Option(`${flags} [value]`, description)
-          option.default(defaultValue.exists ? defaultValue.value : false)
-          command.addOption(option)
-          negate()
-          return
-        }
-        if (rootTypes.length === 2 && rootTypes[0] === 'boolean' && rootTypes[1] === 'number') {
-          const option = new Option(`${flags} [value]`, description)
-          option.argParser(getValueParser(rootTypes).parser!)
-          option.default(defaultValue.exists ? defaultValue.value : false)
-          command.addOption(option)
-          negate()
-          return
-        }
-        if (rootTypes.length === 2 && rootTypes[0] === 'number' && rootTypes[1] === 'string') {
-          const option = new Option(`${flags} ${bracketise('value')}`, description)
-          option.argParser(value => {
-            const number = numberParser(value, {fallback: null})
-            return number ?? value
-          })
           if (defaultValue.exists) option.default(defaultValue.value)
+          else if (rootTypes.includes('boolean')) option.default(false)
+          option.argParser(getOptionValueParser(propertyValue))
           command.addOption(option)
+          if (rootTypes.includes('boolean')) negate()
           return
         }
 
         if (rootTypes.length !== 1) {
           const option = new Option(`${flags} ${bracketise('json')}`, description)
-          option.argParser(getValueParser(rootTypes).parser!)
+          option.argParser(getOptionValueParser(propertyValue))
           command.addOption(option)
           return
         }
 
-        if (propertyType === 'boolean' && isValueRequired) {
-          const option = new Option(flags, description)
-          option.default(defaultValue.exists ? defaultValue.value : false)
-          command.addOption(option)
-          negate()
-          return
-        } else if (propertyType === 'boolean') {
+        if (propertyType === 'boolean') {
           const option = new Option(`${flags} [boolean]`, description)
           option.argParser(value => booleanParser(value))
           // don't set a default value of `false`, because `undefined` is accepted by the procedure
-          if (defaultValue.exists) option.default(defaultValue.value)
+          if (isValueRequired) option.default(false)
+          else if (defaultValue.exists) option.default(defaultValue.value)
           command.addOption(option)
           negate()
           return
@@ -369,10 +314,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         let option: Option | null = null
 
         // eslint-disable-next-line unicorn/prefer-switch
-        if (propertyType === 'string' && 'format' in propertyValue && (propertyValue.format as string) === 'json') {
-          // option = new Option(`${flags} ${bracketise('json')}`, description)
-          // option.argParser(value => parseJson(value, InvalidOptionArgumentError))
-        } else if (propertyType === 'string') {
+        if (propertyType === 'string') {
           option = new Option(`${flags} ${bracketise('string')}`, description)
         } else if (propertyType === 'boolean') {
           option = new Option(flags, description)
@@ -383,20 +325,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
           else if (isValueRequired) option.default([])
-          const itemsProp = 'items' in propertyValue ? (propertyValue.items as JsonSchema7Type) : null
-          const itemTypes = itemsProp ? getSchemaTypes(itemsProp) : []
+          const itemsSchema = 'items' in propertyValue ? (propertyValue.items as JsonSchema7Type) : {}
 
-          const itemEnumTypes = itemsProp && getEnumChoices(itemsProp)
+          const itemEnumTypes = getEnumChoices(itemsSchema)
           if (itemEnumTypes?.type === 'string_enum') {
             option.choices(itemEnumTypes.choices)
           }
 
-          const itemParser = getValueParser(itemTypes)
-          if (itemParser.parser) {
-            option.argParser((value, previous) => {
-              const parsed = itemParser.parser(value)
-              if (Array.isArray(previous)) return [...previous, parsed] as unknown[]
-              return [parsed] as unknown[]
+          const itemParser = getOptionValueParser(itemsSchema)
+          if (itemParser) {
+            option.argParser((value, previous): unknown[] => {
+              const parsed = itemParser(value)
+              return Array.isArray(previous) ? [...previous, parsed] : [parsed]
             })
           }
         }
@@ -441,7 +381,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         program.__ran ||= []
         program.__ran.push(command)
         const options = command.opts()
-        // console.dir({options, args}, {depth: null})
 
         if (args.at(-2) !== options) {
           // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break
@@ -671,4 +610,58 @@ const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
   if (val === 'true') return true
   if (val === 'false') return false
   return fallback
+}
+
+const getOptionValueParser = (schema: JsonSchema7Type) => {
+  const allowedSchemas = getAllowedSchemas(schema)
+    .slice()
+    .sort((a, b) => String(getSchemaTypes(a)[0]).localeCompare(String(getSchemaTypes(b)[0])))
+
+  const typesArray = allowedSchemas.flatMap(getSchemaTypes)
+  const types = new Set(typesArray)
+
+  return (value: string) => {
+    const definitelyPrimitive = typesArray.every(
+      t => t === 'boolean' || t === 'number' || t === 'integer' || t === 'string',
+    )
+    if (types.size === 0 || !definitelyPrimitive) {
+      // parse this as JSON - too risky to fall back to a string because that will probably do the wrong thing if someone passes malformed JSON like `{"foo": 1,}` (trailing comma)
+      const hint = `Malformed JSON. If passing a string, pass it as a valid JSON string with quotes (${JSON.stringify(value)})`
+      const parsed = parseJson(value, InvalidOptionArgumentError, hint)
+      if (!types.size) return parsed // if types is empty, it means any type is allowed - e.g. for json input
+      const jsonSchemaType = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed
+      if (!types.has(jsonSchemaType)) {
+        throw new InvalidOptionArgumentError(`Got ${jsonSchemaType} but expected ${[...types].join(' or ')}`)
+      }
+      return parsed
+    }
+    if (types.has('boolean')) {
+      const parsed = booleanParser(value, {fallback: null})
+      if (typeof parsed === 'boolean') return parsed
+    }
+    if (types.has('number')) {
+      const parsed = numberParser(value, {fallback: null})
+      if (typeof parsed === 'number') return parsed
+    }
+    if (types.has('integer')) {
+      const parsed = numberParser(value, {fallback: null})
+      if (typeof parsed === 'number' && Number.isInteger(parsed)) return parsed
+    }
+    if (types.has('string')) {
+      return value
+    }
+    throw new InvalidOptionArgumentError(`Got ${JSON.stringify(value)} but expected ${[...types].join(' or ')}`)
+  }
+}
+
+const parseJson = (
+  value: string,
+  ErrorClass: new (message: string) => Error = InvalidArgumentError,
+  hint = `Malformed JSON.`,
+) => {
+  try {
+    return JSON.parse(value) as {}
+  } catch {
+    throw new ErrorClass(hint)
+  }
 }

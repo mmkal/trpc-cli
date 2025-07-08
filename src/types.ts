@@ -53,6 +53,8 @@ export interface TrpcCliMeta {
   jsonInput?: boolean
   /** Sub-property for the CLI meta. If present, will take precedence over the top-level meta, to avoid conflicts with other tools. */
   cliMeta?: TrpcCliMeta
+  /** If set to true, add a "--no-*" option to negate each boolean option by default. Can still be overriden by doing `z.boolean().meta({negatable: ...})` or equivalent. */
+  negateBooleans?: boolean
 }
 
 export interface ParsedProcedure {
