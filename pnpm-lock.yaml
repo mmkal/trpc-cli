@@ -25,10 +25,10 @@ importers:
         version: 1.1.1
       zod:
         specifier: ^3.25.3
-        version: 3.25.75
+        version: 3.25.76
       zod-to-json-schema:
         specifier: ^3.23.0
-        version: 3.24.6(zod@3.25.75)
+        version: 3.24.6(zod@3.25.76)
     devDependencies:
       '@clack/prompts':
         specifier: 0.11.0
@@ -4093,8 +4093,8 @@ packages:
     peerDependencies:
       zod: ^3.24.1
 
-  zod@3.25.75:
-    resolution: {integrity: sha512-OhpzAmVzabPOL6C3A3gpAifqr9MqihV/Msx3gor2b2kviCgcb+HM9SEOpMWwwNp9MRunWnhtAKUoo0AHhjyPPg==}
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zx@8.6.1:
     resolution: {integrity: sha512-ig4Gn2e3L9QaQq3OsyDyGKvXFiq7wYvLCPmFJgcneHsr5vTeJefe0SXtDE7qaur9ysv7giAc0CmEtQcS71UA5Q==}
@@ -6140,7 +6140,7 @@ snapshots:
       read-pkg-up: 7.0.1
       safe-stringify: 1.2.0
       strip-ansi: 6.0.1
-      zod: 3.25.75
+      zod: 3.25.76
       zx: 8.6.1
     transitivePeerDependencies:
       - babel-plugin-macros
@@ -7706,7 +7706,7 @@ snapshots:
       quick-lru: 7.0.1
       url-join: 5.0.0
       validate-npm-package-name: 5.0.1
-      zod: 3.25.75
+      zod: 3.25.76
       zod-package-json: 1.2.0
 
   query-string@9.2.1:
@@ -8555,12 +8555,12 @@ snapshots:
 
   zod-package-json@1.2.0:
     dependencies:
-      zod: 3.25.75
+      zod: 3.25.76
 
-  zod-to-json-schema@3.24.6(zod@3.25.75):
+  zod-to-json-schema@3.24.6(zod@3.25.76):
     dependencies:
-      zod: 3.25.75
+      zod: 3.25.76
 
-  zod@3.25.75: {}
+  zod@3.25.76: {}
 
   zx@8.6.1: {}
