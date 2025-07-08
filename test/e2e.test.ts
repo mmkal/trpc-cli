@@ -418,7 +418,6 @@ test('fs copy help', async () => {
 
     Options:
       --force [boolean]  Overwrite destination if it exists (default: false)
-      --no-force         Negate \`--force\` option.
       -h, --help         display help for command
     "
   `)
@@ -480,9 +479,7 @@ test('fs copy', async () => {
 
     Options:
       --ignore-whitespace [boolean]  Ignore whitespace changes (default: false)
-      --no-ignore-whitespace         Negate \`--ignore-whitespace\` option.
       --trim [boolean]               Trim start/end whitespace (default: false)
-      --no-trim                      Negate \`--trim\` option.
       -h, --help                     display help for command
     "
   `)
@@ -498,9 +495,7 @@ test('fs diff', async () => {
 
     Options:
       --ignore-whitespace [boolean]  Ignore whitespace changes (default: false)
-      --no-ignore-whitespace         Negate \`--ignore-whitespace\` option.
       --trim [boolean]               Trim start/end whitespace (default: false)
-      --no-trim                      Negate \`--trim\` option.
       -h, --help                     display help for command
     "
   `)

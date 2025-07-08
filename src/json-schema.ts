@@ -100,7 +100,7 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
 
 export const getSchemaTypes = (
   propertyValue: JsonSchema7Type,
-): Array<'string' | 'boolean' | 'number' | (string & {})> => {
+): Array<'string' | 'boolean' | 'number' | 'integer' | (string & {})> => {
   const array: string[] = []
   if ('type' in propertyValue) {
     array.push(...[propertyValue.type].flat())
@@ -121,6 +121,18 @@ export const getSchemaTypes = (
   }
 
   return [...new Set(array)]
+}
+
+/** Returns a list of all allowed subschemas. If the schema is not a union, returns a list with a single item. */
+export const getAllowedSchemas = (schema: JsonSchema7Type): JsonSchema7Type[] => {
+  if (!schema) return []
+  if ('anyOf' in schema && Array.isArray(schema.anyOf))
+    return (schema.anyOf as JsonSchema7Type[]).flatMap(getAllowedSchemas)
+  if ('oneOf' in schema && Array.isArray(schema.oneOf))
+    return (schema.oneOf as JsonSchema7Type[]).flatMap(getAllowedSchemas)
+  const types = getSchemaTypes(schema)
+  if (types.length === 1) return [schema]
+  return types.map(type => ({...schema, type}))
 }
 
 export const getEnumChoices = (propertyValue: JsonSchema7Type) => {

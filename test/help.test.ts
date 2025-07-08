@@ -77,9 +77,7 @@ test('options with various modifiers', async () => {
       --union-with-default [string]                 (choices: "foo", "bar", default: "foo")
       --number-with-default [number]                (default: 42)
       --boolean-with-default [boolean]              (default: true)
-      --no-boolean-with-default                     Negate \`--boolean-with-default\` option.
       --boolean-or-number [value]                   type: boolean or number (default: false)
-      --no-boolean-or-number                        Negate \`--boolean-or-number\` option.
       --enum-with-default [string]                  (choices: "foo", "bar", default: "foo")
       --array-with-default [values...]              Type: string array (default: ["hello"])
       --object-with-default [json]                  Object (json formatted); Required: ["foo"] (default: {"foo":"bar"})
