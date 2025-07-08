@@ -694,4 +694,24 @@ test('default negatable boolean', async () => {
   expect(await run(router, ['test', '--bar', 'false'])).toMatchInlineSnapshot(`"{ foo: false, bar: false }"`)
 })
 
+test('positional via zod meta', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.object({
+          foo: z.string().meta({positional: true}),
+          bar: z.number().optional().meta({positional: true}),
+          abc: z.string().optional(),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', 'hello'])).toMatchInlineSnapshot(`"{"foo":"hello"}"`)
+  expect(await run(router, ['test', 'hello', '1'])).toMatchInlineSnapshot(`"{"foo":"hello","bar":1}"`)
+  expect(await run(router, ['test', 'hello', '1', '--abc', '2'])).toMatchInlineSnapshot(
+    `"{"foo":"hello","bar":1,"abc":"2"}"`,
+  )
+})
+
 // todo: either create a meta registry or use module augmentation to allow adding aliases for options etc.
