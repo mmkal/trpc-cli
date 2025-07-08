@@ -61,11 +61,11 @@ test('merging input types', async () => {
       .input(z.object({bar: z.string()}))
       .input(z.object({baz: z.number()}))
       .input(z.object({qux: z.boolean()}))
-      .query(({input}) => Object.entries(input).join(', ')),
+      .query(({input}) => JSON.stringify({bar: input.bar, baz: input.baz, qux: input.qux})),
   })
 
   expect(await run(router, ['foo', '--bar', 'hello', '--baz', '42', '--qux'])).toMatchInlineSnapshot(
-    `"bar,hello, baz,42, qux,true"`,
+    `"{"bar":"hello","baz":42,"qux":true}"`,
   )
 })
 
@@ -198,6 +198,7 @@ test('regex input', async () => {
   })
 
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
+  // note: zod 4 has a better error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: ✖ Invalid string: must match pattern /hello/
@@ -428,6 +429,38 @@ test('mixed array input', async () => {
 
   const result = await run(router, ['test', '12', 'true', '3.14', 'null', 'undefined', 'hello'])
   expect(result).toMatchInlineSnapshot(`"list: [12,true,3.14,"null","undefined","hello"]"`)
+})
+
+test('number then string array input', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.tuple([z.number(), z.array(z.string())])) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  expect(await run(router, ['test', '123', 'hello', 'world'])).toMatchInlineSnapshot(`"list: [123,["hello","world"]]"`)
+})
+
+test('string array then number input (downgrades to json input)', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.tuple([z.string().array(), z.number()])) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  expect(await run(router, ['test', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
+    "Usage: program test [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Array positional parameters must
+                      be at the end of the input.)
+      -h, --help      display help for command
+    "
+  `)
+  expect(
+    await run(router, ['test', '--input', '[["hello","world"], 123]'], {expectJsonInput: true}),
+  ).toMatchInlineSnapshot(`"list: [["hello","world"],123]"`)
 })
 
 test('record input', async () => {
@@ -713,5 +746,73 @@ test('positional via zod meta', async () => {
     `"{"foo":"hello","bar":1,"abc":"2"}"`,
   )
 })
+
+test('merged positional via zod meta', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.object({
+          foo: z.string().meta({positional: true}),
+          bar: z.number().optional().meta({positional: true}),
+          abc: z.string().optional(),
+        }),
+      )
+      .input(
+        z.object({
+          hello: z.string().meta({positional: true}),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', 'ff', '1', 'hh'])).toMatchInlineSnapshot(`"{"foo":"ff","bar":1,"hello":"hh"}"`)
+})
+
+test('the order matters for merged positionals', async () => {
+  const router = t.router({
+    aaa: t.procedure
+      .input(z.object({foo: z.string().meta({positional: true})}))
+      .input(z.object({bar: z.string().meta({positional: true})}))
+      .mutation(({input: {foo, bar}}) => JSON.stringify({foo, bar})),
+    bbb: t.procedure
+      .input(z.object({bar: z.string().meta({positional: true})}))
+      .input(z.object({foo: z.string().meta({positional: true})}))
+      .mutation(({input: {foo, bar}}) => JSON.stringify({foo, bar})),
+  })
+
+  expect(await run(router, ['aaa', 'hello', 'goodbye'])).toMatchInlineSnapshot(`"{"foo":"hello","bar":"goodbye"}"`)
+  expect(await run(router, ['bbb', 'hello', 'goodbye'])).toMatchInlineSnapshot(`"{"foo":"goodbye","bar":"hello"}"`)
+})
+
+test('complex positionals', async () => {
+  const router = t.router({
+    stringArray: t.procedure
+      .input(
+        z.object({
+          foo: z.string().array().meta({positional: true}),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+    numberAndStringArray: t.procedure
+      .input(
+        z.object({
+          bar: z.number().meta({positional: true}),
+          foo: z.string().array().meta({positional: true}),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['string-array', 'hello', 'goodbye'])).toMatchInlineSnapshot(`"{"foo":["hello","goodbye"]}"`)
+  expect(await run(router, ['number-and-string-array', '123', 'hello', 'goodbye'])).toMatchInlineSnapshot(
+    `"{"bar":123,"foo":["hello","goodbye"]}"`,
+  )
+})
+
+{
+  // type errors for invalid meta
+  // @ts-expect-error - positional is a boolean
+  z.number().meta({positional: 1})
+}
 
 // todo: either create a meta registry or use module augmentation to allow adding aliases for options etc.

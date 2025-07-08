@@ -43,6 +43,10 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
 
 export function parseProcedureInputs(inputs: unknown[], dependencies: Dependencies): Result<ParsedProcedure> {
   const inner = parseProcedureInputsInner(inputs, dependencies)
+  if (inner.success && inner.value.positionalParameters.some((param, i, {length}) => param.array && i < length - 1)) {
+    return {success: false, error: `Array positional parameters must be at the end of the input.`}
+  }
+
   if (inner.success) {
     const optionsProps = schemaDefPropValue(inner.value.optionsJsonSchema as JSONSchema7, 'properties')
     if (optionsProps) {
@@ -233,6 +237,24 @@ function acceptedPrimitiveTypes(schema: JSONSchema7Definition): Array<(typeof pr
   return primitiveCandidateTypes.filter(c => acceptedJsonSchemaTypes.has(c))
 }
 
+/**
+ * From a list of schemas, if they are all record-style schemas, return a single schema with all properties (an intersection).
+ * Returns `null` if the schemas are not all record-style schemas.
+ */
+function maybeMergeObjectSchemas(schemas: JSONSchema7[]): JSONSchema7 | null {
+  const required: string[] = []
+  const properties: Record<string, JSONSchema7> = {}
+  for (const schema of schemas) {
+    if (!schema) return null
+    const {required: schemaRequired, properties: schemaProperties, type, $schema, ...rest} = schema
+    if (type && type !== 'object') return null
+    if (Object.keys(rest).length) return null
+    if (schemaRequired) required.push(...schemaRequired)
+    if (schemaProperties) Object.assign(properties, schemaProperties)
+  }
+  return {type: 'object', required, properties}
+}
+
 function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result<ParsedProcedure> {
   const parsedIndividually = inputs.map(input => parseProcedureInputsInner([input], dependencies))
 
@@ -246,6 +268,20 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
     return {
       success: false,
       error: `Can't use positional parameters with multi-input type.`,
+    }
+  }
+
+  const merged = maybeMergeObjectSchemas(
+    parsedIndividually.map(p => (p.success ? (p.value.optionsJsonSchema as JSONSchema7) : {})),
+  )
+  if (merged) {
+    return {
+      success: true,
+      value: {
+        positionalParameters: [],
+        optionsJsonSchema: merged,
+        getPojoInput: argv => argv.options,
+      },
     }
   }
 

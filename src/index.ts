@@ -38,6 +38,13 @@ export * as zod from 'zod'
 
 export * as trpcServer from '@trpc/server'
 
+declare module 'zod/v4' {
+  interface GlobalMeta {
+    positional?: boolean
+    alias?: string
+  }
+}
+
 export class Command extends BaseCommand {
   /** @internal track the commands that have been run, so that we can find the `__result` of the last command */
   __ran: Command[] = []
