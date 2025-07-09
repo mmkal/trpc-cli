@@ -451,7 +451,7 @@ const router = t.router({
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L175)
+#### [createCli](./src/index.ts#L186)
 
 Run a trpc router as a CLI.
 
