@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest'
 
 import {createCli, trpcServer, z} from '../src'
-import {router} from './fixtures/migrations'
+import {router as migrationsRouter} from './fixtures/migrations'
 
 expect.addSnapshotSerializer({
   test: () => true,
@@ -83,7 +83,7 @@ test('simple toJSON', async () => {
 })
 
 test('migrations toJSON', async () => {
-  const json = createCli({router}).toJSON()
+  const json = createCli({router: migrationsRouter}).toJSON()
   expect(json).toMatchInlineSnapshot(`
     {
       "description": "Available subcommands: up, create, list, search",
@@ -201,11 +201,11 @@ test('migrations toJSON', async () => {
                 },
                 {
                   "name": "name",
-                  "required": false,
-                  "optional": true,
+                  "required": true,
+                  "optional": false,
                   "negate": false,
                   "variadic": false,
-                  "flags": "--name [string]",
+                  "flags": "--name <string>",
                   "attributeName": "name"
                 }
               ],
@@ -233,11 +233,11 @@ test('migrations toJSON', async () => {
                 },
                 {
                   "name": "search-term",
-                  "required": false,
-                  "optional": true,
+                  "required": true,
+                  "optional": false,
                   "negate": false,
                   "variadic": false,
-                  "flags": "-q, --search-term [string]",
+                  "flags": "-q, --search-term <string>",
                   "short": "-q",
                   "description": "Only show migrations whose \`content\` value contains this string",
                   "attributeName": "searchTerm"
