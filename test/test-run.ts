@@ -33,7 +33,9 @@ export const runWith = async <R extends AnyRouter>(
           return lines.join('\n\n')
         }
         // add to the FailedToExitError message so it's easier to debug when tests fail
-        e.message = print({argv: argv.join(' '), FailedToExitError: String(e), cause: String(e.cause), help})
+        e.message =
+          `exitCode: ${e.exitCode}\n` +
+          print({argv: argv.join(' '), cause: String(e.cause), help, FailedToExitError: String(e)})
       }
       throw e
     })

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError, Option} from 'commander'
-import {inspect} from 'util'
+import {inspect, parseArgs} from 'util'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
@@ -15,7 +15,7 @@ import {
   getAllowedSchemas,
 } from './json-schema'
 import {lineByLineConsoleLogger} from './logging'
-import {parseProcedureInputs} from './parse-procedure'
+import {nonOptional, parseProcedureInputs} from './parse-procedure'
 import {promptify} from './prompts'
 import {prettifyStandardSchemaError} from './standard-schema/errors'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils'
@@ -218,6 +218,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       procedurePath: string,
       {meta, parsedProcedure, incompatiblePairs, procedure}: ProcedureInfo,
     ) => {
+      parsedProcedure = {
+        ...parsedProcedure,
+        optionsJsonSchema: nonOptional(parsedProcedure.optionsJsonSchema as never),
+      }
       const optionJsonSchemaProperties = flattenedProperties(parsedProcedure.optionsJsonSchema)
       command.exitOverride(ec => {
         _process.exit(ec.exitCode)
@@ -392,6 +396,14 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
 
+      const allowAdditionalProperties =
+        'additionalProperties' in parsedProcedure.optionsJsonSchema &&
+        parsedProcedure.optionsJsonSchema.additionalProperties
+      if (allowAdditionalProperties) {
+        command.allowExcessArguments()
+        command.allowUnknownOption()
+      }
+
       const invalidOptionAliases = Object.entries(unusedOptionAliases).map(([option, alias]) => `${option}: ${alias}`)
       if (invalidOptionAliases.length) {
         throw new Error(`Invalid option aliases: ${invalidOptionAliases.join(', ')}`)
@@ -401,7 +413,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       command.action(async (...args) => {
         program.__ran ||= []
         program.__ran.push(command)
-        const options = command.opts()
+        let options = command.opts()
 
         if (args.at(-2) !== options) {
           // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break
@@ -414,6 +426,35 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
         const positionalValues = args.slice(0, -2)
+
+        console.dir({allowAdditionalProperties, parsedProcedure}, {depth: null})
+        if (allowAdditionalProperties) {
+          const {unknown} = program.parseOptions(program.args)
+          const parsed = parseArgs({
+            args: unknown,
+            strict: false,
+            options: Object.fromEntries(
+              unknown
+                .map(name => ({name, isOption: name.startsWith('--')}))
+                .flatMap((o, i, arr) => {
+                  if (!o.isOption) return []
+                  return [
+                    [
+                      o.name.slice(2).split(/\W/)[0],
+                      {type: i === arr.length - 1 || arr[i + 1].isOption ? 'boolean' : 'string'},
+                    ] as const,
+                  ]
+                }),
+            ),
+          })
+          options = Object.fromEntries(
+            Object.entries({...parsed.values}).map(([key, value]) => {
+              const parser =
+                typeof allowAdditionalProperties === 'object' ? getOptionValueParser(allowAdditionalProperties) : String
+              return [key, parser(String(value))]
+            }),
+          )
+        }
 
         const input = parsedProcedure.getPojoInput({positionalValues, options})
         const resolvedTrpcServer = await (params.trpcServer || trpcServer11)

@@ -417,29 +417,43 @@ test('string array then number input (downgrades to json input)', async () => {
   ).toMatchInlineSnapshot(`"list: [["hello","world"],123]"`)
 })
 
-test('record input', async () => {
+test('record input allows unknown options', async () => {
   const router = t.router({
     test: t.procedure
-      .input(z.record(z.number()).optional()) //
-      .query(({input}) => `input: ${JSON.stringify(input)}`),
+      .input(z.record(z.number())) //
+      .query(({input}) => 'input' + `: ${JSON.stringify(input)}`),
   })
 
-  expect(await run(router, ['test', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
+  expect(await run(router, ['test', '--help'])).toMatchInlineSnapshot(`
     "Usage: program test [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Inputs with additional properties
-                      are not currently supported)
-      -h, --help      display help for command
+      -h, --help  display help for command
     "
   `)
-  expect(await run(router, ['test'])).toMatchInlineSnapshot(`"input: undefined"`)
-  expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
-  await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CliValidationError: ✖ Expected number, received string → at foo
+  expect(await run(router, ['test'])).toMatchInlineSnapshot(`"input: {}"`)
+  expect(await run(router, ['test', '--abc', '123'])).toMatchInlineSnapshot(`"input: {"abc":123}"`)
+})
+
+test('record input with positional parameter', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.tuple([z.string(), z.record(z.number()).optional()])) //
+      .query(({input}) => 'input' + `: ${JSON.stringify(input)}`),
+  })
+
+  expect(await run(router, ['test', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program test [options] <parameter_1>
+
+    Arguments:
+      parameter_1  (required)
+
+    Options:
+      -h, --help   display help for command
+    "
   `)
+  expect(await run(router, ['test', 'hi'])).toMatchInlineSnapshot(`"input: ["hi",{}]"`)
+  expect(await run(router, ['test', 'hi', '--abc', '123'])).toMatchInlineSnapshot(`"input: ["hi",{"abc":123}]"`)
 })
 
 test("nullable array inputs aren't supported", async () => {

@@ -67,6 +67,19 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
     return {c: code, codeWithoutInlineSnapshots, placeholders}
   }
 
+  const removeCruft = (code: string) => {
+    const splitter = '.toMatchInlineSnapshot(`'
+    const chunks = code.split(splitter)
+    let result = chunks[0] + splitter.replace('`', '')
+    for (const chunk of chunks.slice(1)) {
+      result += chunk.split('`').slice(1).join('`')
+    }
+    return result
+      .replaceAll('// expect', 'expect')
+      .replaceAll(/\n\s+\/\/.*?\n/g, '\n')
+      .replaceAll(/[\s"',]+/g, '')
+  }
+
   let expected = zod3.tests
     .map(test => {
       const parsed = parseTest(test)
@@ -95,7 +108,7 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
       // TODO: remove this once the diff is in
       // eslint-disable-next-line no-constant-condition
       if (!existingTest.code.includes('__PLACEHOLDER__')) return code
-      return code.replace(
+      const expectedTestCode = code.replace(
         '\n',
         [
           '',
@@ -108,6 +121,7 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
           '',
         ].join('\n'),
       )
+      return expectedTestCode
     })
     .join('\n\n')
 
@@ -119,19 +133,6 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
     '',
     expected,
   ].join('\n')
-
-  const removeCruft = (code: string) => {
-    const splitter = '.toMatchInlineSnapshot(`'
-    const chunks = code.split(splitter)
-    let result = chunks[0] + splitter.replace('`', '')
-    for (const chunk of chunks.slice(1)) {
-      result += chunk.split('`').slice(1).join('`')
-    }
-    return result
-      .replaceAll('// expect', 'expect')
-      .replaceAll(/\n\s+\/\/.*?\n/g, '\n')
-      .replaceAll(/[\s"',]+/g, '')
-  }
 
   if (removeCruft(expected) === removeCruft(meta.existingContent)) {
     return meta.existingContent
