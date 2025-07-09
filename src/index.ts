@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError, Option} from 'commander'
+import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
-import {JsonSchema7Type} from 'zod-to-json-schema'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
 import {commandToJSON} from './json'
@@ -262,7 +262,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       })
 
       const unusedOptionAliases: Record<string, string> = {...meta.aliases?.options}
-      const addOptionForProperty = ([propertyKey, propertyValue]: [string, JsonSchema7Type]) => {
+      const addOptionForProperty = ([propertyKey, propertyValue]: [string, JSONSchema7]) => {
         const description = getDescription(propertyValue)
 
         const longOption = `--${kebabCase(propertyKey)}`
@@ -346,7 +346,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
           else if (isValueRequired) option.default([])
-          const itemsSchema = 'items' in propertyValue ? (propertyValue.items as JsonSchema7Type) : {}
+          const itemsSchema = 'items' in propertyValue ? (propertyValue.items as JSONSchema7) : {}
 
           const itemEnumTypes = getEnumChoices(itemsSchema)
           if (itemEnumTypes?.type === 'string_enum') {
@@ -633,7 +633,7 @@ const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
   return fallback
 }
 
-const getOptionValueParser = (schema: JsonSchema7Type) => {
+const getOptionValueParser = (schema: JSONSchema7) => {
   const allowedSchemas = getAllowedSchemas(schema)
     .slice()
     .sort((a, b) => String(getSchemaTypes(a)[0]).localeCompare(String(getSchemaTypes(b)[0])))

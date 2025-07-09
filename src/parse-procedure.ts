@@ -1,10 +1,10 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
 import * as zod4 from 'zod/v4/core'
-import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Dependencies, ParsedProcedure, Result} from './types'
+import zodToJsonSchema from './zod-to-json-schema'
 
 // We're going to use eval to require some optional dependencies. It's hard-coded, so safe, but some bundlers like tsdown will emit warnings unless we disguise it.
 const disguisedEval = eval

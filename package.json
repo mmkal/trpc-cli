@@ -13,6 +13,7 @@
   },
   "packageManager": "pnpm@10.11.0",
   "scripts": {
+    "cp-zod-to-json-schema": "node -e \"const pkg=require('./package.json'); const version=pkg.devDependencies['zod-to-json-schema']; const gitHead=require('child_process').execSync('npm view zod-to-json-schema@'+version+' gitHead',{encoding:'utf8'}).trim(); require('child_process').execSync('git clone https://github.com/StefanTerdell/zod-to-json-schema.git /tmp/zod-to-json-schema-temp && cd /tmp/zod-to-json-schema-temp && git checkout '+gitHead+' && cd - && cp -r /tmp/zod-to-json-schema-temp/src src/zod-to-json-schema && rm -rf /tmp/zod-to-json-schema-temp',{stdio:'inherit'})\"",
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
@@ -80,7 +81,7 @@
     "typescript": "5.8.3",
     "valibot": "1.1.0",
     "vitest": "3.1.4",
-    "zod": "4.0.0",
+    "zod": "3.25.76",
     "zod-to-json-schema": "3.24.6"
   }
 }
