@@ -351,7 +351,7 @@ You might use the above with a command like:
 path/to/cli copy a.txt b.txt --mkdirp
 ```
 
->Note: when using a tuple, object types for options must appear _last_ in the `.input(...)` tuple, when being used with positional arguments. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed (inputs would have to be passesd as JSON).
+>Note: when using a tuple, object types for options must appear _last_ in the `.input(...)` tuple, when being used with positional arguments. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed (inputs would have to be passed as JSON).
 
 >You can pass an existing tRPC router that's primarily designed to be deployed as a server, in order to invoke your procedures directly in development.
 
