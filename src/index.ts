@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError, Option} from 'commander'
+import {JSONSchema7} from 'json-schema'
 import {inspect, parseArgs} from 'util'
 import {JsonSchema7Type} from 'zod-to-json-schema'
 import {addCompletions} from './completions'
@@ -220,7 +221,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     ) => {
       parsedProcedure = {
         ...parsedProcedure,
-        optionsJsonSchema: nonOptional(parsedProcedure.optionsJsonSchema as never),
+        optionsJsonSchema: nonOptional(parsedProcedure.optionsJsonSchema as JSONSchema7) as JSONSchema7,
       }
       const optionJsonSchemaProperties = flattenedProperties(parsedProcedure.optionsJsonSchema)
       command.exitOverride(ec => {
