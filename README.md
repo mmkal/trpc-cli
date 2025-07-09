@@ -31,8 +31,11 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [Existing routers](#existing-routers)
    - [Disclaimer](#disclaimer)
    - [Parameters and options](#parameters-and-options)
+- [Command configuration](#command-configuration)
    - [Default command](#default-command)
+   - [Command aliases](#command-aliases)
    - [Complex inputs with JSON](#complex-inputs-with-json)
+   - [Command meta](#command-meta)
    - [API docs](#api-docs)
    - [Calculator example](#calculator-example)
 - [Validators](#validators)
@@ -259,6 +262,37 @@ Multi-word options:
 
 Unions and intersections should also work as expected, but make sure to test them thoroughly, especially if they are deeply-nested.
 
+##### Option aliases
+
+If you're using zod v4, or any other standard-schema library that has a similar `meta` functionality, you can set aliases for options with it:
+
+```ts
+const router = t.router({
+  deleteAll: t.procedure
+    .input(
+      z.object({
+        force: z.boolean().meta({alias: 'f'}),
+      }),
+    )
+    .mutation(async () => ___),
+})
+```
+
+If you are on an old version of zod, or another library, set aliases at the procedure level:
+
+```ts
+const router = t.router({
+  deleteAll: t.procedure
+    .meta({aliases: {options: {force: 'f'}}})
+    .input(
+      z.object({
+        force: z.boolean(),
+      }),
+    )
+    .mutation(async () => ___),
+})
+```
+
 #### Both
 
 To use positional arguments _and_ options, use a tuple with an object at the end:
@@ -297,6 +331,27 @@ path/to/cli copy a.txt b.txt --mkdirp
 
 >You can pass an existing tRPC router that's primarily designed to be deployed as a server, in order to invoke your procedures directly in development.
 
+## Command configuration
+
+You can change the behaviour of the command generated for a given procedure by using trpc's `meta` feature. Use `description`, `usage` and `examples` to add corresponding help information to your CLI:
+
+```ts
+const router = t.router({
+  install: t.procedure
+    .meta({
+      description: 'Installs dependencies',
+      // usage: 'mycli install',
+      // examples: ['mycli install', 'mycli install --frozen-lockfile'],
+    })
+    .input(
+      z.object({
+        frozenLockfile: z.boolean(),
+      }),
+    )
+    .mutation(async ({input}) => ___),
+})
+```
+
 ### Default command
 
 You can define a default command for your CLI - set this to the procedure that should be invoked directly when calling your CLI. Useful for simple CLIs that only do one thing, or when you want to make the most common command very quick to type (e.g. `yarn` being an alias for `yarn install`):
@@ -316,6 +371,18 @@ cli.run()
 ```
 
 The above can be invoked with either `yarn` or `yarn install`. You can also set `default: true` on subcommands, which makes them the default for their parent.
+
+### Command aliases
+
+You can use trpc's `meta` feature to create aliases for your commands:
+
+```ts
+const router = t.router({
+  install: t.procedure //
+    .meta({aliases: {command: 'i'}})
+    .mutation(() => console.log('installing...')),
+})
+```
 
 ### Complex inputs with JSON
 
@@ -339,6 +406,23 @@ const cli = createCli({router})
 Rather than ignoring these procedures, trpc-cli makes them available through JSON input, allowing you to pass complex data structures that wouldn't work well with traditional CLI arguments.
 
 You can also explicitly opt into this behavior for any procedure by setting `jsonInput: true` in its meta, regardless of whether its input could be mapped to CLI arguments.
+
+### Command meta
+
+If you don't want to put properties (like `default`, `aliases`, `jsonInput` or `negateBooleans`) at the top level of a procedure's meta, you can nest them under `cliMeta`:
+
+```ts
+const router = t.router({
+  install: t.procedure //
+    .meta({
+      cliMeta: {
+        default: true,
+        aliases: {command: 'i'},
+      },
+    })
+    .mutation(() => console.log('installing...')),
+})
+```
 
 ### API docs
 
