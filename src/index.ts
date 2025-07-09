@@ -256,7 +256,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         const longOption = `--${kebabCase(propertyKey)}`
         let flags = longOption
-        const alias = meta.aliases?.options?.[propertyKey]
+        const alias =
+          propertyValue && 'alias' in propertyValue && typeof propertyValue.alias === 'string'
+            ? propertyValue.alias
+            : meta.aliases?.options?.[propertyKey]
         if (alias) {
           let prefix = '-'
           if (alias.startsWith('-')) prefix = ''

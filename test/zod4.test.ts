@@ -727,4 +727,24 @@ test('default negatable boolean', async () => {
   expect(await run(router, ['test', '--bar', 'false'])).toMatchInlineSnapshot(`"{ foo: false, bar: false }"`)
 })
 
+test('alias via zod meta', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.object({
+          foo: z.string().optional().meta({alias: 'f'}),
+          bar: z.string().optional().meta({alias: 'bb'}),
+          abc: z.string().optional().meta({alias: '--something-else-entirely'}),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', '--foo', 'hello'])).toMatchInlineSnapshot(`"{"foo":"hello"}"`)
+  expect(await run(router, ['test', '-f', 'hello'])).toMatchInlineSnapshot(`"{"foo":"hello"}"`)
+  expect(await run(router, ['test', '--bar', 'hello'])).toMatchInlineSnapshot(`"{"bar":"hello"}"`)
+  expect(await run(router, ['test', '--bb', 'hello'])).toMatchInlineSnapshot(`"{"bar":"hello"}"`)
+  expect(await run(router, ['test', '--something-else-entirely', 'hello'])).toMatchInlineSnapshot(`"{"abc":"hello"}"`)
+})
+
 // todo: either create a meta registry or use module augmentation to allow adding aliases for options etc.
