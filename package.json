@@ -49,20 +49,17 @@
     }
   },
   "dependencies": {
-    "@trpc/server": "^11.1.1",
-    "@types/omelette": "^0.4.4",
-    "commander": "^14.0.0",
-    "picocolors": "^1.0.1",
-    "zod": "^3.25.3",
-    "zod-to-json-schema": "^3.23.0"
+    "commander": "^14.0.0"
   },
   "devDependencies": {
     "@clack/prompts": "0.11.0",
     "@inquirer/prompts": "7.5.1",
     "@orpc/contract": "1.5.0",
     "@orpc/server": "1.5.0",
+    "@trpc/server": "11.4.3",
     "@types/json-schema": "7.0.15",
     "@types/node": "20.17.48",
+    "@types/omelette": "0.4.5",
     "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.2.0",
     "arktype": "^2.1.20",
@@ -82,6 +79,8 @@
     "tsx": "4.19.4",
     "typescript": "5.8.3",
     "valibot": "1.1.0",
-    "vitest": "3.1.4"
+    "vitest": "3.1.4",
+    "zod": "4.0.0",
+    "zod-to-json-schema": "3.24.6"
   }
 }

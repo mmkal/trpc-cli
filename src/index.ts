@@ -20,13 +20,13 @@ import {promptify} from './prompts'
 import {prettifyStandardSchemaError} from './standard-schema/errors'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils'
 import {
-  AnyProcedure,
-  AnyRouter,
-  CreateCallerFactoryLike,
+  type AnyProcedure,
+  type AnyRouter,
+  type CreateCallerFactoryLike,
   isOrpcRouter,
-  OrpcRouterLike,
-  Trpc10RouterLike,
-  Trpc11RouterLike,
+  type OrpcRouterLike,
+  type Trpc10RouterLike,
+  type Trpc11RouterLike,
 } from './trpc-compat'
 import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
