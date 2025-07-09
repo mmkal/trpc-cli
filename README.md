@@ -295,7 +295,31 @@ const router = t.router({
 
 #### Both
 
-To use positional arguments _and_ options, use a tuple with an object at the end:
+To use positional arguments _and_ options, the preferred way is to use input schema metadata (e.g. `z.string().meta({positional: true})`. This is available on zod v4, and arktype via `type('string').configure({positional: true})`):
+
+```ts
+t.router({
+  copy: t.procedure
+    .input(
+      z.object({
+        source: z.string().meta({positional: true}),
+        target: z.string().meta({positional: true}),
+        mkdirp: z
+          .boolean()
+          .optional()
+          .describe("Ensure target's parent directory exists before copying"),
+      }),
+    )
+    .mutation(async ({input: [source, target, opts]}) => {
+      if (opts.mkdirp) {
+        await fs.mkdir(path.dirname(target, {recursive: true}))
+      }
+      await fs.copyFile(source, target)
+    }),
+})
+```
+
+2) use a tuple with an object at the end (use this if you're on an old version of zod, or using a library which doesn't support `meta`):
 
 ```ts
 t.router({
@@ -327,7 +351,7 @@ You might use the above with a command like:
 path/to/cli copy a.txt b.txt --mkdirp
 ```
 
->Note: object types for options must appear _last_ in the `.input(...)` tuple, when being used with positional arguments. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed.
+>Note: when using a tuple, object types for options must appear _last_ in the `.input(...)` tuple, when being used with positional arguments. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed (inputs would have to be passesd as JSON).
 
 >You can pass an existing tRPC router that's primarily designed to be deployed as a server, in order to invoke your procedures directly in development.
 
