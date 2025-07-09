@@ -15,11 +15,11 @@ test('merging input types', async () => {
       .input(z.object({bar: z.string()}))
       .input(z.object({baz: z.number()}))
       .input(z.object({qux: z.boolean()}))
-      .query(({input}) => Object.entries(input).join(', ')),
+      .query(({input}) => JSON.stringify({bar: input.bar, baz: input.baz, qux: input.qux})),
   })
 
   expect(await run(router, ['foo', '--bar', 'hello', '--baz', '42', '--qux'])).toMatchInlineSnapshot(
-    `"bar,hello, baz,42, qux,true"`,
+    `"{"bar":"hello","baz":42,"qux":true}"`,
   )
 })
 
@@ -383,6 +383,38 @@ test('mixed array input', async () => {
 
   const result = await run(router, ['test', '12', 'true', '3.14', 'null', 'undefined', 'hello'])
   expect(result).toMatchInlineSnapshot(`"list: [12,true,3.14,"null","undefined","hello"]"`)
+})
+
+test('number then string array input', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.tuple([z.number(), z.array(z.string())])) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  expect(await run(router, ['test', '123', 'hello', 'world'])).toMatchInlineSnapshot(`"list: [123,["hello","world"]]"`)
+})
+
+test('string array then number input (downgrades to json input)', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(z.tuple([z.string().array(), z.number()])) //
+      .query(({input}) => `list: ${JSON.stringify(input)}`),
+  })
+
+  expect(await run(router, ['test', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
+    "Usage: program test [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Array positional parameters must
+                      be at the end of the input.)
+      -h, --help      display help for command
+    "
+  `)
+  expect(
+    await run(router, ['test', '--input', '[["hello","world"], 123]'], {expectJsonInput: true}),
+  ).toMatchInlineSnapshot(`"list: [["hello","world"],123]"`)
 })
 
 test('record input', async () => {
