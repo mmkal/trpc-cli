@@ -747,4 +747,92 @@ test('alias via zod meta', async () => {
   expect(await run(router, ['test', '--something-else-entirely', 'hello'])).toMatchInlineSnapshot(`"{"abc":"hello"}"`)
 })
 
+test('positional via zod meta', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.object({
+          foo: z.string().meta({positional: true}),
+          bar: z.number().optional().meta({positional: true}),
+          abc: z.string().optional(),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', 'hello'])).toMatchInlineSnapshot(`"{"foo":"hello"}"`)
+  expect(await run(router, ['test', 'hello', '1'])).toMatchInlineSnapshot(`"{"foo":"hello","bar":1}"`)
+  expect(await run(router, ['test', 'hello', '1', '--abc', '2'])).toMatchInlineSnapshot(
+    `"{"foo":"hello","bar":1,"abc":"2"}"`,
+  )
+})
+
+test('merged positional via zod meta', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.object({
+          foo: z.string().meta({positional: true}),
+          bar: z.number().optional().meta({positional: true}),
+          abc: z.string().optional(),
+        }),
+      )
+      .input(
+        z.object({
+          hello: z.string().meta({positional: true}),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', 'ff', '1', 'hh'])).toMatchInlineSnapshot(`"{"foo":"ff","bar":1,"hello":"hh"}"`)
+})
+
+test('the order matters for merged positionals', async () => {
+  const router = t.router({
+    aaa: t.procedure
+      .input(z.object({foo: z.string().meta({positional: true})}))
+      .input(z.object({bar: z.string().meta({positional: true})}))
+      .mutation(({input: {foo, bar}}) => JSON.stringify({foo, bar})),
+    bbb: t.procedure
+      .input(z.object({bar: z.string().meta({positional: true})}))
+      .input(z.object({foo: z.string().meta({positional: true})}))
+      .mutation(({input: {foo, bar}}) => JSON.stringify({foo, bar})),
+  })
+
+  expect(await run(router, ['aaa', 'hello', 'goodbye'])).toMatchInlineSnapshot(`"{"foo":"hello","bar":"goodbye"}"`)
+  expect(await run(router, ['bbb', 'hello', 'goodbye'])).toMatchInlineSnapshot(`"{"foo":"goodbye","bar":"hello"}"`)
+})
+
+test('complex positionals', async () => {
+  const router = t.router({
+    stringArray: t.procedure
+      .input(
+        z.object({
+          foo: z.string().array().meta({positional: true}),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+    numberAndStringArray: t.procedure
+      .input(
+        z.object({
+          bar: z.number().meta({positional: true}),
+          foo: z.string().array().meta({positional: true}),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['string-array', 'hello', 'goodbye'])).toMatchInlineSnapshot(`"{"foo":["hello","goodbye"]}"`)
+  expect(await run(router, ['number-and-string-array', '123', 'hello', 'goodbye'])).toMatchInlineSnapshot(
+    `"{"bar":123,"foo":["hello","goodbye"]}"`,
+  )
+})
+
+{
+  // type errors for invalid meta
+  // @ts-expect-error - positional is a boolean
+  z.number().meta({positional: 1})
+}
+
 // todo: either create a meta registry or use module augmentation to allow adding aliases for options etc.
