@@ -534,11 +534,11 @@ cli.run() // e.g. `mycli add 1 2`
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:437b2603d8fada787b3dec5f39a0d190 -->
+<!-- hash:1cf3ca377bfbcbdc438a2347fcf64054 -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {createCli, type TrpcCliMeta} from 'trpc-cli'
-import {z} from 'zod'
+import {z} from 'zod/v4'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -706,11 +706,11 @@ const appRouter = trpc.router({
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:457256dd5a625a7cabdb3d2b0fc03e12 -->
+<!-- hash:e936e1bd03532ba755f3d46a3485e22f -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {createCli, type TrpcCliMeta} from 'trpc-cli'
-import {z} from 'zod/v3'
+import {z} from 'zod/v4'
 import * as trpcCompat from '../../src/trpc-compat'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
