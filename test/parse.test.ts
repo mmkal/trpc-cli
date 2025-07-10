@@ -75,9 +75,9 @@ test('required positional', async () => {
 
   expect(await output(cli, ['foo', 'abc', '--bar', '1'])).toMatchInlineSnapshot(`"["abc",{"bar":1}]"`)
   expect(await output(cli, ['foo', '--bar', '1'])).toMatchInlineSnapshot(
-    `"CommanderError: error: missing required argument 'parameter_1'"`,
+    `"CommanderError: error: missing required argument 'name'"`,
   )
-  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"CommanderError: error: missing required argument 'parameter_1'"`)
+  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"CommanderError: error: missing required argument 'name'"`)
   expect(await output(cli, ['foo', 'def'])).toMatchInlineSnapshot(`"["def",{}]"`)
 })
 
@@ -105,7 +105,7 @@ test('json option', async () => {
   )
   expect(await output(cli, ['foo', '--obj', '{"abc":"abc"}'])).toMatchInlineSnapshot(
     `
-      "Error: ✖ Invalid input: expected number, received undefined → at obj.def
+      "Error: ✖ Required → at obj.def
 
       Usage: program foo [options]
 
@@ -117,7 +117,7 @@ test('json option', async () => {
   )
   expect(await output(cli, ['foo', '--obj', '{"def":1}'])).toMatchInlineSnapshot(
     `
-      "Error: ✖ Invalid input: expected string, received undefined → at obj.abc
+      "Error: ✖ Required → at obj.abc
 
       Usage: program foo [options]
 
@@ -178,7 +178,7 @@ test('option union array with enum', async () => {
   const cli = createCli({router})
 
   expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`
-    "Error: ✖ Invalid input: expected array, received boolean → at foo
+    "Error: ✖ Expected array, received boolean → at foo
 
     Usage: program foo [options]
 

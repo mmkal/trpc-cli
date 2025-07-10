@@ -469,7 +469,7 @@ test('fs copy', async () => {
 
   // invalid enum value:
   expect(await tsx('fs', ['diff', 'one', 'fileNotFound'])).toMatchInlineSnapshot(`
-    "✖ Invalid option: expected one of "one"|"two"|"three"|"four" → at [1]
+    "✖ Invalid enum value. Expected 'one' | 'two' | 'three' | 'four', received 'fileNotFound' → at [1]
 
     Usage: fs diff [options] <Base path> <Head path>
 
