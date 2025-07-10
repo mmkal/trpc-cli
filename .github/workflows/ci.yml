@@ -152,7 +152,7 @@ jobs:
         run: |
           npx tsx normal-router-test.ts --help
           npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
-      - run: ls -R
+      - run: ls -R && cat test-dir/normal-router-test.ts
         if: always()
   test_tgz_alt_deps:
     runs-on: ubuntu-latest
@@ -205,7 +205,7 @@ jobs:
                 v.tuple([
                   v.pipe(v.string(), v.description('name')),
                   v.object({
-                    enthusiasm: v.pipe(v.number(), v.integer(), v.description('exclamation marks')),
+                    enthusiasm: v.pipe(v.number(), v.integer(), v.description("exclamation marks")),
                   }),
                 ]),
               )
@@ -273,5 +273,5 @@ jobs:
         run: |
           npx tsx normal-router-test.ts --help
           npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
-      - run: ls -R
+      - run: ls -R && cat test-dir/normal-router-test.ts
         if: always()
