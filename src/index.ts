@@ -1,3 +1,5 @@
+/// <reference types="./module-augmentation.d.ts" />
+
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError, Option} from 'commander'
@@ -42,24 +44,6 @@ export const z =
 /** @deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod) */
 export const zod =
   '@deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod)'
-
-declare module 'zod/v4' {
-  interface GlobalMeta {
-    /**
-     * If true, this property will be mapped to a positional CLI argument by trpc-cli. Only valid for string, number, or boolean types (or arrays of these types).
-     * Note: the order of positional arguments is determined by the order of properties in the schema.
-     * For example, the following are different:
-     * - `z.object({abc: z.string().meta({positional: true}), xyz: z.string().meta({positional: true})})`
-     * - `z.object({xyz: z.string().meta({positional: true}), abc: z.string().meta({positional: true})})`
-     */
-    positional?: boolean
-    /**
-     * If set, this value will be used an alias for the option.
-     * Note: this is only valid for options, not positional arguments.
-     */
-    alias?: string
-  }
-}
 
 export class Command extends BaseCommand {
   /** @internal track the commands that have been run, so that we can find the `__result` of the last command */
