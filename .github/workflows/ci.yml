@@ -200,7 +200,7 @@ jobs:
           import {os} from "@orpc/server"
 
           export const router = os.router({
-            sayHello: os.procedure
+            sayHello: os
               .input(
                 v.tuple([
                   v.pipe(v.string(), v.description('name')),
