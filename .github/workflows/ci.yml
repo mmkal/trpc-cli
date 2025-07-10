@@ -194,12 +194,12 @@ jobs:
           export const router = os.router({
             sayHello: os.procedure
               .input(
-                z.tuple([
-                  z.string().describe("name"),
-                  z.object({
-                    enthusiasm: z.number().int().positive().describe("exclamation marks"),
-                  })
-                ])
+                v.tuple([
+                  v.pipe(v.string(), v.description('name')),
+                  v.object({
+                    enthusiasm: v.pipe(v.number(), v.integer(), v.description('exclamation marks')),
+                  }),
+                ]),
               )
               .handler(({input: [name, {enthusiasm}]}) => {
                 return `Hello ${name}` + "!".repeat(enthusiasm)
