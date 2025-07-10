@@ -201,11 +201,11 @@ test('migrations toJSON', async () => {
                 },
                 {
                   "name": "name",
-                  "required": true,
-                  "optional": false,
+                  "required": false,
+                  "optional": true,
                   "negate": false,
                   "variadic": false,
-                  "flags": "--name <string>",
+                  "flags": "--name [string]",
                   "attributeName": "name"
                 }
               ],
@@ -233,11 +233,11 @@ test('migrations toJSON', async () => {
                 },
                 {
                   "name": "search-term",
-                  "required": true,
-                  "optional": false,
+                  "required": false,
+                  "optional": true,
                   "negate": false,
                   "variadic": false,
-                  "flags": "-q, --search-term <string>",
+                  "flags": "-q, --search-term [string]",
                   "short": "-q",
                   "description": "Only show migrations whose \`content\` value contains this string",
                   "attributeName": "searchTerm"

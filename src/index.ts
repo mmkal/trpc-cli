@@ -33,12 +33,15 @@ import {looksLikeInstanceof} from './util'
 
 export * from './types'
 
-// export {z} from 'zod/v4'
-// export * as zod from 'zod'
+/** @deprecated use `import * as trpcServer from '@trpc/server'` instead */
+export const trpcServer = "@deprecated use `import * as trpcServer from '@trpc/server'` instead"
 
-// export * as trpcServer from '@trpc/server'
-
-export * from './convenience-exports'
+/** @deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod) */
+export const z =
+  '@deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod)'
+/** @deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod) */
+export const zod =
+  '@deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod)'
 
 declare module 'zod/v4' {
   interface GlobalMeta {

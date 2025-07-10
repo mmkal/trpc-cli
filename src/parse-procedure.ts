@@ -48,7 +48,7 @@ export function parseProcedureInputs(inputs: unknown[], dependencies: Dependenci
   }
 
   if (inner.success) {
-    const optionsProps = schemaDefPropValue(inner.value.optionsJsonSchema as JSONSchema7, 'properties')
+    const optionsProps = schemaDefPropValue(inner.value.optionsJsonSchema, 'properties')
     if (optionsProps) {
       const optionishPositionals = Object.entries(optionsProps).flatMap(([key, schema]) => {
         if (typeof schema === 'object' && 'positional' in schema && schema.positional === true) {
@@ -271,9 +271,7 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
     }
   }
 
-  const merged = maybeMergeObjectSchemas(
-    parsedIndividually.map(p => (p.success ? (p.value.optionsJsonSchema as JSONSchema7) : {})),
-  )
+  const merged = maybeMergeObjectSchemas(parsedIndividually.map(p => (p.success ? p.value.optionsJsonSchema : {})))
   if (merged) {
     return {
       success: true,
