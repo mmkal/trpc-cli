@@ -51,7 +51,7 @@ jobs:
         run: |
           npm init -y
           npm install ../pkg.tgz --save-dev --save-exact
-          def installDev() {
+          installDev() {
             npm install "$@@$(cat ./node_modules/trpc-cli/dist/devDependencies.json | jq -r ".$@")"
           }
           installDev typescript
@@ -174,8 +174,7 @@ jobs:
         run: |
           npm init -y
           npm install ../pkg.tgz --save-dev --save-exact
-          def installDev() {
-            # install the version of the devDependency that's specified in the package.json
+          installDev() {
             npm install "$@@$(cat ./node_modules/trpc-cli/dist/devDependencies.json | jq -r ".$@")"
           }
           installDev typescript
