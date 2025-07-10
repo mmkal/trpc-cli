@@ -68,7 +68,7 @@ This isn't just the easiest and safest way to build a CLI, but you also get all 
 ## Installation
 
 ```
-npm install trpc-cli
+npm install trpc-cli @trpc/server zod
 ```
 
 ## Quick Start
@@ -95,7 +95,7 @@ And that's it! Your tRPC router is now a CLI program with help text and input va
 
 [Docs here](https://trpc.io/docs/server/routers) if you're not familiar with tRPC.
 
-You can also create a tRPC router in the usual way using imports from `@trpc/server` and `zod` - the builtin exports are purely a convenience for simple use-case:
+You can also create a tRPC router in the usual way using imports from `@trpc/server` and `zod` - the builtin exports are purely a convenience for simple use-cases:
 
 ```ts
 import {initTRPC} from '@trpc/server'

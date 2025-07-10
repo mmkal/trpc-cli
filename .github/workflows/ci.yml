@@ -151,3 +151,123 @@ jobs:
           npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
       - run: ls -R
         if: always()
+  test_tgz_alt_deps:
+    runs-on: ubuntu-latest
+    needs: [create_tgz]
+    strategy:
+      matrix:
+        node: [23, 22]
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: tarball
+      - run: ls
+      - run: mkdir test-dir
+      - name: setup test-dir
+        working-directory: test-dir
+        run: |
+          npm init -y
+          npm install ../pkg.tgz --save-dev --save-exact
+          npm install typescript@5.8.3 tsx@4.19.4
+          npm install @orpc/server valibot
+          echo '{
+            "compilerOptions": {
+                "target": "ES2022",
+                "lib": ["ES2022"],
+                "skipLibCheck": true,
+                "strict": true,
+                "declaration": true,
+                "esModuleInterop": true,
+                "module": "NodeNext",
+                "moduleResolution": "NodeNext"
+            },
+            "include": ["*.ts"]
+          }' > tsconfig.json
+          echo '
+          import {createCli} from "trpc-cli"
+          import * as v from "valibot"
+          import {os} from "@orpc/server"
+
+          export const router = os.router({
+            sayHello: os.procedure
+              .input(
+                z.tuple([
+                  z.string().describe("name"),
+                  z.object({
+                    enthusiasm: z.number().int().positive().describe("exclamation marks"),
+                  })
+                ])
+              )
+              .handler(({input: [name, {enthusiasm}]}) => {
+                return `Hello ${name}` + "!".repeat(enthusiasm)
+              })
+          })
+
+          const cli = createCli({router})
+
+          void cli.run()
+          ' > trpc-cli-test.ts
+
+
+          # let's create an equivalent file without using `trpc-cli` imports at all - we'll test the bin script on this
+          # to make sure it's possible to use the package's CLI on an existing trpc router.
+          touch normal-router-test.ts
+
+          cat trpc-cli-test.ts | grep -v 'const cli =' | grep -v cli.run >> normal-router-test.ts
+
+          cat trpc-cli-test.ts
+          cat normal-router-test.ts
+      - name: bundle
+        working-directory: test-dir
+        # tsdown and other bundlers sometimes complain about requires of peerDependencies, let's make sure the output is clean
+        run: |
+          npm install tsdown --save-dev --save-exact
+          npx tsdown trpc-cli-test.ts | tee tsdown-output.txt
+
+          if grep -i "warning" tsdown-output.txt || grep -i "error" tsdown-output.txt; then
+            echo "tsdown output had problems"
+            exit 1
+          fi
+      - name: compile
+        working-directory: test-dir
+        run: npx tsc -p .
+
+      - name: run test
+        working-directory: test-dir
+        run: |
+          echo testing --help
+          node trpc-cli-test.js --help
+
+          echo checking --help output
+          node trpc-cli-test.js --help | grep say-hello
+
+          echo testing say-hello
+          node trpc-cli-test.js say-hello mmkal --enthusiasm 3
+
+          echo checking say-hello output
+          node trpc-cli-test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+      - name: test bin script
+        working-directory: test-dir
+        run: |
+          echo testing --help
+          ./node_modules/.bin/trpc-cli normal-router-test.ts --help
+
+          echo checking --help output
+          ./node_modules/.bin/trpc-cli normal-router-test.ts --help | grep say-hello
+
+          echo testing say-hello
+          ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3
+
+          echo checking say-hello output
+          ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+      - name: tsx test
+        if: failure()
+        working-directory: test-dir
+        run: |
+          npx tsx normal-router-test.ts --help
+          npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
+      - run: ls -R
+        if: always()

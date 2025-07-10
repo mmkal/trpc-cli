@@ -33,10 +33,12 @@ import {looksLikeInstanceof} from './util'
 
 export * from './types'
 
-export {z} from 'zod/v4'
-export * as zod from 'zod'
+// export {z} from 'zod/v4'
+// export * as zod from 'zod'
 
-export * as trpcServer from '@trpc/server'
+// export * as trpcServer from '@trpc/server'
+
+export * from './convenience-exports'
 
 declare module 'zod/v4' {
   interface GlobalMeta {

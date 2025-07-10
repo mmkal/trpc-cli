@@ -74,9 +74,9 @@ test('required positional', async () => {
 
   expect(await output(cli, ['foo', 'abc', '--bar', '1'])).toMatchInlineSnapshot(`"["abc",{"bar":1}]"`)
   expect(await output(cli, ['foo', '--bar', '1'])).toMatchInlineSnapshot(
-    `"CommanderError: error: missing required argument 'name'"`,
+    `"CommanderError: error: missing required argument 'parameter_1'"`,
   )
-  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"CommanderError: error: missing required argument 'name'"`)
+  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"CommanderError: error: missing required argument 'parameter_1'"`)
   expect(await output(cli, ['foo', 'def'])).toMatchInlineSnapshot(`"["def",{}]"`)
 })
 
