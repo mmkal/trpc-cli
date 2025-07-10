@@ -10,7 +10,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - ✅ Automatic positional arguments and options via zod input types (or arktype, or valibot)
 - ✅ Easily add subcommands via nested trpc routers
 - ✅ Rich helptext out of the box
-- ✅ Batteries included - no need to install any other libraries (even trpc!)
+- ✅ Exactly one dependency: [`commander`](https://npmjs.com/package/commander)
 - ✅ Automatic input prompts
 - ✅ Automatic shell autocompletions
 - ✅ Use advanced tRPC features like context and middleware in your CLI
@@ -75,12 +75,14 @@ npm install trpc-cli @trpc/server zod
 
 ### Basic Usage
 
-The fastest way to get going is to write a normal tRPC router, using `trpcServer` and `zod` exports from this library, and turn it into a fully-functional CLI by passing it to `createCli`:
+The fastest way to get going is to write a normal tRPC router and turn it into a fully-functional CLI by passing it to `createCli`:
 
 ```ts
-import {createCli, trpcServer, zod as z, type TrpcCliMeta} from 'trpc-cli'
+import {initTRPC} from '@trpc/server'
+import {createCli} from 'trpc-cli'
+import {z} from 'zod'
 
-const t = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
+const t = initTRPC.create()
 
 const router = t.router({
   add: t.procedure
@@ -94,25 +96,6 @@ createCli({router}).run()
 And that's it! Your tRPC router is now a CLI program with help text and input validation. You can run it with `node yourscript add --left 2 --right 3`.
 
 [Docs here](https://trpc.io/docs/server/routers) if you're not familiar with tRPC.
-
-You can also create a tRPC router in the usual way using imports from `@trpc/server` and `zod` - the builtin exports are purely a convenience for simple use-cases:
-
-```ts
-import {initTRPC} from '@trpc/server'
-import {createCli} from 'trpc-cli'
-import {z} from 'zod'
-
-const t = initTRPC.create()
-
-export const router = t.router({
-  add: t.procedure
-    .input(z.object({left: z.number(), right: z.number()}))
-    .query(({input}) => input.left + input.right),
-})
-
-const cli = createCli({router})
-cli.run()
-```
 
 ## Core Concepts
 
@@ -551,9 +534,10 @@ cli.run() // e.g. `mycli add 1 2`
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:ac0f348dafc53b3e441e1d8466c29c5c -->
+<!-- hash:437b2603d8fada787b3dec5f39a0d190 -->
 ```ts
-import {createCli, type TrpcCliMeta, trpcServer} from 'trpc-cli'
+import * as trpcServer from '@trpc/server'
+import {createCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
@@ -722,9 +706,11 @@ const appRouter = trpc.router({
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:fb832e86869dc44396d5db272281a6ce -->
+<!-- hash:457256dd5a625a7cabdb3d2b0fc03e12 -->
 ```ts
-import {createCli, type TrpcCliMeta, trpcServer, z} from 'trpc-cli'
+import * as trpcServer from '@trpc/server'
+import {createCli, type TrpcCliMeta} from 'trpc-cli'
+import {z} from 'zod/v3'
 import * as trpcCompat from '../../src/trpc-compat'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
@@ -919,7 +905,8 @@ You can now also pass an [oRPC](https://orpc.unnoq.com/) router! Note that it ne
 
 ```ts
 import {os} from '@orpc/server'
-import {z, createCli} from 'trpc-cli'
+import {createCli} from 'trpc-cli'
+import {z} from 'zod'
 
 export const router = os.router({
   add: os.procedure
@@ -935,7 +922,8 @@ Note: lazy procedures aren't supported right now. If you are using some, call or
 
 ```ts
 import {os, unlazyRouter} from '@orpc/server'
-import {z, createCli} from 'trpc-cli'
+import {createCli} from 'trpc-cli'
+import {z} from 'zod'
 
 export const router = os.router({
   real: {
@@ -1217,7 +1205,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L186)
+#### [createCli](./src/index.ts#L191)
 
 Run a trpc router as a CLI.
 
@@ -1263,12 +1251,9 @@ All dependencies have zero dependencies of their own, so the dependency tree is 
 
 ![Dependency tree from npmgraph](./docs/deps.png)
 
-- [@trpc/server](https://npmjs.com/package/@trpc/server) for the trpc router
 - [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
-- [zod](https://npmjs.com/package/zod) for input validation, included for convenience
-- [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) to convert zod v3 schemas into a standard, inspectable format
 
-`zod` and `@tprc/server` are included as dependencies for convenience, but you can use your own separate installations if you prefer. Zod 3+ and @trpc/server 10 and 11, have been tested. It should work with most versions of zod.
+`@trpc/server` and `@orpc/server` are peerDependencies, but one of the two must be installed. Similarly one of `zod`, `valibot`, `arktype` or `effect` will likely be needed for input validation. The code from [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) has been copied more or less as-is to this repo in order to support json schema conversion for old versions of zod.
 
 ### Testing
 

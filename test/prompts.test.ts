@@ -1,7 +1,9 @@
 import {Command} from 'commander'
 import {expect, expectTypeOf, test, vi} from 'vitest'
 import {describe} from 'vitest'
-import {AnyRouter, createCli, TrpcCliParams, TrpcCliRunParams, trpcServer, z} from '../src'
+import * as trpcServer from '@trpc/server'
+import {z} from 'zod/v3'
+import {AnyRouter, createCli, TrpcCliParams, TrpcCliRunParams} from '../src'
 
 describe('types', () => {
   const t = trpcServer.initTRPC.create()

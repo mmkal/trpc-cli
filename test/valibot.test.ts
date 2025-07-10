@@ -1,7 +1,8 @@
 import {inspect} from 'util'
 import * as v from 'valibot'
 import {expect, test} from 'vitest'
-import {createCli, TrpcCliMeta, trpcServer} from '../src'
+import * as trpcServer from '@trpc/server'
+import {createCli, TrpcCliMeta} from '../src'
 import {run, snapshotSerializer} from './test-run'
 
 expect.addSnapshotSerializer(snapshotSerializer)

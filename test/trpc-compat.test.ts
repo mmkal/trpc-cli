@@ -1,7 +1,8 @@
 import {initTRPC as initTRPC_v10} from 'trpcserver10'
 import {initTRPC as initTRPC_v11} from 'trpcserver11'
 import {expect, expectTypeOf, test} from 'vitest'
-import {createCli, TrpcCliMeta, TrpcServerModuleLike, z} from '../src'
+import {z} from 'zod/v3'
+import {createCli, TrpcCliMeta, TrpcServerModuleLike} from '../src'
 import {Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat'
 
 expect.addSnapshotSerializer({
