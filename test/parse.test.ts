@@ -183,7 +183,7 @@ test('option union array with enum', async () => {
 
     Options:
       --foo [values...]  Any of:
-                         [{"type":"boolean"},{"type":"number"},{"enum":["abc","def"]}]
+                         [{"type":"boolean"},{"type":"number"},{"type":"string","enum":["abc","def"]}]
                          array (default: [])
       -h, --help         display help for command
     "
@@ -207,7 +207,7 @@ test('option union array with enum', async () => {
 
     Options:
       --foo [values...]  Any of:
-                         [{"type":"boolean"},{"type":"number"},{"enum":["abc","def"]}]
+                         [{"type":"boolean"},{"type":"number"},{"type":"string","enum":["abc","def"]}]
                          array (default: [])
       -h, --help         display help for command
     "
