@@ -30,7 +30,6 @@ import {
 import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
 
-// @ts-ignore zod might not be installed. oh well, you still get this one interface
 declare module 'zod/v4' {
   export interface GlobalMeta {
     /**
