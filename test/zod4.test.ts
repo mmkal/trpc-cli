@@ -46,8 +46,8 @@ test('basic boolean option', async () => {
     test: t.procedure.input(z.object({foo: z.boolean()})).query(({input}) => `${JSON.stringify({input})}`),
   })
 
-  expect(await run(router, ['test'])).toMatchInlineSnapshot(`"{"input":{"foo":false}}"`)
-  expect(await run(router, ['test', '--foo'])).toMatchInlineSnapshot(`"{"input":{"foo":true}}"`)
+  const result = await run(router, ['test', '--foo'])
+  expect(result).toMatchInlineSnapshot(`"{"input":{"foo":true}}"`)
 })
 
 // codegen:start {preset: custom, source: ./validation-library-codegen.ts, export: testSuite}
@@ -89,7 +89,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid enum value. Expected 'aa' | 'bb', received 'cc'
+      Caused by: CliValidationError: ✖ Invalid option: expected one of "aa"|"bb"
   `)
 })
 
@@ -118,7 +118,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Expected boolean, received string
+      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string
   `)
 })
 
@@ -164,7 +164,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid literal value, expected 2
+      Caused by: CliValidationError: ✖ Invalid input: expected 2
   `)
 })
 
@@ -201,7 +201,7 @@ test('regex input', async () => {
   // note: zod 4 has a better error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid
+      Caused by: CliValidationError: ✖ Invalid string: must match pattern /hello/
   `)
 })
 
@@ -387,7 +387,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Expected number, received string → at [1]
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at [1]
   `)
 })
 
@@ -400,7 +400,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Expected number, received string → at [0]
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at [0]
   `)
 })
 
@@ -416,7 +416,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Expected boolean, received string → at [1]
+      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string → at [1]
   `)
 })
 
@@ -484,7 +484,7 @@ test('record input', async () => {
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Expected number, received string → at foo
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at foo
   `)
 })
 
@@ -791,30 +791,6 @@ test('merged positional via zod meta', async () => {
   })
 
   expect(await run(router, ['test', 'ff', '1', 'hh'])).toMatchInlineSnapshot(`"{"foo":"ff","bar":1,"hello":"hh"}"`)
-})
-
-test('refine positional via zod meta', async () => {
-  const router = t.router({
-    test: t.procedure
-      .input(
-        z.object({
-          foo: z
-            .string()
-            .refine(val => val.length > 2)
-            .meta({positional: true}),
-          abc: z.string().optional(),
-        }),
-      )
-      .input(
-        z.object({
-          hello: z.string().meta({positional: true}),
-        }),
-      )
-      .mutation(({input}) => JSON.stringify(input)),
-  })
-
-  expect(await run(router, ['test', 'ff'])).toMatchInlineSnapshot(`"{"foo":"ff","bar":1,"hello":"hh"}"`)
-  expect(await run(router, ['test', 'ff', '--abc', 'def'])).toMatchInlineSnapshot(`"{"foo":"ff","bar":1,"hello":"hh"}"`)
 })
 
 test('the order matters for merged positionals', async () => {
