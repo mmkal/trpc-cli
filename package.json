@@ -41,7 +41,10 @@
     "@inquirer/prompts": "*",
     "@orpc/server": "*",
     "@trpc/server": "*",
+    "arktype": "*",
+    "effect": "*",
     "omelette": "*",
+    "valibot": "*",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
@@ -54,7 +57,16 @@
     "@inquirer/prompts": {
       "optional": true
     },
+    "arktype": {
+      "optional": true
+    },
+    "effect": {
+      "optional": true
+    },
     "omelette": {
+      "optional": true
+    },
+    "valibot": {
       "optional": true
     },
     "zod": {

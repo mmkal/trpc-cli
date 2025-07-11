@@ -4,9 +4,6 @@ import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Dependencies, ParsedProcedure, Result} from './types'
 
-// We're going to use eval to require some optional dependencies. It's hard-coded, so safe, but some bundlers like tsdown will emit warnings unless we disguise it.
-const disguisedEval = eval
-
 /**
  * Attempts to convert a trpc procedure input to JSON schema.
  * Uses @see jsonSchemaConverters to convert the input to JSON schema.
@@ -530,7 +527,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       let valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema']
       if (!valibotToJsonSchemaLib) {
         try {
-          valibotToJsonSchemaLib = disguisedEval(`require('@valibot/to-json-schema')`)
+          valibotToJsonSchemaLib = require('@valibot/to-json-schema')
         } catch (e: unknown) {
           throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`, {cause: e})
         }
@@ -544,7 +541,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       }
       let v: typeof import('valibot')
       try {
-        v = disguisedEval(`require('valibot')`)
+        v = require('valibot')
       } catch {
         // couldn't load valibot, maybe it's aliased to something else? anyway bad luck, you won't know about optional positional parameters, but that's a rare-ish case so not a big deal
         return valibotToJsonSchema(input)
@@ -556,7 +553,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
     },
     effect: (input: unknown) => {
-      const effect = dependencies.effect || (disguisedEval(`require('effect')`) as Dependencies['effect'])
+      const effect = dependencies.effect || (require('effect') as Dependencies['effect'])
       if (!effect) {
         throw new Error(`effect dependency could not be found - try installing it and re-running`)
       }
