@@ -18,7 +18,7 @@
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
     "compile": "tsc -p tsconfig.lib.json",
-    "build": "pnpm clean && pnpm compile",
+    "build": "pnpm clean && pnpm compile && ORIG=$(cat dist/index.d.ts) node -e \"require('fs').writeFileSync('dist/index.d.ts', process.env.ORIG.replace(/declare module/g, '// @ts-ignore\\ndeclare module'))\"",
     "dev": "cd test/fixtures && tsx",
     "test": "vitest run"
   },
