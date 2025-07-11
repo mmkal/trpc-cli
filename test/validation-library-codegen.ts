@@ -119,9 +119,10 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
         index: Number(x[1]),
       }))
       for (const pl of snapshotPlaceholders) {
-        const {calleeCode: calleeSource} = sourceParsed.replacements.snapshots[pl.index]
+        const {calleeCode: calleeSource, argumentsCode: calleeArgs} = sourceParsed.replacements.snapshots[pl.index]
         const targetReplacement = existingParsed.replacements.snapshots.find(x => x.calleeCode === calleeSource)
         if (targetReplacement) findAndReplaces.push({find: pl.string, replace: targetReplacement.argumentsCode})
+        else findAndReplaces.push({find: pl.string, replace: calleeArgs})
         if (existingTargetTest.code.includes(`// ${calleeSource}`)) {
           // if the assertion has been manually commented out, keep it commented out in the expected code
           findAndReplaces.push({find: calleeSource, replace: `// ${calleeSource}`})
