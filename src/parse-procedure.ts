@@ -3,7 +3,6 @@ import {inspect} from 'util'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Dependencies, ParsedProcedure, Result} from './types'
-import zodToJsonSchema from './zod-to-json-schema'
 
 // We're going to use eval to require some optional dependencies. It's hard-coded, so safe, but some bundlers like tsdown will emit warnings unless we disguise it.
 const disguisedEval = eval
@@ -515,6 +514,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
           },
         }) as JSONSchema7
       }
+      const {default: zodToJsonSchema} = require('./zod-to-json-schema') as typeof import('./zod-to-json-schema')
       return zodToJsonSchema(input as never) as JSONSchema7
     },
     arktype: (input: unknown) => {
