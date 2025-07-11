@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError, Option} from 'commander'
 import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
@@ -422,7 +421,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const positionalValues = args.slice(0, -2)
 
         const input = parsedProcedure.getPojoInput({positionalValues, options})
-        const resolvedTrpcServer = await (params.trpcServer || trpcServer11)
+        const resolvedTrpcServer = await (params.trpcServer || (await import('@trpc/server')))
 
         let caller: Record<string, (input: unknown) => unknown>
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
@@ -605,7 +604,8 @@ function transformError(err: unknown, command: Command) {
     )
   }
 
-  if (looksLikeInstanceof<trpcServer11.TRPCError>(err, 'TRPCError')) {
+  type TRPCErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
+  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError')) {
     const cause = err.cause
     if (looksLikeStandardSchemaFailure(cause)) {
       const prettyMessage = prettifyStandardSchemaError(cause)

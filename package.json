@@ -39,13 +39,25 @@
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
     "@inquirer/prompts": "*",
-    "omelette": "*"
+    "@orpc/server": "*",
+    "@trpc/server": "*",
+    "omelette": "*",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
-    "omelette": {
+    "@orpc/server": {
+      "optional": true
+    },
+    "@trpc/server": {
       "optional": true
     },
     "@inquirer/prompts": {
+      "optional": true
+    },
+    "omelette": {
+      "optional": true
+    },
+    "zod": {
       "optional": true
     }
   },
