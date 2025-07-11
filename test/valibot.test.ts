@@ -175,9 +175,7 @@ test('regex input', async () => {
 test('boolean, number, string input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(
-        v.union([v.string(), v.number(), v.boolean()]), //
-      )
+      .input(v.union([v.string(), v.number(), v.boolean()]))
       .query(({input}) => JSON.stringify(input || null)),
   })
 

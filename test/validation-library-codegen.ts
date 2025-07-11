@@ -82,6 +82,7 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
     return code
       .replaceAll('// expect', '') // allow manually commenting out specific assertions
       .split('// extra assertions')[0] // allow adding some extra assertions
+      .replaceAll('//\n', '') // get rid of comments that are just forcing prettier to make line breaks
       .trim()
   }
 
@@ -138,7 +139,7 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
         const lines = input.split('\n')
         return lines.map(line => line.trimStart()).join('\n')
       }
-      const comparableCode = (input: string) => removeLineComments(unindentAllLines(preprocessCode(input)))
+      const comparableCode = (input: string) => removeLineComments(unindentAllLines(prettyCode(preprocessCode(input))))
       // _logs.push(`
       //   source:\n${prettyCode(sourceTest.code)}\n
       //   source with placeholders:\n${prettyCode(expectedCode)}\n

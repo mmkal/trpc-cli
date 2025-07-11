@@ -545,6 +545,10 @@ test('defaults and negations', async () => {
 
   expect(await run(router, ['normal-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['normal-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['normal-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['normal-boolean', '--foo', 'false', '--foo', 'true'])).toMatchInlineSnapshot(
+    `"{ foo: true }"`,
+  )
 
   expect(await run(router, ['optional-boolean'])).toMatchInlineSnapshot(`"{}"`)
   expect(await run(router, ['optional-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
@@ -552,6 +556,7 @@ test('defaults and negations', async () => {
   expect(await run(router, ['optional-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-true-boolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['default-true-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-false-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['default-false-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
