@@ -1,8 +1,9 @@
 export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
-  dependencies: {path, fs, dedent},
+  dependencies: {path, fs, dedent, recast, simplify, babelParser},
   context,
   meta,
 }) => {
+  const logs: string[] = []
   const parseTestFile = (content: string) => {
     const lines = content.split('\n').map(line => (line.trim() ? line : ''))
     const firstNonImportLine = lines.findIndex(line => line && !line.startsWith('import') && !line.startsWith('//'))
@@ -38,76 +39,142 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
 
   const current = parseTestFile(meta.existingContent)
 
-  const parseTest = (test: {code: string}) => {
-    const chunks = test.code.split('.input(')
-    let code = chunks[0]
-    const placeholders = {} as Record<number, {original: string; placeholder: string}>
-    for (const [chunkIndex, chunk] of chunks.slice(1).entries()) {
-      code += `.input(`
-      const firstParen = chunk.indexOf('(')
-      let count = 1
-      const indexOfClosedParen = chunk.split('').findIndex((ch, i) => {
-        if (i < firstParen) return false
-        if (ch === '(') count++
-        if (ch === ')') count--
-        return count === 0
-      })
-      const placeholder = `__PLACEHOLDER__${chunkIndex}__()`
-      code += placeholder
-      placeholders[chunkIndex] = {original: chunk.slice(0, indexOfClosedParen), placeholder}
-      code += chunk.slice(indexOfClosedParen)
+  const parseTest = (testCode: string) => {
+    const ast = recast.parse(testCode)
+    type CallExpression = import('eslint-plugin-mmkal').codegen.dependencies.recast.types.namedTypes.CallExpression
+    const replacements = {
+      inputs: [] as {argumentsCode: string}[],
+      snapshots: [] as {calleeCode: string; argumentsCode: string; arguments: CallExpression['arguments']}[],
     }
-    const codeWithoutInlineSnapshots = code
-      .split(`.toMatchInlineSnapshot(`)
-      .map((chunk, i) => {
-        if (i === 0 || !chunk.startsWith('`')) return chunk
-        return chunk.slice(1).split('`').slice(1).join('`')
-      })
-      .join(`.toMatchInlineSnapshot(`)
-    return {c: code, codeWithoutInlineSnapshots, placeholders}
+
+    recast.visit(ast, {
+      visitCallExpression(p) {
+        if (
+          p.node.callee.type === 'MemberExpression' &&
+          p.node.callee.property.type === 'Identifier' &&
+          p.node.callee.property.name === 'input' &&
+          p.node.arguments.length === 1
+        ) {
+          const index = replacements.inputs.push({argumentsCode: recast.print(p.node.arguments[0]).code}) - 1
+          p.node.arguments = [{type: 'StringLiteral', value: `INPUT_PLACEHOLDER:${index}`}]
+        }
+        const calleeCode = recast.print(p.node.callee).code
+        if (calleeCode.trim().endsWith('toMatchInlineSnapshot') && p.node.arguments.length === 1) {
+          const index =
+            replacements.snapshots.push({
+              calleeCode,
+              argumentsCode: recast.print(p.node.arguments[0]).code,
+              arguments: p.node.arguments,
+            }) - 1
+          p.node.arguments = [{type: 'StringLiteral', value: `SNAPSHOT_PLACEHOLDER:${index}`}]
+        }
+        this.traverse(p)
+      },
+    })
+
+    return {
+      ast,
+      codeWithPlaceholders: recast.print(ast).code,
+      replacements,
+    }
   }
 
   let expected = zod3.tests
-    .map(test => {
-      const parsed = parseTest(test)
+    .map(sourceTest => {
+      const sourceParsed = parseTest(sourceTest.code)
 
-      const existingTest = current.tests.find(x => x.name === test.name)
-      if (!existingTest) return parsed.c
-      const existingParsed = parseTest(existingTest)
-      const existingPlaceholders = existingParsed.placeholders
-      let code = parsed.c
-      const zodExamples = [] as string[]
-      for (let i = 0; i < 10; i++) {
-        const placeholder = `__PLACEHOLDER__${i}__()`
-        if (i in parsed.placeholders) {
-          zodExamples[i] = dedent(parsed.placeholders[i].original)
-        }
-        if (
-          code.includes(placeholder) &&
-          existingPlaceholders[i].original &&
-          existingPlaceholders[i].original !== placeholder
-        ) {
-          //   throw new Error(`replacing ${placeholder} with ${existingPlaceholders[i].original}`)
-          code = code.replaceAll(placeholder, existingPlaceholders[i].original)
-        }
+      const existingTargetTest = current.tests.find(x => x.name === sourceTest.name)
+      if (!existingTargetTest) return sourceTest.code
+
+      const existingCode = existingTargetTest.code
+        .replaceAll('// expect', '') // allow manually commenting out specific assertions
+        .split('// extra assertions')[0] // allow adding some extra assertions
+        .trim()
+      const existingParsed = parseTest(existingCode)
+
+      // the expected code is the *source* code, but we're going to swap in specific values from the existing (target) test code
+      let expectedCode = sourceParsed.codeWithPlaceholders
+      const inputPlaceholders = [...expectedCode.matchAll(/"INPUT_PLACEHOLDER:(\d+)"/g)].map(x => ({
+        string: x[0],
+        index: Number(x[1]),
+      }))
+      const findAndReplaces = [] as Array<{find: string; replace: string}>
+      for (const pl of inputPlaceholders) {
+        const existingInput = existingParsed.replacements.inputs[pl.index]
+        if (existingInput) findAndReplaces.push({find: pl.string, replace: existingInput.argumentsCode})
       }
-      const s = zodExamples.length > 1 ? 's' : ''
-      // TODO: remove this once the diff is in
-      // eslint-disable-next-line no-constant-condition
-      if (!existingTest.code.includes('__PLACEHOLDER__')) return code
-      return code.replace(
-        '\n',
-        [
-          '',
-          '/**',
-          `  * Type${s} should match the following zod schema${s}`,
-          '  * ```ts',
-          '  * ' + zodExamples.join('\n\n').replaceAll('\n', '\n  * '),
-          '  * ```',
-          '  */',
-          '',
-        ].join('\n'),
-      )
+      const snapshotPlaceholders = [...expectedCode.matchAll(/"SNAPSHOT_PLACEHOLDER:(\d+)"/g)].map(x => ({
+        string: x[0],
+        index: Number(x[1]),
+      }))
+      for (const pl of snapshotPlaceholders) {
+        const sourceReplacement = sourceParsed.replacements.snapshots[pl.index]
+        const targetReplacement = existingParsed.replacements.snapshots.find(
+          x => x.calleeCode === sourceReplacement.calleeCode,
+        )
+        if (targetReplacement) findAndReplaces.push({find: pl.string, replace: targetReplacement.argumentsCode})
+      }
+
+      for (const r of findAndReplaces) {
+        expectedCode = expectedCode.replaceAll(r.find, r.replace)
+      }
+
+      const prettyCode = (input: string) => {
+        const ast = babelParser.parse(input, {sourceType: 'unambiguous', plugins: ['typescript'], attachComment: false})
+        return recast.prettyPrint(ast).code
+      }
+      if (false)
+        throw new Error(`
+          source:\n${prettyCode(sourceTest.code)}
+
+          source with placeholders:\n${prettyCode(expectedCode)}
+
+          existing:\n${prettyCode(existingCode)}
+
+          existing with placeholders:\n${prettyCode(existingCode)}
+
+          expected:\n${prettyCode(expectedCode)}
+        `)
+
+      if (prettyCode(expectedCode) === prettyCode(existingCode)) {
+        // return existingTargetTest.code
+      }
+
+      return expectedCode
+      // const existingPlaceholders = existingParsed.placeholders
+      // let sourceTestCode = sourceParsed.c
+      // const zodExamples = [] as string[]
+      // for (let i = 0; i < 10; i++) {
+      //   const placeholder = `__PLACEHOLDER__${i}__()`
+      //   if (i in sourceParsed.placeholders) {
+      //     zodExamples[i] = dedent(sourceParsed.placeholders[i].original)
+      //   }
+      //   if (
+      //     sourceTestCode.includes(placeholder) &&
+      //     existingPlaceholders[i].original &&
+      //     existingPlaceholders[i].original !== placeholder
+      //   ) {
+      //     //   throw new Error(`replacing ${placeholder} with ${existingPlaceholders[i].original}`)
+      //     sourceTestCode = sourceTestCode.replaceAll(placeholder, existingPlaceholders[i].original)
+      //   }
+      // }
+      // const s = zodExamples.length > 1 ? 's' : ''
+      // // TODO: remove this once the diff is in
+      // // eslint-disable-next-line no-constant-condition
+      // if (!existingTargetTest.code.includes('__PLACEHOLDER__')) return sourceTestCode
+      // return sourceTestCode.replace(
+      //   '\n',
+      //   [
+      //     '',
+      //     '/**',
+      //     `  * Type${s} should match the following zod schema${s}`,
+      //     '  * ```ts',
+      //     '  * ' + zodExamples.join('\n\n').replaceAll('\n', '\n  * '),
+      //     '  * ```',
+      //     '  */',
+      //     '',
+      //   ].join('\n'),
+      // )
     })
     .join('\n\n')
 
@@ -120,21 +187,5 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
     expected,
   ].join('\n')
 
-  const removeCruft = (code: string) => {
-    const splitter = '.toMatchInlineSnapshot(`'
-    const chunks = code.split(splitter)
-    let result = chunks[0] + splitter.replace('`', '')
-    for (const chunk of chunks.slice(1)) {
-      result += chunk.split('`').slice(1).join('`')
-    }
-    return result
-      .replaceAll('// expect', 'expect')
-      .replaceAll(/\n\s+\/\/.*?\n/g, '\n')
-      .replaceAll(/[\s"',]+/g, '')
-  }
-
-  if (removeCruft(expected) === removeCruft(meta.existingContent)) {
-    return meta.existingContent
-  }
   return expected
 }
