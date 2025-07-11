@@ -124,14 +124,12 @@ test('boolean input', async () => {
 
 test('refine in a union pedantry', async () => {
   const router = t.router({
-    foo: t.procedure
-      .input(z.union([z.number().int(), z.string()])) //
-      .query(({input}) => JSON.stringify(input)),
+    foo: t.procedure.input(z.union([z.number().int(), z.string()])).query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
-  expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  expect(await run(router, ['foo', '11'])).toMatchInlineSnapshot(`"11"`)
+  expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
+  expect(await run(router, ['foo', '1.1'])).toMatchInlineSnapshot(`""1.1""`) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
 test('transform in a union', async () => {

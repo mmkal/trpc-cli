@@ -81,6 +81,7 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
   function preprocessCode(code: string) {
     return code
       .replaceAll('// expect', '') // allow manually commenting out specific assertions
+      .replaceAll('// await expect', '') // allow manually commenting out specific assertions
       .split('// extra assertions')[0] // allow adding some extra assertions
       .replaceAll('//\n', '') // get rid of comments that are just forcing prettier to make line breaks
       .trim()
@@ -124,6 +125,17 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
           x => x.calleeCode === sourceReplacement.calleeCode,
         )
         if (targetReplacement) findAndReplaces.push({find: pl.string, replace: targetReplacement.argumentsCode})
+        if (existingTargetTest.code.includes(`// ${sourceReplacement.calleeCode}`)) {
+          // if the assertion has been manually commented out, keep it commented out in the expected code
+          findAndReplaces.push({find: sourceReplacement.calleeCode, replace: `// ${sourceReplacement.calleeCode}`})
+        }
+        if (existingTargetTest.code.includes(`// await ${sourceReplacement.calleeCode}`)) {
+          // if the assertion has been manually commented out, keep it commented out in the expected code
+          findAndReplaces.push({
+            find: sourceReplacement.calleeCode,
+            replace: `// await ${sourceReplacement.calleeCode}`,
+          })
+        }
       }
 
       for (const r of findAndReplaces) {
