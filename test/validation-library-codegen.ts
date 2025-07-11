@@ -3,7 +3,7 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
   context,
   meta,
 }) => {
-  const logs: string[] = []
+  const _logs: string[] = []
   const parseTestFile = (content: string) => {
     const lines = content.split('\n').map(line => (line.trim() ? line : ''))
     const firstNonImportLine = lines.findIndex(line => line && !line.startsWith('import') && !line.startsWith('//'))
@@ -39,8 +39,7 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
 
   const current = parseTestFile(meta.existingContent)
 
-  const parseTest = (testCode: string) => {
-    const ast = recast.parse(testCode)
+  const parseTest = (testCode: string, ast: ReturnType<typeof babelParser.parse> = recast.parse(testCode)) => {
     type CallExpression = import('eslint-plugin-mmkal').codegen.dependencies.recast.types.namedTypes.CallExpression
     const replacements = {
       inputs: [] as {argumentsCode: string}[],
@@ -79,17 +78,28 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
     }
   }
 
+  function preprocessCode(code: string) {
+    return code
+      .replaceAll('// expect', '') // allow manually commenting out specific assertions
+      .split('// extra assertions')[0] // allow adding some extra assertions
+      .trim()
+  }
+
+  function removeLineComments(code: string) {
+    return code
+      .split('\n')
+      .filter(line => !line.trim().startsWith('//'))
+      .join('\n')
+  }
+
   let expected = zod3.tests
     .map(sourceTest => {
-      const sourceParsed = parseTest(sourceTest.code)
+      const sourceParsed = parseTest(removeLineComments(preprocessCode(sourceTest.code)))
 
       const existingTargetTest = current.tests.find(x => x.name === sourceTest.name)
       if (!existingTargetTest) return sourceTest.code
 
-      const existingCode = existingTargetTest.code
-        .replaceAll('// expect', '') // allow manually commenting out specific assertions
-        .split('// extra assertions')[0] // allow adding some extra assertions
-        .trim()
+      const existingCode = preprocessCode(existingTargetTest.code)
       const existingParsed = parseTest(existingCode)
 
       // the expected code is the *source* code, but we're going to swap in specific values from the existing (target) test code
@@ -123,21 +133,22 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
         const ast = babelParser.parse(input, {sourceType: 'unambiguous', plugins: ['typescript'], attachComment: false})
         return recast.prettyPrint(ast).code
       }
-      if (false)
-        throw new Error(`
-          source:\n${prettyCode(sourceTest.code)}
+      /** ignore uninteresting differences in indentation - can occur even after pretty-printing because of snapshot indentations, which vitest ignores */
+      const unindentAllLines = (input: string) => {
+        const lines = input.split('\n')
+        return lines.map(line => line.trimStart()).join('\n')
+      }
+      const comparableCode = (input: string) => removeLineComments(unindentAllLines(preprocessCode(input)))
+      // _logs.push(`
+      //   source:\n${prettyCode(sourceTest.code)}\n
+      //   source with placeholders:\n${prettyCode(expectedCode)}\n
+      //   existing:\n${prettyCode(existingCode)}\n
+      //   existing with placeholders:\n${prettyCode(existingCode)}\n
+      //   expected:\n${prettyCode(expectedCode)}\n
+      // `)
 
-          source with placeholders:\n${prettyCode(expectedCode)}
-
-          existing:\n${prettyCode(existingCode)}
-
-          existing with placeholders:\n${prettyCode(existingCode)}
-
-          expected:\n${prettyCode(expectedCode)}
-        `)
-
-      if (prettyCode(expectedCode) === prettyCode(existingCode)) {
-        // return existingTargetTest.code
+      if (comparableCode(expectedCode) === comparableCode(existingCode)) {
+        return existingTargetTest.code
       }
 
       return expectedCode
