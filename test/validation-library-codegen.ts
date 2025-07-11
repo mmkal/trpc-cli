@@ -1,5 +1,5 @@
 export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
-  dependencies: {path, fs, dedent, recast, simplify, babelParser},
+  dependencies: {path, fs, recast, babelParser},
   context,
   meta,
 }) => {
