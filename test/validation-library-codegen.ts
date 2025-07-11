@@ -3,7 +3,6 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
   context,
   meta,
 }) => {
-  const _logs: string[] = []
   const parseTestFile = (content: string) => {
     const lines = content.split('\n').map(line => (line.trim() ? line : ''))
     const firstNonImportLine = lines.findIndex(line => line && !line.startsWith('import') && !line.startsWith('//'))
@@ -120,21 +119,16 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
         index: Number(x[1]),
       }))
       for (const pl of snapshotPlaceholders) {
-        const sourceReplacement = sourceParsed.replacements.snapshots[pl.index]
-        const targetReplacement = existingParsed.replacements.snapshots.find(
-          x => x.calleeCode === sourceReplacement.calleeCode,
-        )
+        const {calleeCode: calleeSource} = sourceParsed.replacements.snapshots[pl.index]
+        const targetReplacement = existingParsed.replacements.snapshots.find(x => x.calleeCode === calleeSource)
         if (targetReplacement) findAndReplaces.push({find: pl.string, replace: targetReplacement.argumentsCode})
-        if (existingTargetTest.code.includes(`// ${sourceReplacement.calleeCode}`)) {
+        if (existingTargetTest.code.includes(`// ${calleeSource}`)) {
           // if the assertion has been manually commented out, keep it commented out in the expected code
-          findAndReplaces.push({find: sourceReplacement.calleeCode, replace: `// ${sourceReplacement.calleeCode}`})
+          findAndReplaces.push({find: calleeSource, replace: `// ${calleeSource}`})
         }
-        if (existingTargetTest.code.includes(`// await ${sourceReplacement.calleeCode}`)) {
+        if (existingTargetTest.code.includes(`// await ${calleeSource}`)) {
           // if the assertion has been manually commented out, keep it commented out in the expected code
-          findAndReplaces.push({
-            find: sourceReplacement.calleeCode,
-            replace: `// await ${sourceReplacement.calleeCode}`,
-          })
+          findAndReplaces.push({find: calleeSource, replace: `// await ${calleeSource}`})
         }
       }
 
