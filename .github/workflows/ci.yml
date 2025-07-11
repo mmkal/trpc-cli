@@ -273,5 +273,7 @@ jobs:
         run: |
           npx tsx normal-router-test.ts --help
           npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
-      - run: ls -R && cat test-dir/normal-router-test.ts
+      - run: ls -R && cat test-dir/normal-router-test.ts && cat test-dir/node_modules/trpc-cli/dist/index.d.ts
+        if: always()
+      - run: cat test-dir/node_modules/trpc-cli/dist/index.d.ts
         if: always()

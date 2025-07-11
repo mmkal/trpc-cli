@@ -18,7 +18,7 @@
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
     "compile": "tsc -p tsconfig.lib.json",
-    "build": "pnpm clean && pnpm compile",
+    "build": "pnpm clean && pnpm compile && sed -i '' 's|declare module|// @ts-ignore\\ndeclare module|g' dist/index.d.ts",
     "dev": "cd test/fixtures && tsx",
     "test": "vitest run"
   },

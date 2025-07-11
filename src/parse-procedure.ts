@@ -1,6 +1,5 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
-import * as zod4 from 'zod/v4/core'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Dependencies, ParsedProcedure, Result} from './types'
@@ -503,12 +502,12 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
     zod: (input: unknown) => {
       // @ts-expect-error don't worry lots of ?.
       if (input._zod?.version?.major == 4) {
+        const zod4 = require('zod/v4/core') as typeof import('zod/v4/core')
         return zod4.toJSONSchema(input as never, {
-          // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
           io: 'input',
-          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           unrepresentable: 'any',
-          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           override: ctx => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
               ctx.jsonSchema.optional = true
