@@ -246,6 +246,9 @@ test('positional array with title', async () => {
     bar: t.procedure
       .input(z.array(z.string().describe('files'))) //
       .query(({input}) => JSON.stringify(input)),
+    baz: t.procedure
+      .input(z.array(z.string().describe('one single file')).describe('file collection'))
+      .query(({input}) => JSON.stringify(input)),
   })
 
   const cli = createCli({router})
@@ -255,6 +258,9 @@ test('positional array with title', async () => {
   )
   expect((await output(cli, ['bar', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
     `"Usage: program bar [options] <files...>"`,
+  )
+  expect((await output(cli, ['baz', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
+    `"Usage: program baz [options] <file collection...>"`,
   )
 })
 
