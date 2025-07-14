@@ -181,6 +181,7 @@ jobs:
           installDev tsx
           installDev @orpc/server
           installDev valibot
+          installDev @valibot/to-json-schema
           echo '{
             "compilerOptions": {
                 "target": "ES2022",
