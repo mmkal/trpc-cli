@@ -239,6 +239,32 @@ test('non-primitive option union', async () => {
   )
 })
 
+test('positional array with title', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.array(z.string()).describe('files')) //
+      .query(({input}) => JSON.stringify(input)),
+    bar: t.procedure
+      .input(z.array(z.string().describe('files'))) //
+      .query(({input}) => JSON.stringify(input)),
+    baz: t.procedure
+      .input(z.array(z.string().describe('one single file')).describe('file collection'))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  const cli = createCli({router})
+  expect(await output(cli, ['foo', 'abc', 'def'])).toMatchInlineSnapshot(`"["abc","def"]"`)
+  expect((await output(cli, ['foo', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
+    `"Usage: program foo [options] <files...>"`,
+  )
+  expect((await output(cli, ['bar', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
+    `"Usage: program bar [options] <files...>"`,
+  )
+  expect((await output(cli, ['baz', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
+    `"Usage: program baz [options] <file collection...>"`,
+  )
+})
+
 const run = async (cli: TrpcCli, argv: string[]) => {
   const exit = vi.fn() as any
   const log = vi.fn()

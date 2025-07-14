@@ -181,9 +181,10 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
 function isOptional(schema: JSONSchema7Definition) {
   if (schema && typeof schema === 'object' && 'optional' in schema) return schema.optional === true
+  if (schemaDefPropValue(schema, 'not') && JSON.stringify(schema) === '{"not":{}}') return true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
-  if (anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}') return true
   if (anyOf?.some(sub => isOptional(sub))) return true
+  if (schemaDefPropValue(schema, 'default') !== undefined) return true
   return false
 }
 
@@ -469,14 +470,22 @@ const toRoughJsonSchema7 = (schema: JSONSchema7Definition | undefined): JSONSche
   return schema
 }
 
-const parameterName = (s: JSONSchema7Definition, position: number): string => {
-  if (looksLikeArray(s)) {
+const maybeParameterName = (s: JSONSchema7Definition): string | undefined => {
+  const value = schemaDefPropValue(s, 'title') || schemaDefPropValue(s, 'description')
+  // only look at array item title if we don't have one for the outer array itself
+  // e.g. for {title: 'file collection', items: {title: 'file'}} we prefer 'file collection' as the parameter name
+  if (!value && looksLikeArray(s)) {
     const items = toRoughJsonSchema7(s).items
-    const elementName = parameterName(!items || Array.isArray(items) ? {} : items, position)
-    return `[${elementName.slice(1, -1)}...]`
+    return items && !Array.isArray(items) ? maybeParameterName(items) : undefined
   }
+  return value
+}
+
+const parameterName = (s: JSONSchema7Definition, position: number): string => {
+  let name = maybeParameterName(s) || `parameter_${position}`
+  if (looksLikeArray(s)) return `[${name}...]`
+
   // commander requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
-  let name = schemaDefPropValue(s, 'title') || schemaDefPropValue(s, 'description') || `parameter_${position}`
   name = name.replaceAll(/\W+/g, ' ').trim()
   return isOptional(s) ? `[${name}]` : `<${name}>`
 }
