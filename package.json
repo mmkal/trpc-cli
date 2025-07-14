@@ -38,26 +38,18 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
-    "@inquirer/prompts": "*",
-    "@orpc/server": "*",
-    "@trpc/server": "*",
-    "arktype": "*",
-    "effect": "*",
+    "@orpc/server": "^1.0.0",
+    "@trpc/server": "^10.45.2 || ^11.0.1",
+    "effect": "^3.14.2 || ^4.0.0",
     "omelette": "*",
-    "valibot": "*",
-    "zod": "^3.25.0 || ^4.0.0"
+    "valibot": "^1.1.0",
+    "zod": "^3.24.1 || ^4.0.0"
   },
   "peerDependenciesMeta": {
     "@orpc/server": {
       "optional": true
     },
     "@trpc/server": {
-      "optional": true
-    },
-    "@inquirer/prompts": {
-      "optional": true
-    },
-    "arktype": {
       "optional": true
     },
     "effect": {
