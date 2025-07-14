@@ -186,9 +186,10 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
 function isOptional(schema: JSONSchema7Definition) {
   if (schema && typeof schema === 'object' && 'optional' in schema) return schema.optional === true
+  if (schemaDefPropValue(schema, 'not') && JSON.stringify(schema) === '{"not":{}}') return true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
-  if (anyOf?.length === 2 && JSON.stringify(anyOf[0]) === '{"not":{}}') return true
   if (anyOf?.some(sub => isOptional(sub))) return true
+  if (schemaDefPropValue(schema, 'default') !== undefined) return true
   return false
 }
 
