@@ -24,11 +24,11 @@ importers:
         specifier: ^1.0.1
         version: 1.1.1
       zod:
-        specifier: ^3.25.3
-        version: 3.25.76
+        specifier: ^4.0.0
+        version: 4.0.5
       zod-to-json-schema:
         specifier: ^3.23.0
-        version: 3.24.6(zod@3.25.76)
+        version: 3.24.6(zod@4.0.5)
     devDependencies:
       '@clack/prompts':
         specifier: 0.11.0
@@ -4095,6 +4095,9 @@ packages:
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
+  zod@4.0.5:
+    resolution: {integrity: sha512-/5UuuRPStvHXu7RS+gmvRf4NXrNxpSllGwDnCBcJZtQsKrviYXm54yDGV2KYNLT5kq0lHGcl7lqWJLgSaG+tgA==}
 
   zx@8.6.1:
     resolution: {integrity: sha512-ig4Gn2e3L9QaQq3OsyDyGKvXFiq7wYvLCPmFJgcneHsr5vTeJefe0SXtDE7qaur9ysv7giAc0CmEtQcS71UA5Q==}
@@ -8557,10 +8560,12 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  zod-to-json-schema@3.24.6(zod@3.25.76):
+  zod-to-json-schema@3.24.6(zod@4.0.5):
     dependencies:
-      zod: 3.25.76
+      zod: 4.0.5
 
   zod@3.25.76: {}
+
+  zod@4.0.5: {}
 
   zx@8.6.1: {}
