@@ -518,6 +518,10 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
               ctx.jsonSchema.optional = true
             }
+
+            // todo: figure out why i needed to add this, it wasn't required before making zod a peer dependency
+            const meta = (ctx.zodSchema as {meta?: () => Record<string, unknown>})?.meta?.()
+            if (meta) Object.assign(ctx.jsonSchema, meta)
           },
         }) as JSONSchema7
       }
