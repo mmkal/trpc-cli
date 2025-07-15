@@ -2,7 +2,9 @@ import {initTRPC} from '@trpc/server'
 import {expect, test} from 'vitest'
 import {z} from 'zod/v3'
 import {TrpcCliMeta} from '../src'
-import {run} from './test-run'
+import {run, snapshotSerializer} from './test-run'
+
+expect.addSnapshotSerializer(snapshotSerializer)
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
@@ -14,11 +16,9 @@ test('default command', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const runFoo = await run(router, ['foo', '--bar', '1'])
-  expect(runFoo).toEqual({bar: 1})
+  expect(await run(router, ['foo', '--bar', '1'])).toMatchInlineSnapshot(`"{"bar":1}"`)
 
-  const runDefault = await run(router, ['--bar', '1'])
-  expect(runDefault).toEqual({bar: 1})
+  expect(await run(router, ['--bar', '1'])).toMatchInlineSnapshot(`"{"bar":1}"`)
 })
 
 test('optional positional', async () => {
@@ -56,10 +56,18 @@ test('required positional', async () => {
   })
 
   expect(await run(router, ['foo', 'abc', '--bar', '1'])).toMatchInlineSnapshot(`"["abc",{"bar":1}]"`)
-  expect(await run(router, ['foo', '--bar', '1'])).toMatchInlineSnapshot(
-    `"CommanderError: error: missing required argument 'name'"`,
+  await expect(run(router, ['foo', '--bar', '1'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CommanderError: error: missing required argument 'name'
+    `,
   )
-  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"CommanderError: error: missing required argument 'name'"`)
+  await expect(run(router, ['foo'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CommanderError: error: missing required argument 'name'
+    `,
+  )
   expect(await run(router, ['foo', 'def'])).toMatchInlineSnapshot(`"["def",{}]"`)
 })
 
@@ -80,31 +88,22 @@ test('json option', async () => {
   expect(await run(router, ['foo', '--obj', '{"abc":"abc","def":1}'])).toMatchInlineSnapshot(
     `"{"obj":{"abc":"abc","def":1}}"`,
   )
-  expect(await run(router, ['foo', '--obj', `{abc: 'abc', def: 1}`])).toMatchInlineSnapshot(
-    `"CommanderError: error: option '--obj [json]' argument '{abc: 'abc', def: 1}' is invalid. Malformed JSON."`,
-  )
-  expect(await run(router, ['foo', '--obj', '{"abc":"abc"}'])).toMatchInlineSnapshot(
+  await expect(run(router, ['foo', '--obj', `{abc: 'abc', def: 1}`])).rejects.toMatchInlineSnapshot(
     `
-      "Error: ✖ Required → at obj.def
-
-      Usage: program foo [options]
-
-      Options:
-        --obj [json]  Object (json formatted); Required: ["abc","def"]
-        -h, --help    display help for command
-      "
+      CLI exited with code 1
+        Caused by: CommanderError: error: option '--obj [json]' argument '{abc: 'abc', def: 1}' is invalid. Malformed JSON.
     `,
   )
-  expect(await run(router, ['foo', '--obj', '{"def":1}'])).toMatchInlineSnapshot(
+  await expect(run(router, ['foo', '--obj', '{"abc":"abc"}'])).rejects.toMatchInlineSnapshot(
     `
-      "Error: ✖ Required → at obj.abc
-
-      Usage: program foo [options]
-
-      Options:
-        --obj [json]  Object (json formatted); Required: ["abc","def"]
-        -h, --help    display help for command
-      "
+      CLI exited with code 1
+        Caused by: CliValidationError: ✖ Required → at obj.def
+    `,
+  )
+  await expect(run(router, ['foo', '--obj', '{"def":1}'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CliValidationError: ✖ Required → at obj.abc
     `,
   )
 })
@@ -136,9 +135,10 @@ test('primitive option union', async () => {
   expect(await run(router, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
   expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
   expect(await run(router, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
-  expect(await run(router, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
-    "CommanderError: error: unknown option '--no-foo'
-    (Did you mean --foo?)"
+  await expect(run(router, ['foo', '--no-foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)
   `)
   expect(await run(router, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
   expect(await run(router, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
@@ -151,41 +151,26 @@ test('option union array with enum', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '--foo'])).toMatchInlineSnapshot(`
-    "Error: ✖ Expected array, received boolean → at foo
-
-    Usage: program foo [options]
-
-    Options:
-      --foo [values...]  Any of:
-                         [{"type":"boolean"},{"type":"number"},{"type":"string","enum":["abc","def"]}]
-                         array (default: [])
-      -h, --help         display help for command
-    "
+  await expect(run(router, ['foo', '--foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Expected array, received boolean → at foo
   `)
   expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"{"foo":[]}"`)
   expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":[true]}"`)
   expect(await run(router, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":[false]}"`)
-  expect(await run(router, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
-    "CommanderError: error: unknown option '--no-foo'
-    (Did you mean --foo?)"
+  await expect(run(router, ['foo', '--no-foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)
   `)
   expect(await run(router, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":[1]}"`)
   expect(await run(router, ['foo', '--foo', 'abc'])).toMatchInlineSnapshot(`"{"foo":["abc"]}"`)
   expect(await run(router, ['foo', '--foo', 'abc', '--foo', 'true', '--foo', '1'])).toMatchInlineSnapshot(
     `"{"foo":["abc",true,1]}"`,
   )
-  expect(await run(router, ['foo', '--foo', 'wrong'])).toMatchInlineSnapshot(`
-    "Error: ✖ Invalid input → at foo[0]
-
-    Usage: program foo [options]
-
-    Options:
-      --foo [values...]  Any of:
-                         [{"type":"boolean"},{"type":"number"},{"type":"string","enum":["abc","def"]}]
-                         array (default: [])
-      -h, --help         display help for command
-    "
+  await expect(run(router, ['foo', '--foo', 'wrong'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Invalid input → at foo[0]
   `)
 })
 
@@ -200,14 +185,18 @@ test('non-primitive option union', async () => {
   expect(await run(router, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
   expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
   expect(await run(router, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
-  expect(await run(router, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
-    "CommanderError: error: unknown option '--no-foo'
-    (Did you mean --foo?)"
+  await expect(run(router, ['foo', '--no-foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)
   `)
   expect(await run(router, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
   expect(await run(router, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
-  await expect(run(router, ['foo', '--foo', 'abc123'])).resolves.toMatchInlineSnapshot(
-    `"CommanderError: error: option '--foo [value]' argument 'abc123' is invalid. Malformed JSON. If passing a string, pass it as a valid JSON string with quotes ("abc123")"`,
+  await expect(run(router, ['foo', '--foo', 'abc123'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CommanderError: error: option '--foo [value]' argument 'abc123' is invalid. Malformed JSON. If passing a string, pass it as a valid JSON string with quotes ("abc123")
+    `,
   )
 })
 
