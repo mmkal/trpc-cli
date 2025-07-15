@@ -1,4 +1,4 @@
-import { ZodIntersectionDef } from "zod";
+import type { ZodIntersectionDef } from "zod";
 import { parseDef } from "../parseDef.js";
 import { JsonSchema7Type } from "../parseTypes.js";
 import { Refs } from "../Refs.js";

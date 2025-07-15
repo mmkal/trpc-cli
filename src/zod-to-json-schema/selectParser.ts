@@ -1,4 +1,3 @@
-import { ZodFirstPartyTypeKind } from "zod";
 import { parseAnyDef } from "./parsers/any.js";
 import { parseArrayDef } from "./parsers/array.js";
 import { parseBigintDef } from "./parsers/bigint.js";
@@ -31,6 +30,7 @@ import { parseUnknownDef } from "./parsers/unknown.js";
 import { Refs } from "./Refs.js";
 import { parseReadonlyDef } from "./parsers/readonly.js";
 import { JsonSchema7Type } from "./parseTypes.js";
+import { ZodFirstPartyTypeKind } from "./ZodFirstPartyTypeKind.js";
 
 export type InnerDefGetter = () => any;
 

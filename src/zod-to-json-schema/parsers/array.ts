@@ -1,8 +1,9 @@
-import { ZodArrayDef, ZodFirstPartyTypeKind } from "zod";
+import type { ZodArrayDef } from "zod";
 import { ErrorMessages, setResponseValueAndErrors } from "../errorMessages.js";
 import { parseDef } from "../parseDef.js";
 import { JsonSchema7Type } from "../parseTypes.js";
 import { Refs } from "../Refs.js";
+import { ZodFirstPartyTypeKind } from "../ZodFirstPartyTypeKind.js";
 
 export type JsonSchema7ArrayType = {
   type: "array";

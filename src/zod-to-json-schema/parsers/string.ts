@@ -1,4 +1,4 @@
-import { ZodStringDef } from "zod";
+import type { ZodStringDef } from "zod";
 import { ErrorMessages, setResponseValueAndErrors } from "../errorMessages.js";
 import { Refs } from "../Refs.js";
 

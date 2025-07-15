@@ -1,4 +1,4 @@
-import { ZodObjectDef, ZodTypeAny } from "zod";
+import type { ZodObjectDef, ZodTypeAny } from "zod";
 import { parseDef } from "../parseDef.js";
 import { JsonSchema7Type } from "../parseTypes.js";
 import { Refs } from "../Refs.js";
