@@ -37,6 +37,7 @@ jobs:
     strategy:
       matrix:
         node: [23, 22]
+        zod: ['3.24.4', '3.25.76', '4.0.0']
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -56,8 +57,8 @@ jobs:
           }
           installDev typescript
           installDev @trpc/server
-          installDev zod
           installDev tsx
+          npm install zod@${{ matrix.zod }} --save-dev --save-exact
           echo '{
             "compilerOptions": {
                 "target": "ES2022",
@@ -74,7 +75,7 @@ jobs:
           echo '
           import {createCli} from "trpc-cli"
           import * as trpcServer from "@trpc/server"
-          import {z} from "zod/v4"
+          import {z} from "zod"
 
           const t = trpcServer.initTRPC.create()
 
