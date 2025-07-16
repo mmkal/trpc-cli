@@ -83,6 +83,8 @@ jobs:
             },
             "include": ["*.ts"]
           }' > tsconfig.json
+
+          if [ "${{ matrix.rpc_lib }}" =~ "@trpc/server" ]; then
           echo '
           import {createCli} from "trpc-cli"
           import * as trpcServer from "@trpc/server"
@@ -100,7 +102,9 @@ jobs:
 
           void createCli({router}).run()
           ' > trpc-cli-test.ts
+          fi
 
+          if [ "${{ matrix.rpc_lib }}" =~ "@orpc/server" ]; then
           echo '
           import {createCli} from "trpc-cli"
           import {os} from "@orpc/server"
@@ -115,14 +119,10 @@ jobs:
           })
 
           void createCli({router}).run()
-          ' > orpc-cli-test.ts
-
-          if [ "${{ matrix.rpc_lib }}" =* "@orpc/server" ]; then
-            mv orpc-cli-test.ts trpc-cli-test.ts
-            rm orpc-cli-test.ts
+          ' > trpc-cli-test.ts
           fi
 
-          # write files for all input schemas, and then export the correct one
+          if [ "${{ matrix.schema_lib }}" =~ "zod" ]; then
           echo '
           import {z} from "zod"
 
@@ -132,7 +132,10 @@ jobs:
               enthusiasm: z.number().int().positive().describe("exclamation marks"),
             })
           ])
-          ' > zod-input-schema.ts
+          ' > input-schema.ts
+          fi
+
+          if [ "${{ matrix.schema_lib }}" =~ "valibot" ]; then
           echo '
           v.tuple([
             v.pipe(v.string(), v.description("name")),
@@ -140,10 +143,8 @@ jobs:
               enthusiasm: v.pipe(v.number(), v.integer(), v.description("exclamation marks")),
             }),
           ])
-          ' > valibot-input-schema.ts
-
-          schema_lib_name=$(printf "${{ matrix.schema_lib }}" | cut -d'@' -f1)
-          echo "export * from './$schema_lib_name-input-schema'" > input-schema.ts
+          ' > input-schema.ts
+          fi
 
           # let's create an equivalent file without using `trpc-cli` imports at all - we'll test the bin script on this
           # to make sure it's possible to use the package's CLI on an existing trpc router.
