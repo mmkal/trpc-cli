@@ -47,7 +47,6 @@ jobs:
           - 'zod@~3.25.76'
           - 'zod@^4.0.0'
           - 'valibot@^1.0.0'
-        zod: ['3.0.0', '3.24.4', '3.25.76', '4.0.0']
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -67,7 +66,6 @@ jobs:
           }
           installDev typescript
           installDev tsx
-          # npm install zod@${{ matrix.zod }} --save-dev --save-exact
           npm install ${{ matrix.rpc_lib }}
           npm install ${{ matrix.schema_lib }}
           echo '{
