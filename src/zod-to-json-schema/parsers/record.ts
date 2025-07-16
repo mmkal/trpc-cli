@@ -1,5 +1,4 @@
-import {
-  ZodFirstPartyTypeKind,
+import type {
   ZodMapDef,
   ZodRecordDef,
   ZodTypeAny,
@@ -12,6 +11,7 @@ import { JsonSchema7ObjectType } from "./object.js";
 import { JsonSchema7StringType, parseStringDef } from "./string.js";
 import { parseBrandedDef } from "./branded.js";
 import { parseAnyDef } from "./any.js";
+import { ZodFirstPartyTypeKind } from "../ZodFirstPartyTypeKind.js";
 
 type JsonSchema7RecordPropertyNamesType =
   | Omit<JsonSchema7StringType, "type">
