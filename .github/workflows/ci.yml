@@ -133,6 +133,19 @@ jobs:
           ' > input-schema.ts
           fi
 
+          if [[ "${{ matrix.schema_lib }}" =~ "zod@3.0.0" ]]; then
+          echo '
+          import {z} from "zod"
+
+          export const InputSchema = z.tuple([
+            z.string(),
+            z.object({
+              enthusiasm: z.number().int().positive(),
+            })
+          ])
+          ' > input-schema.ts
+          fi
+
           if [[ "${{ matrix.schema_lib }}" =~ "valibot" ]]; then
           echo '
           import * as v from "valibot"
