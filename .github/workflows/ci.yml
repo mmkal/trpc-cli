@@ -38,7 +38,7 @@ jobs:
       matrix:
         node: [23, 22]
         rpc_lib: 
-          - '@trpc/server@^10.45.2'
+          # - '@trpc/server@^10.45.2' # doesn't work w valibot
           - '@trpc/server@^11.0.1'
           - '@orpc/server@^1.0.0'
         schema_lib:
@@ -133,19 +133,6 @@ jobs:
             z.string().describe("name"),
             z.object({
               enthusiasm: z.number().int().positive().describe("exclamation marks"),
-            })
-          ])
-          ' > input-schema.ts
-          fi
-
-          if [[ "${{ matrix.schema_lib }}" =~ "zod@3.0.0" ]]; then
-          echo '
-          import {z} from "zod"
-
-          export const InputSchema = z.tuple([
-            z.string(),
-            z.object({
-              enthusiasm: z.number().int().positive(),
             })
           ])
           ' > input-schema.ts
