@@ -68,6 +68,11 @@ jobs:
           installDev tsx
           npm install ${{ matrix.rpc_lib }}
           npm install ${{ matrix.schema_lib }}
+
+          if [[ "${{ matrix.schema_lib }}" =~ "valibot" ]]; then
+            installDev @valibot/to-json-schema
+          fi
+
           echo '{
             "compilerOptions": {
                 "target": "ES2022",
