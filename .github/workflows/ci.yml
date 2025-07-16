@@ -37,7 +37,17 @@ jobs:
     strategy:
       matrix:
         node: [23, 22]
-        zod: ['3.24.4', '3.25.76', '4.0.0']
+        rpc_lib: 
+          - '@trpc/server@^10.0.0'
+          - '@trpc/server@^11.0.0'
+          - '@orpc/server@^1.0.0'
+        schema_lib:
+          - 'zod@3.0.0'
+          - 'zod@~3.24.4'
+          - 'zod@~3.25.76'
+          - 'zod@^4.0.0'
+          - 'valibot@^1.0.0'
+        zod: ['3.0.0', '3.24.4', '3.25.76', '4.0.0']
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -56,9 +66,10 @@ jobs:
             npm install "$@@$(cat ./node_modules/trpc-cli/dist/devDependencies.json | jq -r ".$@")"
           }
           installDev typescript
-          installDev @trpc/server
           installDev tsx
-          npm install zod@${{ matrix.zod }} --save-dev --save-exact
+          # npm install zod@${{ matrix.zod }} --save-dev --save-exact
+          npm install ${{ matrix.rpc_lib }}
+          npm install ${{ matrix.schema_lib }}
           echo '{
             "compilerOptions": {
                 "target": "ES2022",
@@ -75,20 +86,13 @@ jobs:
           echo '
           import {createCli} from "trpc-cli"
           import * as trpcServer from "@trpc/server"
-          import {z} from "zod"
+          import {InputSchema} from "./input-schema"
 
           const t = trpcServer.initTRPC.create()
 
           export const router = t.router({
             sayHello: t.procedure
-              .input(
-                z.tuple([
-                  z.string().describe("name"),
-                  z.object({
-                    enthusiasm: z.number().int().positive().describe("exclamation marks"),
-                  })
-                ])
-              )
+              .input(InputSchema)
               .query(({input: [name, {enthusiasm}]}) => {
                 return `Hello ${name}` + "!".repeat(enthusiasm)
               })
@@ -97,6 +101,49 @@ jobs:
           void createCli({router}).run()
           ' > trpc-cli-test.ts
 
+          echo '
+          import {createCli} from "trpc-cli"
+          import {os} from "@orpc/server"
+          import {InputSchema} from "./input-schema"
+
+          export const router = os.router({
+            sayHello: os
+              .input(InputSchema)
+              .handler(({input: [name, {enthusiasm}]}) => {
+                return `Hello ${name}` + "!".repeat(enthusiasm)
+              })
+          })
+
+          void createCli({router}).run()
+          ' > orpc-cli-test.ts
+
+          if [ "${{ matrix.rpc_lib }}" =* "@orpc/server" ]; then
+            mv orpc-cli-test.ts trpc-cli-test.ts
+            rm orpc-cli-test.ts
+          fi
+
+          # write files for all input schemas, and then export the correct one
+          echo '
+          import {z} from "zod"
+
+          export const InputSchema = z.tuple([
+            z.string().describe("name"),
+            z.object({
+              enthusiasm: z.number().int().positive().describe("exclamation marks"),
+            })
+          ])
+          ' > zod-input-schema.ts
+          echo '
+          v.tuple([
+            v.pipe(v.string(), v.description("name")),
+            v.object({
+              enthusiasm: v.pipe(v.number(), v.integer(), v.description("exclamation marks")),
+            }),
+          ])
+          ' > valibot-input-schema.ts
+
+          schema_lib_name=$(printf "${{ matrix.schema_lib }}" | cut -d'@' -f1)
+          echo "export * from './$schema_lib_name-input-schema'" > input-schema.ts
 
           # let's create an equivalent file without using `trpc-cli` imports at all - we'll test the bin script on this
           # to make sure it's possible to use the package's CLI on an existing trpc router.
