@@ -417,7 +417,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const positionalValues = args.slice(0, -2)
 
         const input = parsedProcedure.getPojoInput({positionalValues, options})
-        const resolvedTrpcServer = await (params.trpcServer || (await import('@trpc/server')))
 
         let caller: Record<string, (input: unknown) => unknown>
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
@@ -431,6 +430,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         } else {
+          const resolvedTrpcServer = await (params.trpcServer || (await import('@trpc/server')))
           const createCallerFactor = resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike
           caller = createCallerFactor(router)(params.context)
         }
