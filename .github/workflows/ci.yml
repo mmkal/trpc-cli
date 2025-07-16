@@ -135,7 +135,9 @@ jobs:
 
           if [[ "${{ matrix.schema_lib }}" =~ "valibot" ]]; then
           echo '
-          v.tuple([
+          import * as v from "valibot"
+
+          export const InputSchema = v.tuple([
             v.pipe(v.string(), v.description("name")),
             v.object({
               enthusiasm: v.pipe(v.number(), v.integer(), v.description("exclamation marks")),
