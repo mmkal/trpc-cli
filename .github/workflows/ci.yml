@@ -82,7 +82,7 @@ jobs:
             "include": ["*.ts"]
           }' > tsconfig.json
 
-          if [ "${{ matrix.rpc_lib }}" =~ "@trpc/server" ]; then
+          if [[ "${{ matrix.rpc_lib }}" =~ "@trpc/server" ]]; then
           echo '
           import {createCli} from "trpc-cli"
           import * as trpcServer from "@trpc/server"
@@ -102,7 +102,7 @@ jobs:
           ' > trpc-cli-test.ts
           fi
 
-          if [ "${{ matrix.rpc_lib }}" =~ "@orpc/server" ]; then
+          if [[ "${{ matrix.rpc_lib }}" =~ "@orpc/server" ]]; then
           echo '
           import {createCli} from "trpc-cli"
           import {os} from "@orpc/server"
@@ -120,7 +120,7 @@ jobs:
           ' > trpc-cli-test.ts
           fi
 
-          if [ "${{ matrix.schema_lib }}" =~ "zod" ]; then
+          if [[ "${{ matrix.schema_lib }}" =~ "zod" ]]; then
           echo '
           import {z} from "zod"
 
@@ -133,7 +133,7 @@ jobs:
           ' > input-schema.ts
           fi
 
-          if [ "${{ matrix.schema_lib }}" =~ "valibot" ]; then
+          if [[ "${{ matrix.schema_lib }}" =~ "valibot" ]]; then
           echo '
           v.tuple([
             v.pipe(v.string(), v.description("name")),
