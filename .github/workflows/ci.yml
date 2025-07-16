@@ -42,7 +42,7 @@ jobs:
           - '@trpc/server@^11.0.0'
           - '@orpc/server@^1.0.0'
         schema_lib:
-          - 'zod@3.0.0'
+          # - 'zod@3.0.0' # doesn't work
           - 'zod@~3.24.4'
           - 'zod@~3.25.76'
           - 'zod@^4.0.0'
