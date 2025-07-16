@@ -38,8 +38,8 @@ jobs:
       matrix:
         node: [23, 22]
         rpc_lib: 
-          - '@trpc/server@^10.0.0'
-          - '@trpc/server@^11.0.0'
+          - '@trpc/server@^10.45.2'
+          - '@trpc/server@^11.0.1'
           - '@orpc/server@^1.0.0'
         schema_lib:
           # - 'zod@3.0.0' # doesn't work
