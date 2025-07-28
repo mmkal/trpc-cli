@@ -113,13 +113,15 @@ jobs:
           import {os} from "@orpc/server"
           import {InputSchema} from "./input-schema"
 
-          export default os.router({
+          const router = os.router({
             sayHello: os
               .input(InputSchema)
               .handler(({input: [name, {enthusiasm}]}) => {
                 return `Hello ${name}` + "!".repeat(enthusiasm)
               })
           })
+
+          export default router
 
           void createCli({router}).run()
           ' > trpc-cli-test.ts
