@@ -113,7 +113,7 @@ jobs:
           import {os} from "@orpc/server"
           import {InputSchema} from "./input-schema"
 
-          export const router = os.router({
+          export default os.router({
             sayHello: os
               .input(InputSchema)
               .handler(({input: [name, {enthusiasm}]}) => {
