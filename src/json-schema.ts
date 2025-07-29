@@ -1,4 +1,4 @@
-import type {JsonSchema7ObjectType, JsonSchema7Type} from 'zod-to-json-schema'
+import {JSONSchema7} from 'json-schema'
 
 const capitaliseFromCamelCase = (camel: string) => {
   const parts = camel.split(/(?=[A-Z])/)
@@ -7,19 +7,19 @@ const capitaliseFromCamelCase = (camel: string) => {
 
 const capitalise = (s: string) => s.slice(0, 1).toUpperCase() + s.slice(1)
 
-export const flattenedProperties = (sch: JsonSchema7Type): JsonSchema7ObjectType['properties'] => {
+export const flattenedProperties = (sch: JSONSchema7): Record<string, JSONSchema7> => {
   if ('properties' in sch) {
-    return sch.properties
+    return sch.properties as Record<string, JSONSchema7>
   }
   if ('allOf' in sch) {
     return Object.fromEntries(
-      sch.allOf!.flatMap(subSchema => Object.entries(flattenedProperties(subSchema as JsonSchema7Type))),
+      sch.allOf!.flatMap(subSchema => Object.entries(flattenedProperties(subSchema as JSONSchema7))),
     )
   }
   if ('anyOf' in sch) {
-    const isExcluded = (v: JsonSchema7Type) => Object.keys(v).join(',') === 'not'
+    const isExcluded = (v: JSONSchema7) => Object.keys(v).join(',') === 'not'
     const entries = sch.anyOf!.flatMap(subSchema => {
-      const flattened = flattenedProperties(subSchema as JsonSchema7Type)
+      const flattened = flattenedProperties(subSchema as JSONSchema7)
       const excluded = Object.entries(flattened).flatMap(([name, propSchema]) => {
         return isExcluded(propSchema) ? [`--${name}`] : []
       })
@@ -41,12 +41,12 @@ export const flattenedProperties = (sch: JsonSchema7Type): JsonSchema7ObjectType
   return {}
 }
 /** For a union type, returns a list of pairs of properties which *shouldn't* be used together (because they don't appear in the same type variant) */
-export const incompatiblePropertyPairs = (sch: JsonSchema7Type): Array<[string, string]> => {
+export const incompatiblePropertyPairs = (sch: JSONSchema7): Array<[string, string]> => {
   const isUnion = 'anyOf' in sch
   if (!isUnion) return []
 
   const sets = sch.anyOf!.map(subSchema => {
-    const keys = Object.keys(flattenedProperties(subSchema as JsonSchema7Type))
+    const keys = Object.keys(flattenedProperties(subSchema as JSONSchema7))
     return {keys, set: new Set(keys)}
   })
 
@@ -68,10 +68,10 @@ export const incompatiblePropertyPairs = (sch: JsonSchema7Type): Array<[string, 
  * Tries fairly hard to build a roughly human-readable description of a json-schema type.
  * A few common properties are given special treatment, most others are just stringified and output in `key: value` format.
  */
-export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
+export const getDescription = (v: JSONSchema7, depth = 0): string => {
   if ('items' in v && v.items) {
     const {items, ...rest} = v
-    return [getDescription(items as JsonSchema7Type, 1), getDescription(rest), 'array'].filter(Boolean).join(' ')
+    return [getDescription(items as JSONSchema7, 1), getDescription(rest), 'array'].filter(Boolean).join(' ')
   }
   return (
     Object.entries(v)
@@ -99,11 +99,11 @@ export const getDescription = (v: JsonSchema7Type, depth = 0): string => {
 }
 
 export const getSchemaTypes = (
-  propertyValue: JsonSchema7Type,
+  propertyValue: JSONSchema7,
 ): Array<'string' | 'boolean' | 'number' | 'integer' | (string & {})> => {
   const array: string[] = []
   if ('type' in propertyValue) {
-    array.push(...[propertyValue.type].flat())
+    array.push(...[propertyValue.type!].flat())
   }
   if ('enum' in propertyValue && Array.isArray(propertyValue.enum)) {
     array.push(...propertyValue.enum.flatMap(s => typeof s))
@@ -114,28 +114,28 @@ export const getSchemaTypes = (
     array.push(typeof propertyValue.const)
   }
   if ('oneOf' in propertyValue) {
-    array.push(...(propertyValue.oneOf as JsonSchema7Type[]).flatMap(getSchemaTypes))
+    array.push(...(propertyValue.oneOf as JSONSchema7[]).flatMap(getSchemaTypes))
   }
   if ('anyOf' in propertyValue) {
-    array.push(...(propertyValue.anyOf as JsonSchema7Type[]).flatMap(getSchemaTypes))
+    array.push(...(propertyValue.anyOf as JSONSchema7[]).flatMap(getSchemaTypes))
   }
 
   return [...new Set(array)]
 }
 
 /** Returns a list of all allowed subschemas. If the schema is not a union, returns a list with a single item. */
-export const getAllowedSchemas = (schema: JsonSchema7Type): JsonSchema7Type[] => {
+export const getAllowedSchemas = (schema: JSONSchema7): JSONSchema7[] => {
   if (!schema) return []
   if ('anyOf' in schema && Array.isArray(schema.anyOf))
-    return (schema.anyOf as JsonSchema7Type[]).flatMap(getAllowedSchemas)
+    return (schema.anyOf as JSONSchema7[]).flatMap(getAllowedSchemas)
   if ('oneOf' in schema && Array.isArray(schema.oneOf))
-    return (schema.oneOf as JsonSchema7Type[]).flatMap(getAllowedSchemas)
+    return (schema.oneOf as JSONSchema7[]).flatMap(getAllowedSchemas)
   const types = getSchemaTypes(schema)
   if (types.length === 1) return [schema]
-  return types.map(type => ({...schema, type}))
+  return types.map(type => ({...schema, type}) as JSONSchema7)
 }
 
-export const getEnumChoices = (propertyValue: JsonSchema7Type) => {
+export const getEnumChoices = (propertyValue: JSONSchema7) => {
   if (!propertyValue) return null
   if (!('enum' in propertyValue && Array.isArray(propertyValue.enum))) {
     // arktype prefers {anyOf: [{const: 'foo'}, {const: 'bar'}]} over {enum: ['foo', 'bar']} 🤷
@@ -144,6 +144,7 @@ export const getEnumChoices = (propertyValue: JsonSchema7Type) => {
       propertyValue.anyOf?.every(subSchema => {
         if (
           subSchema &&
+          typeof subSchema === 'object' &&
           'const' in subSchema &&
           Object.keys(subSchema).length === 1 &&
           typeof subSchema.const === 'string'
@@ -165,6 +166,7 @@ export const getEnumChoices = (propertyValue: JsonSchema7Type) => {
       propertyValue.anyOf?.every(subSchema => {
         if (
           subSchema &&
+          typeof subSchema === 'object' &&
           'const' in subSchema &&
           Object.keys(subSchema).length === 1 &&
           typeof subSchema.const === 'number'
@@ -187,7 +189,7 @@ export const getEnumChoices = (propertyValue: JsonSchema7Type) => {
   if (propertyValue.enum.every(s => typeof s === 'string')) {
     return {
       type: 'string_enum',
-      choices: propertyValue.enum as string[],
+      choices: propertyValue.enum,
     } as const
   }
 
@@ -195,7 +197,7 @@ export const getEnumChoices = (propertyValue: JsonSchema7Type) => {
   if (propertyValue.enum.every(s => typeof s === 'number')) {
     return {
       type: 'number_enum',
-      choices: propertyValue.enum as number[],
+      choices: propertyValue.enum,
     } as const
   }
 

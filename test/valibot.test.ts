@@ -1,7 +1,8 @@
+import * as trpcServer from '@trpc/server'
 import {inspect} from 'util'
 import * as v from 'valibot'
 import {expect, test} from 'vitest'
-import {createCli, TrpcCliMeta, trpcServer} from '../src'
+import {createCli, TrpcCliMeta} from '../src'
 import {run, snapshotSerializer} from './test-run'
 
 expect.addSnapshotSerializer(snapshotSerializer)
@@ -83,21 +84,13 @@ test('boolean input', async () => {
 test('refine in a union pedantry', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(
-        v.union([
-          v.string(),
-          v.pipe(
-            v.number(),
-            v.integer(), //
-          ),
-        ]),
-      ) //
+      .input(v.union([v.string(), v.pipe(v.number(), v.integer())]))
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
-  expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  expect(await run(router, ['foo', '11'])).toMatchInlineSnapshot(`"11"`)
+  expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
+  expect(await run(router, ['foo', '1.1'])).toMatchInlineSnapshot(`""1.1""`) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
 test('transform in a union', async () => {
@@ -164,7 +157,7 @@ test('regex input', async () => {
   })
 
   expect(await run(router, ['foo', 'hello abc'])).toMatchInlineSnapshot(`""hello abc""`)
-  // todo: raise a zod-validation-error issue 👇 not a great error message
+  // i like this error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: ✖ Invalid format: Expected /hello/ but received "goodbye xyz"
@@ -174,9 +167,7 @@ test('regex input', async () => {
 test('boolean, number, string input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(
-        v.union([v.string(), v.number(), v.boolean()]), //
-      )
+      .input(v.union([v.string(), v.number(), v.boolean()]))
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -560,6 +551,10 @@ test('defaults and negations', async () => {
 
   expect(await run(router, ['normal-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['normal-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['normal-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['normal-boolean', '--foo', 'false', '--foo', 'true'])).toMatchInlineSnapshot(
+    `"{ foo: true }"`,
+  )
 
   expect(await run(router, ['optional-boolean'])).toMatchInlineSnapshot(`"{}"`)
   expect(await run(router, ['optional-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
@@ -567,6 +562,7 @@ test('defaults and negations', async () => {
   expect(await run(router, ['optional-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-true-boolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['default-true-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-false-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['default-false-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)

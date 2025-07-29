@@ -1,6 +1,8 @@
+import * as trpcServer from '@trpc/server'
 import {expect, test} from 'vitest'
 
-import {createCli, trpcServer, z} from '../src'
+import {z} from 'zod/v3'
+import {createCli} from '../src'
 import {router as migrationsRouter} from './fixtures/migrations'
 
 expect.addSnapshotSerializer({

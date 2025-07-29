@@ -1,7 +1,8 @@
 import {initTRPC} from '@trpc/server'
 import {Command} from 'commander'
 import {expect, test, vi} from 'vitest'
-import {createCli, TrpcCliMeta, z} from '../src'
+import {z} from 'zod/v3'
+import {createCli, TrpcCliMeta} from '../src'
 import {FailedToExitError} from '../src/errors'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
@@ -52,7 +53,7 @@ test('override of process.exit and pass in bad option', async () => {
   )
   expect(result.exitCode).toBe(1)
   expect(result.cause).toMatchInlineSnapshot(`
-    [Error: ✖ Invalid input: expected number, received string → at bar
+    [Error: ✖ Expected number, received string → at bar
 
     Usage: program foo [options]
 

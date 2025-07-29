@@ -13,11 +13,12 @@
   },
   "packageManager": "pnpm@10.11.0",
   "scripts": {
+    "ztjs": "./cp-zod-to-json-schema.sh",
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
     "compile": "tsc -p tsconfig.lib.json",
-    "build": "pnpm clean && pnpm compile",
+    "build": "pnpm clean && pnpm compile && ORIG=$(cat dist/index.d.ts) node -e \"require('fs').writeFileSync('dist/index.d.ts', process.env.ORIG.replace(/declare module/g, '// @ts-ignore\\ndeclare module'))\"",
     "dev": "cd test/fixtures && tsx",
     "test": "vitest run"
   },
@@ -37,39 +38,52 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
-    "@inquirer/prompts": "*",
-    "omelette": "*"
+    "@orpc/server": "^1.0.0",
+    "@trpc/server": "^10.45.2 || ^11.0.1",
+    "effect": "^3.14.2 || ^4.0.0",
+    "omelette": "*",
+    "valibot": "^1.1.0",
+    "zod": "^3.24.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
+    "@orpc/server": {
+      "optional": true
+    },
+    "@trpc/server": {
+      "optional": true
+    },
+    "effect": {
+      "optional": true
+    },
     "omelette": {
       "optional": true
     },
-    "@inquirer/prompts": {
+    "valibot": {
+      "optional": true
+    },
+    "zod": {
       "optional": true
     }
   },
   "dependencies": {
-    "@trpc/server": "^11.1.1",
-    "@types/omelette": "^0.4.4",
-    "commander": "^14.0.0",
-    "picocolors": "^1.0.1",
-    "zod": "^3.25.3",
-    "zod-to-json-schema": "^3.23.0"
+    "commander": "^14.0.0"
   },
   "devDependencies": {
     "@clack/prompts": "0.11.0",
     "@inquirer/prompts": "7.5.1",
     "@orpc/contract": "1.5.0",
     "@orpc/server": "1.5.0",
+    "@trpc/server": "11.4.3",
     "@types/json-schema": "7.0.15",
     "@types/node": "20.17.48",
+    "@types/omelette": "0.4.5",
     "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.2.0",
     "arktype": "^2.1.20",
     "effect": "3.15.2",
     "enquirer": "2.4.1",
     "eslint": "8",
-    "eslint-plugin-mmkal": "0.10.2",
+    "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-codegen/eslint-plugin-mmkal@288006dd60273f9640446faa1cd3fcabfe9e84c1",
     "execa": "9.3.1",
     "expect-type": "1.2.1",
     "fs-syncer": "0.5.3",
@@ -82,6 +96,8 @@
     "tsx": "4.19.4",
     "typescript": "5.8.3",
     "valibot": "1.1.0",
-    "vitest": "3.1.4"
+    "vitest": "3.1.4",
+    "zod": "3.25.76",
+    "zod-to-json-schema": "3.24.6"
   }
 }

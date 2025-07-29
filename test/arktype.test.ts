@@ -86,17 +86,13 @@ test('boolean input', async () => {
 test('refine in a union pedantry', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(
-        type('string').or(
-          type('number').narrow(n => Number.isInteger(n)), //
-        ),
-      ) //
+      .input(type('string').or(type('number').narrow(n => Number.isInteger(n))))
       .query(({input}) => JSON.stringify(input)),
   })
 
-  // expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
-  // expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  // expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  expect(await run(router, ['foo', '11'])).toMatchInlineSnapshot(`"11"`)
+  expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
+  // expect(await run(router, ['foo', '1.1'])).toMatchInlineSnapshot('SNAPSHOT_PLACEHOLDER:2') // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
 test('transform in a union', async () => {
@@ -104,17 +100,17 @@ test('transform in a union', async () => {
     foo: t.procedure
       .input(
         type('string').or(
-          type('number') // arktype's .toJsonSchema() can't handle types this complex so we end up with json input
+          type('number')
             .narrow(n => Number.isInteger(n))
             .pipe(n => `Roman numeral: ${'I'.repeat(n)}`),
         ),
-      ) //
+      )
       .query(({input}) => JSON.stringify(input)),
   })
 
-  // expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
-  // expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
-  // expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot(`""3.3""`)
+  expect(await run(router, ['foo', '3'])).toMatchInlineSnapshot(`""Roman numeral: III""`)
+  expect(await run(router, ['foo', 'a'])).toMatchInlineSnapshot(`""a""`)
+  // expect(await run(router, ['foo', '3.3'])).toMatchInlineSnapshot("SNAPSHOT_PLACEHOLDER:2")
 })
 
 test('literal input', async () => {
@@ -425,7 +421,9 @@ test('string array then number input (downgrades to json input)', async () => {
 test('record input', async () => {
   const router = t.router({
     test: t.procedure
-      .input(type({'[string]': 'number'})) //
+      .input(
+        type({'[string]': 'number'}).or('undefined'), //
+      )
       .query(({input}) => `input: ${JSON.stringify(input)}`),
   })
 
@@ -434,12 +432,14 @@ test('record input', async () => {
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Inputs with additional properties
-                      are not currently supported)
+                      converted to CLI arguments: Invalid input type { '$schema':
+                      'https://json-schema.org/draft/2020-12/schema', anyOf: [ {
+                      type: 'object', additionalProperties: [Object] }, { optional:
+                      true } ] }, expected object or tuple.)
       -h, --help      display help for command
     "
   `)
-  // expect(await run(router, ['test'])).toMatchInlineSnapshot(`"input: undefined"`)
+  expect(await run(router, ['test'])).toMatchInlineSnapshot(`"input: undefined"`)
   expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -546,6 +546,10 @@ test('defaults and negations', async () => {
 
   expect(await run(router, ['normal-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['normal-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['normal-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['normal-boolean', '--foo', 'false', '--foo', 'true'])).toMatchInlineSnapshot(
+    `"{ foo: true }"`,
+  )
 
   expect(await run(router, ['optional-boolean'])).toMatchInlineSnapshot(`"{}"`)
   expect(await run(router, ['optional-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
@@ -553,6 +557,7 @@ test('defaults and negations', async () => {
   expect(await run(router, ['optional-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-true-boolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['default-true-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-false-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['default-false-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)

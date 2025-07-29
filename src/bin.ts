@@ -2,7 +2,7 @@
 import {createCli} from '.'
 import {Command} from 'commander'
 import * as path from 'path'
-import {Trpc11RouterLike} from './trpc-compat'
+import {isOrpcRouter, Trpc11RouterLike} from './trpc-compat'
 
 const program = new Command('trpc-cli')
 
@@ -66,7 +66,7 @@ program.action(async () => {
   }
   let router: Trpc11RouterLike
   const isTrpcRouterLike = (value: unknown): value is Trpc11RouterLike =>
-    Boolean((value as Trpc11RouterLike)?._def?.procedures)
+    Boolean((value as Trpc11RouterLike)?._def?.procedures) || isOrpcRouter(value as never)
   if (options.export) {
     router = (importedModule as {[key: string]: Trpc11RouterLike})[options.export]
     if (!isTrpcRouterLike(router)) {
