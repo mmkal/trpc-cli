@@ -65,23 +65,25 @@ program.action(async () => {
     importedModule = importedModule?.default as never
   }
   let router: Trpc11RouterLike
-  const isTrpcRouterLike = (value: unknown): value is Trpc11RouterLike =>
+  const looksLikeARouter = (value: unknown): value is Trpc11RouterLike =>
     Boolean((value as Trpc11RouterLike)?._def?.procedures) || isOrpcRouter(value as never)
   if (options.export) {
     router = (importedModule as {[key: string]: Trpc11RouterLike})[options.export]
-    if (!isTrpcRouterLike(router)) {
+    if (!looksLikeARouter(router)) {
       throw new Error(`Expected a trpc router in ${filepath}.${options.export}, got ${typeof router}`)
     }
-  } else if (isTrpcRouterLike(importedModule)) {
-    router = importedModule
   } else {
-    const routerExports = Object.values(importedModule).filter(isTrpcRouterLike)
-    if (routerExports.length !== 1) {
+    const exports = Object.values(importedModule)
+    const routerExports = exports.filter(looksLikeARouter)
+    if (routerExports.length === 1) {
+      router = routerExports[0]
+    } else if (looksLikeARouter(importedModule)) {
+      router = importedModule
+    } else {
       throw new Error(
         `Expected exactly one trpc router in ${filepath}, found ${routerExports.length}. Exports: ${Object.keys(importedModule).join(', ')}`,
       )
     }
-    router = routerExports[0]
   }
 
   const cli = createCli({router})

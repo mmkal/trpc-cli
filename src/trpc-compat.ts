@@ -87,16 +87,15 @@ export const isTrpc11Router = (router: AnyRouter): router is Trpc11RouterLike =>
   return Boolean(procedure && isTrpc11Procedure(procedure))
 }
 
+// no way to actually check a router, because they are just records of procedures and sub-routers.
+// so recursively check values for procedures and sub-routers
 export const isOrpcRouter = (router: AnyRouter): router is OrpcRouterLike<any> => {
   const values: never[] = []
   for (const v of Object.values(router)) {
     if (typeof v === 'function') return false
     values.push(v as never)
   }
-  return values.some(isOrpcProcedure) || values.some(isOrpcRouter)
-  // if (values.some(isOrpcProcedure)) return true
-  // if (values.some(isOrpcRouter)) return true
-  // return false
+  return values.every(v => isOrpcProcedure(v) || isOrpcRouter(v))
 }
 
 export const isOrpcProcedure = (procedure: {}): procedure is OrpcProcedureLike<any> => {
