@@ -524,6 +524,11 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
               ctx.jsonSchema.optional = true
             }
+
+            // this is needed because trpc-cli (currently) has its own zod dependency, which is v3, and uses zod/v4 as a submodule. But the v3 zod/v4 module drops descriptions from the produced json schema.
+            // normally zod does this itself, but not when using v3's toJSONSchema function with a v4 schema.
+            const meta = (ctx.zodSchema as {} as Partial<import('zod/v4').ZodType>).meta?.()
+            if (meta) Object.assign(ctx.jsonSchema, meta)
           },
         }) as JSONSchema7
       }
