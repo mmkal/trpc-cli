@@ -16,7 +16,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ oRPC support
-- ☑️ [soon] No config needed. Run on an existing router with `npx trpc-cli src/your-router.ts`
+- ✅ No configuration required. Run on an existing router with `npx trpc-cli src/your-router.ts`
 
 ---
 
