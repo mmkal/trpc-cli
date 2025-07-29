@@ -124,14 +124,12 @@ test('boolean input', async () => {
 
 test('refine in a union pedantry', async () => {
   const router = t.router({
-    foo: t.procedure
-      .input(z.union([z.number().int(), z.string()])) //
-      .query(({input}) => JSON.stringify(input)),
+    foo: t.procedure.input(z.union([z.number().int(), z.string()])).query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '11'])).toBe(JSON.stringify(11))
-  expect(await run(router, ['foo', 'aa'])).toBe(JSON.stringify('aa'))
-  expect(await run(router, ['foo', '1.1'])).toBe(JSON.stringify('1.1')) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
+  expect(await run(router, ['foo', '11'])).toMatchInlineSnapshot(`"11"`)
+  expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
+  expect(await run(router, ['foo', '1.1'])).toMatchInlineSnapshot(`""1.1""`) // technically this *does* match one of the types in the union, just not the number type because that demands ints - it matches the string type
 })
 
 test('transform in a union', async () => {
@@ -591,6 +589,10 @@ test('defaults and negations', async () => {
 
   expect(await run(router, ['normal-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['normal-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['normal-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['normal-boolean', '--foo', 'false', '--foo', 'true'])).toMatchInlineSnapshot(
+    `"{ foo: true }"`,
+  )
 
   expect(await run(router, ['optional-boolean'])).toMatchInlineSnapshot(`"{}"`)
   expect(await run(router, ['optional-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
@@ -598,6 +600,7 @@ test('defaults and negations', async () => {
   expect(await run(router, ['optional-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-true-boolean'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['default-true-boolean', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
 
   expect(await run(router, ['default-false-boolean'])).toMatchInlineSnapshot(`"{ foo: false }"`)
   expect(await run(router, ['default-false-boolean', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)

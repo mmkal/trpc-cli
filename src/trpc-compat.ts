@@ -88,6 +88,17 @@ export const isTrpc11Router = (router: AnyRouter): router is Trpc11RouterLike =>
 }
 
 export const isOrpcRouter = (router: AnyRouter): router is OrpcRouterLike<any> => {
-  // this could fall down if someone tries to pass a trpc router which doesn't use t.router(...) - but you're not allowed to do that ok!
-  return !('_def' in router) || (router._def && '~orpc' in router._def)
+  const values: never[] = []
+  for (const v of Object.values(router)) {
+    if (typeof v === 'function') return false
+    values.push(v as never)
+  }
+  return values.some(isOrpcProcedure) || values.some(isOrpcRouter)
+  // if (values.some(isOrpcProcedure)) return true
+  // if (values.some(isOrpcRouter)) return true
+  // return false
+}
+
+export const isOrpcProcedure = (procedure: {}): procedure is OrpcProcedureLike<any> => {
+  return typeof procedure === 'object' && '~orpc' in procedure && typeof procedure['~orpc'] === 'object'
 }
