@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import * as trpcServer11 from '@trpc/server'
 import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError, Option} from 'commander'
+import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
-import {JsonSchema7Type} from 'zod-to-json-schema'
 import {addCompletions} from './completions'
 import {FailedToExitError, CliValidationError} from './errors'
 import {commandToJSON} from './json'
@@ -20,26 +19,20 @@ import {promptify} from './prompts'
 import {prettifyStandardSchemaError} from './standard-schema/errors'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils'
 import {
-  AnyProcedure,
-  AnyRouter,
-  CreateCallerFactoryLike,
+  type AnyProcedure,
+  type AnyRouter,
+  type CreateCallerFactoryLike,
   isOrpcRouter,
-  OrpcRouterLike,
-  Trpc10RouterLike,
-  Trpc11RouterLike,
+  type OrpcRouterLike,
+  type Trpc10RouterLike,
+  type Trpc11RouterLike,
 } from './trpc-compat'
 import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
 import {looksLikeInstanceof} from './util'
 
-export * from './types'
-
-export {z} from 'zod/v4'
-export * as zod from 'zod'
-
-export * as trpcServer from '@trpc/server'
-
+// @ts-ignore zod is an optional peer dependency so might not be installed. oh well, you still get this one interface
 declare module 'zod/v4' {
-  interface GlobalMeta {
+  export interface GlobalMeta {
     /**
      * If true, this property will be mapped to a positional CLI argument by trpc-cli. Only valid for string, number, or boolean types (or arrays of these types).
      * Note: the order of positional arguments is determined by the order of properties in the schema.
@@ -55,6 +48,18 @@ declare module 'zod/v4' {
     alias?: string
   }
 }
+
+export * from './types'
+
+/** @deprecated use `import * as trpcServer from '@trpc/server'` instead */
+export const trpcServer = "@deprecated use `import * as trpcServer from '@trpc/server'` instead"
+
+/** @deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod) */
+export const z =
+  '@deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod)'
+/** @deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod) */
+export const zod =
+  '@deprecated use `import {z} from "zod/v4"` instead (or use zod/v3 if you need to support use an old version of zod)'
 
 export class Command extends BaseCommand {
   /** @internal track the commands that have been run, so that we can find the `__result` of the last command */
@@ -103,16 +108,12 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
   })
 }
 
-// We're going to use eval to require some optional dependencies. It's hard-coded, so safe, but some bundlers like tsdown will emit warnings unless we disguise it.
-const disguisedEval = eval
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
   const entries: [string, ProcedureInfo][] = []
 
-  const {traverseContractProcedures, isProcedure} = disguisedEval(
-    `require('@orpc/server')`,
-  ) as typeof import('@orpc/server')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const {traverseContractProcedures, isProcedure} = require('@orpc/server') as typeof import('@orpc/server')
   const router = params.router as import('@orpc/server').AnyRouter
   const lazyRoutes = traverseContractProcedures({path: [], router}, ({contract, path}) => {
     let procedure: Record<string, unknown> = params.router
@@ -262,7 +263,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       })
 
       const unusedOptionAliases: Record<string, string> = {...meta.aliases?.options}
-      const addOptionForProperty = ([propertyKey, propertyValue]: [string, JsonSchema7Type]) => {
+      const addOptionForProperty = ([propertyKey, propertyValue]: [string, JSONSchema7]) => {
         const description = getDescription(propertyValue)
 
         const longOption = `--${kebabCase(propertyKey)}`
@@ -346,7 +347,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
           else if (isValueRequired) option.default([])
-          const itemsSchema = 'items' in propertyValue ? (propertyValue.items as JsonSchema7Type) : {}
+          const itemsSchema = 'items' in propertyValue ? (propertyValue.items as JSONSchema7) : {}
 
           const itemEnumTypes = getEnumChoices(itemsSchema)
           if (itemEnumTypes?.type === 'string_enum') {
@@ -416,7 +417,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const positionalValues = args.slice(0, -2)
 
         const input = parsedProcedure.getPojoInput({positionalValues, options})
-        const resolvedTrpcServer = await (params.trpcServer || trpcServer11)
 
         let caller: Record<string, (input: unknown) => unknown>
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
@@ -425,10 +425,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
         } else if (isOrpcRouter(router)) {
-          const {call} = disguisedEval(`require('@orpc/server')`) as typeof import('@orpc/server')
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const {call} = require('@orpc/server') as typeof import('@orpc/server')
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         } else {
+          const resolvedTrpcServer = await (params.trpcServer || (await import('@trpc/server')))
           const createCallerFactor = resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike
           caller = createCallerFactor(router)(params.context)
         }
@@ -599,7 +601,8 @@ function transformError(err: unknown, command: Command) {
     )
   }
 
-  if (looksLikeInstanceof<trpcServer11.TRPCError>(err, 'TRPCError')) {
+  type TRPCErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
+  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError')) {
     const cause = err.cause
     if (looksLikeStandardSchemaFailure(cause)) {
       const prettyMessage = prettifyStandardSchemaError(cause)
@@ -633,7 +636,7 @@ const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
   return fallback
 }
 
-const getOptionValueParser = (schema: JsonSchema7Type) => {
+const getOptionValueParser = (schema: JSONSchema7) => {
   const allowedSchemas = getAllowedSchemas(schema)
     .slice()
     .sort((a, b) => String(getSchemaTypes(a)[0]).localeCompare(String(getSchemaTypes(b)[0])))

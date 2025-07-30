@@ -1,5 +1,4 @@
 import type {JSONSchema7} from 'json-schema'
-import {type JsonSchema7Type} from 'zod-to-json-schema'
 import {CommandJSON} from './json'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat'
 
@@ -66,7 +65,7 @@ export interface ParsedProcedure {
     array: boolean
   }>
   /** JSON Schema type describing the flags for the procedure */
-  optionsJsonSchema: JsonSchema7Type
+  optionsJsonSchema: JSONSchema7
   /**
    * Function for taking parsed argv output and transforming it so it can be passed into the procedure.
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input

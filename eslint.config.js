@@ -5,5 +5,6 @@ module.exports = [
       'unicorn/prefer-switch': 'off', // mmkal
     },
   },
+  {ignores: ['src/zod-to-json-schema/**']},
   // {ignores: ['**/*ignoreme*']}, //
 ]

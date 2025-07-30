@@ -1,8 +1,9 @@
 import {initTRPC as initTRPC_v10} from 'trpcserver10'
 import {initTRPC as initTRPC_v11} from 'trpcserver11'
 import {expect, expectTypeOf, test} from 'vitest'
-import {createCli, TrpcCliMeta, TrpcServerModuleLike, z} from '../src'
-import {Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat'
+import {z} from 'zod/v3'
+import {createCli, TrpcCliMeta, TrpcServerModuleLike} from '../src'
+import {isOrpcRouter, Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat'
 
 expect.addSnapshotSerializer({
   test: val => val?.cause && val.message,
@@ -179,4 +180,17 @@ test('trpc v10 has helpful error when not passing in trpcServer', async () => {
   expect(error?.cause).toMatchInlineSnapshot(
     `[Error: Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the \`@trpc/server\` module to \`createCli\` explicitly]`,
   )
+})
+
+test('isOrpcRouter', async () => {
+  const {os} = await import('@orpc/server')
+  // expect(isOrpcRouter(os.router({}))).toBe(true) // fails, because we only now how to look for procedures really
+  expect(isOrpcRouter(os.router({hello: os.handler(() => 'ok')}))).toBe(true)
+  expect(isOrpcRouter(os.router({hello: os.router({nested: os.handler(() => 'ok')})}))).toBe(true)
+  expect(isOrpcRouter({hello: {nested: os.handler(() => 'ok')}})).toBe(true)
+
+  const {initTRPC} = await import('trpcserver11')
+  const t = initTRPC.create()
+  expect(isOrpcRouter(t.router({}))).toBe(false)
+  expect(isOrpcRouter(t.router({hello: t.procedure.query(() => 'ok')}))).toBe(false)
 })

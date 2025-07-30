@@ -1,11 +1,12 @@
 import {initTRPC} from '@trpc/server'
-import {expect, test, vi} from 'vitest'
-import {createCli, TrpcCli, TrpcCliMeta, z} from '../src'
-import {FailedToExitError} from '../src/errors'
+import {expect, test} from 'vitest'
+import {z} from 'zod/v3'
+import {TrpcCliMeta} from '../src'
+import {run, snapshotSerializer} from './test-run'
+
+expect.addSnapshotSerializer(snapshotSerializer)
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
-
-// these tests just make sure it's possible to override process.exit if you want to capture low-level errors
 
 test('default command', async () => {
   const router = t.router({
@@ -15,23 +16,9 @@ test('default command', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
+  expect(await run(router, ['foo', '--bar', '1'])).toMatchInlineSnapshot(`"{"bar":1}"`)
 
-  const runFoo = await run(cli, ['foo', '--bar', '1'])
-
-  expect(runFoo.exit).toHaveBeenCalledWith(0)
-  expect(runFoo.log).toHaveBeenCalledWith('{"bar":1}')
-  expect(runFoo.result).toBeInstanceOf(FailedToExitError)
-  expect(runFoo.result.exitCode).toBe(0)
-  expect(runFoo.result.cause).toBe('{"bar":1}')
-
-  const runDefault = await run(cli, ['--bar', '1'])
-
-  expect(runDefault.exit).toHaveBeenCalledWith(0)
-  expect(runDefault.log).toHaveBeenCalledWith('{"bar":1}')
-  expect(runDefault.result).toBeInstanceOf(FailedToExitError)
-  expect(runDefault.result.exitCode).toBe(0)
-  expect(runDefault.result.cause).toBe('{"bar":1}')
+  expect(await run(router, ['--bar', '1'])).toMatchInlineSnapshot(`"{"bar":1}"`)
 })
 
 test('optional positional', async () => {
@@ -48,12 +35,10 @@ test('optional positional', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
-
-  expect(await output(cli, ['foo', 'abc', '--bar', '1'])).toMatchInlineSnapshot(`"["abc",{"bar":1}]"`)
-  expect(await output(cli, ['foo', '--bar', '1'])).toMatchInlineSnapshot(`"[null,{"bar":1}]"`)
-  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"[null,{}]"`)
-  expect(await output(cli, ['foo', 'def'])).toMatchInlineSnapshot(`"["def",{}]"`)
+  expect(await run(router, ['foo', 'abc', '--bar', '1'])).toMatchInlineSnapshot(`"["abc",{"bar":1}]"`)
+  expect(await run(router, ['foo', '--bar', '1'])).toMatchInlineSnapshot(`"[null,{"bar":1}]"`)
+  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"[null,{}]"`)
+  expect(await run(router, ['foo', 'def'])).toMatchInlineSnapshot(`"["def",{}]"`)
 })
 
 test('required positional', async () => {
@@ -70,14 +55,20 @@ test('required positional', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
-
-  expect(await output(cli, ['foo', 'abc', '--bar', '1'])).toMatchInlineSnapshot(`"["abc",{"bar":1}]"`)
-  expect(await output(cli, ['foo', '--bar', '1'])).toMatchInlineSnapshot(
-    `"CommanderError: error: missing required argument 'name'"`,
+  expect(await run(router, ['foo', 'abc', '--bar', '1'])).toMatchInlineSnapshot(`"["abc",{"bar":1}]"`)
+  await expect(run(router, ['foo', '--bar', '1'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CommanderError: error: missing required argument 'name'
+    `,
   )
-  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"CommanderError: error: missing required argument 'name'"`)
-  expect(await output(cli, ['foo', 'def'])).toMatchInlineSnapshot(`"["def",{}]"`)
+  await expect(run(router, ['foo'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CommanderError: error: missing required argument 'name'
+    `,
+  )
+  expect(await run(router, ['foo', 'def'])).toMatchInlineSnapshot(`"["def",{}]"`)
 })
 
 test('json option', async () => {
@@ -94,36 +85,25 @@ test('json option', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
-
-  expect(await output(cli, ['foo', '--obj', '{"abc":"abc","def":1}'])).toMatchInlineSnapshot(
+  expect(await run(router, ['foo', '--obj', '{"abc":"abc","def":1}'])).toMatchInlineSnapshot(
     `"{"obj":{"abc":"abc","def":1}}"`,
   )
-  expect(await output(cli, ['foo', '--obj', `{abc: 'abc', def: 1}`])).toMatchInlineSnapshot(
-    `"CommanderError: error: option '--obj [json]' argument '{abc: 'abc', def: 1}' is invalid. Malformed JSON."`,
-  )
-  expect(await output(cli, ['foo', '--obj', '{"abc":"abc"}'])).toMatchInlineSnapshot(
+  await expect(run(router, ['foo', '--obj', `{abc: 'abc', def: 1}`])).rejects.toMatchInlineSnapshot(
     `
-      "Error: ✖ Invalid input: expected number, received undefined → at obj.def
-
-      Usage: program foo [options]
-
-      Options:
-        --obj [json]  Object (json formatted); Required: ["abc","def"]
-        -h, --help    display help for command
-      "
+      CLI exited with code 1
+        Caused by: CommanderError: error: option '--obj [json]' argument '{abc: 'abc', def: 1}' is invalid. Malformed JSON.
     `,
   )
-  expect(await output(cli, ['foo', '--obj', '{"def":1}'])).toMatchInlineSnapshot(
+  await expect(run(router, ['foo', '--obj', '{"abc":"abc"}'])).rejects.toMatchInlineSnapshot(
     `
-      "Error: ✖ Invalid input: expected string, received undefined → at obj.abc
-
-      Usage: program foo [options]
-
-      Options:
-        --obj [json]  Object (json formatted); Required: ["abc","def"]
-        -h, --help    display help for command
-      "
+      CLI exited with code 1
+        Caused by: CliValidationError: ✖ Required → at obj.def
+    `,
+  )
+  await expect(run(router, ['foo', '--obj', '{"def":1}'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CliValidationError: ✖ Required → at obj.abc
     `,
   )
 })
@@ -139,11 +119,9 @@ test('default value in union subtype', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
-
-  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
-  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
-  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
+  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await run(router, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
 })
 
 test('primitive option union', async () => {
@@ -153,18 +131,17 @@ test('primitive option union', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
-
-  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":false}"`)
-  expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
-  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
-  expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
-  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
-    "CommanderError: error: unknown option '--no-foo'
-    (Did you mean --foo?)"
+  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  expect(await run(router, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await run(router, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  await expect(run(router, ['foo', '--no-foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)
   `)
-  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
-  expect(await output(cli, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
+  expect(await run(router, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
+  expect(await run(router, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
 })
 
 test('option union array with enum', async () => {
@@ -174,43 +151,26 @@ test('option union array with enum', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
-
-  expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`
-    "Error: ✖ Invalid input: expected array, received boolean → at foo
-
-    Usage: program foo [options]
-
-    Options:
-      --foo [values...]  Any of:
-                         [{"type":"boolean"},{"type":"number"},{"enum":["abc","def"]}]
-                         array (default: [])
-      -h, --help         display help for command
-    "
+  await expect(run(router, ['foo', '--foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Expected array, received boolean → at foo
   `)
-  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":[]}"`)
-  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":[true]}"`)
-  expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":[false]}"`)
-  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
-    "CommanderError: error: unknown option '--no-foo'
-    (Did you mean --foo?)"
+  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"{"foo":[]}"`)
+  expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":[true]}"`)
+  expect(await run(router, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":[false]}"`)
+  await expect(run(router, ['foo', '--no-foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)
   `)
-  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":[1]}"`)
-  expect(await output(cli, ['foo', '--foo', 'abc'])).toMatchInlineSnapshot(`"{"foo":["abc"]}"`)
-  expect(await output(cli, ['foo', '--foo', 'abc', '--foo', 'true', '--foo', '1'])).toMatchInlineSnapshot(
+  expect(await run(router, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":[1]}"`)
+  expect(await run(router, ['foo', '--foo', 'abc'])).toMatchInlineSnapshot(`"{"foo":["abc"]}"`)
+  expect(await run(router, ['foo', '--foo', 'abc', '--foo', 'true', '--foo', '1'])).toMatchInlineSnapshot(
     `"{"foo":["abc",true,1]}"`,
   )
-  expect(await output(cli, ['foo', '--foo', 'wrong'])).toMatchInlineSnapshot(`
-    "Error: ✖ Invalid input → at foo[0]
-
-    Usage: program foo [options]
-
-    Options:
-      --foo [values...]  Any of:
-                         [{"type":"boolean"},{"type":"number"},{"enum":["abc","def"]}]
-                         array (default: [])
-      -h, --help         display help for command
-    "
+  await expect(run(router, ['foo', '--foo', 'wrong'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Invalid input → at foo[0]
   `)
 })
 
@@ -221,20 +181,22 @@ test('non-primitive option union', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
-
-  expect(await output(cli, ['foo'])).toMatchInlineSnapshot(`"{"foo":false}"`)
-  expect(await output(cli, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
-  expect(await output(cli, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
-  expect(await output(cli, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
-  expect(await output(cli, ['foo', '--no-foo'])).toMatchInlineSnapshot(`
-    "CommanderError: error: unknown option '--no-foo'
-    (Did you mean --foo?)"
+  expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  expect(await run(router, ['foo', '--foo'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":true}"`)
+  expect(await run(router, ['foo', '--foo', 'false'])).toMatchInlineSnapshot(`"{"foo":false}"`)
+  await expect(run(router, ['foo', '--no-foo'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--no-foo'
+    (Did you mean --foo?)
   `)
-  expect(await output(cli, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
-  expect(await output(cli, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
-  await expect(output(cli, ['foo', '--foo', 'abc123'])).resolves.toMatchInlineSnapshot(
-    `"CommanderError: error: option '--foo [value]' argument 'abc123' is invalid. Malformed JSON. If passing a string, pass it as a valid JSON string with quotes ("abc123")"`,
+  expect(await run(router, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
+  expect(await run(router, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
+  await expect(run(router, ['foo', '--foo', 'abc123'])).rejects.toMatchInlineSnapshot(
+    `
+      CLI exited with code 1
+        Caused by: CommanderError: error: option '--foo [value]' argument 'abc123' is invalid. Malformed JSON. If passing a string, pass it as a valid JSON string with quotes ("abc123")
+    `,
   )
 })
 
@@ -251,37 +213,14 @@ test('positional array with title', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  const cli = createCli({router})
-  expect(await output(cli, ['foo', 'abc', 'def'])).toMatchInlineSnapshot(`"["abc","def"]"`)
-  expect((await output(cli, ['foo', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
+  expect(await run(router, ['foo', 'abc', 'def'])).toMatchInlineSnapshot(`"["abc","def"]"`)
+  expect((await run(router, ['foo', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
     `"Usage: program foo [options] <files...>"`,
   )
-  expect((await output(cli, ['bar', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
+  expect((await run(router, ['bar', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
     `"Usage: program bar [options] <files...>"`,
   )
-  expect((await output(cli, ['baz', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
+  expect((await run(router, ['baz', '--help'])).split('\n')[0]).toMatchInlineSnapshot(
     `"Usage: program baz [options] <file collection...>"`,
   )
 })
-
-const run = async (cli: TrpcCli, argv: string[]) => {
-  const exit = vi.fn() as any
-  const log = vi.fn()
-  const result = await cli
-    .run({
-      argv,
-      process: {exit}, // prevent process.exit
-      logger: {info: log, error: log},
-    })
-    .catch(err => err)
-  if (result.exitCode !== 0) throw result.cause
-  return {exit, log, result}
-}
-const output = async (cli: TrpcCli, argv: string[]) => {
-  try {
-    const {log} = await run(cli, argv)
-    return log.mock.calls.map(call => call[0]).join('\n')
-  } catch (err) {
-    return String(err)
-  }
-}

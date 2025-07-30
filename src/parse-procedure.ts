@@ -1,13 +1,9 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
-import * as zod4 from 'zod/v4/core'
-import zodToJsonSchema from 'zod-to-json-schema'
 import {CliValidationError} from './errors'
 import {getSchemaTypes} from './json-schema'
 import type {Dependencies, ParsedProcedure, Result} from './types'
-
-// We're going to use eval to require some optional dependencies. It's hard-coded, so safe, but some bundlers like tsdown will emit warnings unless we disguise it.
-const disguisedEval = eval
+import {zodToJsonSchema} from './zod-to-json-schema'
 
 /**
  * Attempts to convert a trpc procedure input to JSON schema.
@@ -48,7 +44,7 @@ export function parseProcedureInputs(inputs: unknown[], dependencies: Dependenci
   }
 
   if (inner.success) {
-    const optionsProps = schemaDefPropValue(inner.value.optionsJsonSchema as JSONSchema7, 'properties')
+    const optionsProps = schemaDefPropValue(inner.value.optionsJsonSchema, 'properties')
     if (optionsProps) {
       const optionishPositionals = Object.entries(optionsProps).flatMap(([key, schema]) => {
         if (typeof schema === 'object' && 'positional' in schema && schema.positional === true) {
@@ -272,9 +268,7 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
     }
   }
 
-  const merged = maybeMergeObjectSchemas(
-    parsedIndividually.map(p => (p.success ? (p.value.optionsJsonSchema as JSONSchema7) : {})),
-  )
+  const merged = maybeMergeObjectSchemas(parsedIndividually.map(p => (p.success ? p.value.optionsJsonSchema : {})))
   if (merged) {
     return {
       success: true,
@@ -514,12 +508,12 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
     zod: (input: unknown) => {
       // @ts-expect-error don't worry lots of ?.
       if (input._zod?.version?.major == 4) {
+        const zod4 = require('zod/v4/core') as typeof import('zod/v4/core')
         return zod4.toJSONSchema(input as never, {
-          // todo[zod@>=4.0.0] remove the line if https://github.com/colinhacks/zod/issues/4167 is resolved, or this comment if it's closed
           io: 'input',
-          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           unrepresentable: 'any',
-          // todo[zod@>=4.0.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
           override: ctx => {
             if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
               ctx.jsonSchema.optional = true
@@ -547,7 +541,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       let valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema']
       if (!valibotToJsonSchemaLib) {
         try {
-          valibotToJsonSchemaLib = disguisedEval(`require('@valibot/to-json-schema')`)
+          valibotToJsonSchemaLib = require('@valibot/to-json-schema')
         } catch (e: unknown) {
           throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`, {cause: e})
         }
@@ -561,7 +555,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       }
       let v: typeof import('valibot')
       try {
-        v = disguisedEval(`require('valibot')`)
+        v = require('valibot')
       } catch {
         // couldn't load valibot, maybe it's aliased to something else? anyway bad luck, you won't know about optional positional parameters, but that's a rare-ish case so not a big deal
         return valibotToJsonSchema(input)
@@ -573,7 +567,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
     },
     effect: (input: unknown) => {
-      const effect = dependencies.effect || (disguisedEval(`require('effect')`) as Dependencies['effect'])
+      const effect = dependencies.effect || (require('effect') as Dependencies['effect'])
       if (!effect) {
         throw new Error(`effect dependency could not be found - try installing it and re-running`)
       }
