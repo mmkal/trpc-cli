@@ -884,7 +884,7 @@ Commands:
 
 ### tRPC v10 vs v11
 
-Both versions 10 and 11 of `@trpc/server` are both supported. v11 is included in the dependencies of this packages, so that you can use it out of the box, but you can also use your own installation. If using tRPC v10 you must pass in your `@trpc/server` module to `createCli`:
+Both versions 10 and 11 of `@trpc/server` are both supported. If using tRPC v10 you must pass in your `@trpc/server` module to `createCli`:
 
 ```ts
 const cli = createCli({router, trpcServer: import('@trpc/server')})
@@ -897,7 +897,7 @@ const cli = createCli({router, trpcServer: await import('@trpc/server')})
 const cli = createCli({router, trpcServer: require('@trpc/server')})
 ```
 
-Note: previously, when trpc v11 was in preview, v10 was included in the dependencies.
+Note: previously, `@trpc/server` was included in the dependencies of this package, but now you have to install it separately.
 
 ### oRPC
 
@@ -1247,11 +1247,9 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 
 ### Implementation and dependencies
 
-All dependencies have zero dependencies of their own, so the dependency tree is very shallow.
+The only dependency is [`commander`](https://npmjs.com/package/commander), for parsing arguments before passing to trpc, which has no dependencies of its own.
 
 ![Dependency tree from npmgraph](./docs/deps.png)
-
-- [commander](https://npmjs.com/package/commander) for parsing arguments before passing to trpc
 
 `@trpc/server` and `@orpc/server` are peerDependencies, but one of the two must be installed. Similarly one of `zod`, `valibot`, `arktype` or `effect` will likely be needed for input validation. The code from [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) has been copied more or less as-is to this repo in order to support json schema conversion for old versions of zod.
 
