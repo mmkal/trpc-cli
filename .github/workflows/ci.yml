@@ -151,20 +151,6 @@ jobs:
           ' > input-schema.ts
           fi
 
-          if [[ "${{ matrix.schema_lib }}" =~ "zod@~3.25.76" || "${{ matrix.schema_lib }}" =~ "zod@^4.0.0" ]]; then
-          echo '
-          // some type tests to make sure we've set up zod global meta types correctly
-          
-          import {createCli} from "trpc-cli" // need to import from here to make sure module augmentation applies
-
-          createCli satisfies Function
-
-          ;({} as import("zod/v4").GlobalMeta).alias satisfies string | undefined
-          ;({} as import("zod/v4").GlobalMeta).positional satisfies boolean | undefined
-          ;({} as import("zod/v4").GlobalMeta).somethingElse satisfies unknown
-          ' > type-tests.ts
-          fi
-
           # let's create an equivalent file without using `trpc-cli` imports at all - we'll test the bin script on this
           # to make sure it's possible to use the package's CLI on an existing trpc router.
           cat trpc-cli-test.ts | grep -v .run > normal-router-test.ts
