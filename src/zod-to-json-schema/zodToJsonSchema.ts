@@ -1,7 +1,7 @@
 import type { ZodSchema } from "zod";
-import { Options, Targets } from "./Options.js";
+import type { Options, Targets } from "./Options.js";
 import { parseDef } from "./parseDef.js";
-import { JsonSchema7Type } from "./parseTypes.js";
+import type { JsonSchema7Type } from "./parseTypes.js";
 import { getRefs } from "./Refs.js";
 import { parseAnyDef } from "./parsers/any.js";
 

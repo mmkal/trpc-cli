@@ -37,4 +37,4 @@ export * from "./parsers/unknown.js";
 export * from "./selectParser.js";
 export * from "./zodToJsonSchema.js";
 import { zodToJsonSchema } from "./zodToJsonSchema.js";
-export default zodToJsonSchema;
+export default zodToJsonSchema

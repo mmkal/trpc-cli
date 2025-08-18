@@ -1,17 +1,13 @@
-import type {
-  ZodMapDef,
-  ZodRecordDef,
-  ZodTypeAny,
-} from "zod";
+import {ZodFirstPartyTypeKind} from "../ZodFirstPartyTypeKind.js";
+import type { ZodMapDef, ZodRecordDef, ZodTypeAny } from "zod";
 import { parseDef } from "../parseDef.js";
-import { JsonSchema7Type } from "../parseTypes.js";
-import { Refs } from "../Refs.js";
-import { JsonSchema7EnumType } from "./enum.js";
-import { JsonSchema7ObjectType } from "./object.js";
-import { JsonSchema7StringType, parseStringDef } from "./string.js";
+import type { JsonSchema7Type } from "../parseTypes.js";
+import type { Refs } from "../Refs.js";
+import type { JsonSchema7EnumType } from "./enum.js";
+import type { JsonSchema7ObjectType } from "./object.js";
+import { type JsonSchema7StringType, parseStringDef } from "./string.js";
 import { parseBrandedDef } from "./branded.js";
 import { parseAnyDef } from "./any.js";
-import { ZodFirstPartyTypeKind } from "../ZodFirstPartyTypeKind.js";
 
 type JsonSchema7RecordPropertyNamesType =
   | Omit<JsonSchema7StringType, "type">

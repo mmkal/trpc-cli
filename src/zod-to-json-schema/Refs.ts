@@ -1,6 +1,6 @@
 import type { ZodTypeDef } from "zod";
-import { getDefaultOptions, Options, Targets } from "./Options.js";
-import { JsonSchema7Type } from "./parseTypes.js";
+import { getDefaultOptions, type Options, type Targets } from "./Options.js";
+import type { JsonSchema7Type } from "./parseTypes.js";
 
 export type Refs = {
   seen: Map<ZodTypeDef, Seen>;

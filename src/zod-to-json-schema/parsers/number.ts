@@ -1,10 +1,6 @@
 import type { ZodNumberDef } from "zod";
-import {
-  addErrorMessage,
-  ErrorMessages,
-  setResponseValueAndErrors,
-} from "../errorMessages.js";
-import { Refs } from "../Refs.js";
+import { addErrorMessage, type ErrorMessages, setResponseValueAndErrors } from "../errorMessages.js";
+import type { Refs } from "../Refs.js";
 
 export type JsonSchema7NumberType = {
   type: "number" | "integer";

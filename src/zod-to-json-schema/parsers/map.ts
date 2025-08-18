@@ -1,8 +1,8 @@
 import type { ZodMapDef } from "zod";
 import { parseDef } from "../parseDef.js";
-import { JsonSchema7Type } from "../parseTypes.js";
-import { Refs } from "../Refs.js";
-import { JsonSchema7RecordType, parseRecordDef } from "./record.js";
+import type { JsonSchema7Type } from "../parseTypes.js";
+import type { Refs } from "../Refs.js";
+import { type JsonSchema7RecordType, parseRecordDef } from "./record.js";
 import { parseAnyDef } from "./any.js";
 
 export type JsonSchema7MapType = {

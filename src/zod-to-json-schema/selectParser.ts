@@ -1,3 +1,4 @@
+import {ZodFirstPartyTypeKind} from "./ZodFirstPartyTypeKind.js";
 import { parseAnyDef } from "./parsers/any.js";
 import { parseArrayDef } from "./parsers/array.js";
 import { parseBigintDef } from "./parsers/bigint.js";
@@ -27,10 +28,9 @@ import { parseTupleDef } from "./parsers/tuple.js";
 import { parseUndefinedDef } from "./parsers/undefined.js";
 import { parseUnionDef } from "./parsers/union.js";
 import { parseUnknownDef } from "./parsers/unknown.js";
-import { Refs } from "./Refs.js";
+import type { Refs } from "./Refs.js";
 import { parseReadonlyDef } from "./parsers/readonly.js";
-import { JsonSchema7Type } from "./parseTypes.js";
-import { ZodFirstPartyTypeKind } from "./ZodFirstPartyTypeKind.js";
+import type { JsonSchema7Type } from "./parseTypes.js";
 
 export type InnerDefGetter = () => any;
 

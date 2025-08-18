@@ -1,7 +1,7 @@
 import type { ZodEffectsDef } from "zod";
 import { parseDef } from "../parseDef.js";
-import { JsonSchema7Type } from "../parseTypes.js";
-import { Refs } from "../Refs.js";
+import type { JsonSchema7Type } from "../parseTypes.js";
+import type { Refs } from "../Refs.js";
 import { parseAnyDef } from "./any.js";
 
 export function parseEffectsDef(

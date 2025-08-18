@@ -1,5 +1,5 @@
-import { Refs } from "../Refs";
-import { JsonSchema7AnyType, parseAnyDef } from "./any.js";
+import type { Refs } from "../Refs";
+import { type JsonSchema7AnyType, parseAnyDef } from "./any.js";
 
 export type JsonSchema7UnknownType = JsonSchema7AnyType;
 

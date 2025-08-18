@@ -1,6 +1,6 @@
 import type { ZodBigIntDef } from "zod";
-import { Refs } from "../Refs.js";
-import { ErrorMessages, setResponseValueAndErrors } from "../errorMessages.js";
+import type { Refs } from "../Refs.js";
+import { type ErrorMessages, setResponseValueAndErrors } from "../errorMessages.js";
 
 export type JsonSchema7BigintType = {
   type: "integer";

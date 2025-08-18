@@ -1,4 +1,4 @@
-import { Refs } from "../Refs.js";
+import type { Refs } from "../Refs.js";
 
 export type JsonSchema7NullType = {
   type: "null";
