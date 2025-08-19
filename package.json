@@ -18,7 +18,7 @@
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
     "compile": "tsc -p tsconfig.lib.json",
-    "dts-ignore": "sed -i '' \"s#declare module#\\n$(cat src/index.ts | grep ts-ignore | head -n 1)\\ndeclare module#g\" dist/index.d.ts",
+    "dts-ignore": "sed -i.bak \"s#declare module#\\n$(cat src/index.ts | grep ts-ignore | head -n 1)\\ndeclare module#g\" dist/index.d.ts && rm dist/index.d.ts.bak",
     "build": "pnpm clean && pnpm compile && pnpm dts-ignore",
     "dev": "cd test/fixtures && tsx",
     "test": "vitest run"
