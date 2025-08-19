@@ -18,7 +18,7 @@
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
     "compile": "tsc -p tsconfig.lib.json",
-    "dts-ignore": "ORIG=$(cat dist/index.d.ts) node -e \"require('fs').writeFileSync('dist/index.d.ts', process.env.ORIG.replace(/declare module/g, '// @ts-ignore\\ndeclare module'))\"",
+    "dts-ignore": "sed -i '' \"s#declare module#\\n$(cat src/index.ts | grep ts-ignore | head -n 1)\\ndeclare module#g\" dist/index.d.ts",
     "build": "pnpm clean && pnpm compile && pnpm dts-ignore",
     "dev": "cd test/fixtures && tsx",
     "test": "vitest run"
