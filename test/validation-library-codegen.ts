@@ -77,10 +77,10 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
     }
   }
 
-  function preprocessCode(code: string) {
+  function getRidOfCertainComments(code: string) {
     return code
-      .replaceAll('// expect', '') // allow manually commenting out specific assertions
-      .replaceAll('// await expect', '') // allow manually commenting out specific assertions
+      .replaceAll('// expect', 'expect') // allow manually commenting out specific assertions
+      .replaceAll('// await expect', 'await expect') // allow manually commenting out specific assertions
       .split('// extra assertions')[0] // allow adding some extra assertions
       .replaceAll('//\n', '') // get rid of comments that are just forcing prettier to make line breaks
       .trim()
@@ -95,12 +95,12 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
 
   let expected = zod3.tests
     .map(sourceTest => {
-      const sourceParsed = parseTest(removeLineComments(preprocessCode(sourceTest.code)))
+      const sourceParsed = parseTest(removeLineComments(getRidOfCertainComments(sourceTest.code)))
 
       const existingTargetTest = current.tests.find(x => x.name === sourceTest.name)
       if (!existingTargetTest) return sourceTest.code
 
-      const existingCode = preprocessCode(existingTargetTest.code)
+      const existingCode = getRidOfCertainComments(existingTargetTest.code)
       const existingParsed = parseTest(existingCode)
 
       // the expected code is the *source* code, but we're going to swap in specific values from the existing (target) test code
@@ -146,54 +146,14 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
         const lines = input.split('\n')
         return lines.map(line => line.trimStart()).join('\n')
       }
-      const comparableCode = (input: string) => removeLineComments(unindentAllLines(prettyCode(preprocessCode(input))))
-      // _logs.push(`
-      //   source:\n${prettyCode(sourceTest.code)}\n
-      //   source with placeholders:\n${prettyCode(expectedCode)}\n
-      //   existing:\n${prettyCode(existingCode)}\n
-      //   existing with placeholders:\n${prettyCode(existingCode)}\n
-      //   expected:\n${prettyCode(expectedCode)}\n
-      // `)
+      const comparableCode = (input: string) =>
+        removeLineComments(unindentAllLines(prettyCode(getRidOfCertainComments(input))))
 
       if (comparableCode(expectedCode) === comparableCode(existingCode)) {
         return existingTargetTest.code
       }
 
       return expectedCode
-      // const existingPlaceholders = existingParsed.placeholders
-      // let sourceTestCode = sourceParsed.c
-      // const zodExamples = [] as string[]
-      // for (let i = 0; i < 10; i++) {
-      //   const placeholder = `__PLACEHOLDER__${i}__()`
-      //   if (i in sourceParsed.placeholders) {
-      //     zodExamples[i] = dedent(sourceParsed.placeholders[i].original)
-      //   }
-      //   if (
-      //     sourceTestCode.includes(placeholder) &&
-      //     existingPlaceholders[i].original &&
-      //     existingPlaceholders[i].original !== placeholder
-      //   ) {
-      //     //   throw new Error(`replacing ${placeholder} with ${existingPlaceholders[i].original}`)
-      //     sourceTestCode = sourceTestCode.replaceAll(placeholder, existingPlaceholders[i].original)
-      //   }
-      // }
-      // const s = zodExamples.length > 1 ? 's' : ''
-      // // TODO: remove this once the diff is in
-      // // eslint-disable-next-line no-constant-condition
-      // if (!existingTargetTest.code.includes('__PLACEHOLDER__')) return sourceTestCode
-      // return sourceTestCode.replace(
-      //   '\n',
-      //   [
-      //     '',
-      //     '/**',
-      //     `  * Type${s} should match the following zod schema${s}`,
-      //     '  * ```ts',
-      //     '  * ' + zodExamples.join('\n\n').replaceAll('\n', '\n  * '),
-      //     '  * ```',
-      //     '  */',
-      //     '',
-      //   ].join('\n'),
-      // )
     })
     .join('\n\n')
 
