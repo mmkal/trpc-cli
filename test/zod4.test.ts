@@ -76,7 +76,7 @@ test('string input', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  // expect(await run(router, ['foo', 'hello'])).toMatchInlineSnapshot(`""hello""`)
+  expect(await run(router, ['foo', 'hello'])).toMatchInlineSnapshot(`""hello""`)
 })
 
 test('enum input', async () => {
