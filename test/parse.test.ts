@@ -248,5 +248,5 @@ test('option with acronym', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['foo', '--add-http-headers'])).toEqual({addHTTPHeaders: true})
+  expect(await run(router, ['foo', '--add-http-headers'])).toEqual(`{"addHTTPHeaders":true}`)
 })
