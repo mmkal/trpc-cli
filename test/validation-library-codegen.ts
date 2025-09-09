@@ -1,5 +1,5 @@
 export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
-  dependencies: {path, fs, dedent},
+  dependencies: {path, fs, recast, babelParser},
   context,
   meta,
 }) => {
@@ -38,76 +38,122 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
 
   const current = parseTestFile(meta.existingContent)
 
-  const parseTest = (test: {code: string}) => {
-    const chunks = test.code.split('.input(')
-    let code = chunks[0]
-    const placeholders = {} as Record<number, {original: string; placeholder: string}>
-    for (const [chunkIndex, chunk] of chunks.slice(1).entries()) {
-      code += `.input(`
-      const firstParen = chunk.indexOf('(')
-      let count = 1
-      const indexOfClosedParen = chunk.split('').findIndex((ch, i) => {
-        if (i < firstParen) return false
-        if (ch === '(') count++
-        if (ch === ')') count--
-        return count === 0
-      })
-      const placeholder = `__PLACEHOLDER__${chunkIndex}__()`
-      code += placeholder
-      placeholders[chunkIndex] = {original: chunk.slice(0, indexOfClosedParen), placeholder}
-      code += chunk.slice(indexOfClosedParen)
+  const parseTest = (testCode: string, ast: ReturnType<typeof babelParser.parse> = recast.parse(testCode)) => {
+    type CallExpression = import('eslint-plugin-mmkal').codegen.dependencies.recast.types.namedTypes.CallExpression
+    const replacements = {
+      inputs: [] as {argumentsCode: string}[],
+      snapshots: [] as {calleeCode: string; argumentsCode: string; arguments: CallExpression['arguments']}[],
     }
-    const codeWithoutInlineSnapshots = code
-      .split(`.toMatchInlineSnapshot(`)
-      .map((chunk, i) => {
-        if (i === 0 || !chunk.startsWith('`')) return chunk
-        return chunk.slice(1).split('`').slice(1).join('`')
-      })
-      .join(`.toMatchInlineSnapshot(`)
-    return {c: code, codeWithoutInlineSnapshots, placeholders}
+
+    recast.visit(ast, {
+      visitCallExpression(p) {
+        if (
+          p.node.callee.type === 'MemberExpression' &&
+          p.node.callee.property.type === 'Identifier' &&
+          p.node.callee.property.name === 'input' &&
+          p.node.arguments.length === 1
+        ) {
+          const index = replacements.inputs.push({argumentsCode: recast.print(p.node.arguments[0]).code}) - 1
+          p.node.arguments = [{type: 'StringLiteral', value: `INPUT_PLACEHOLDER:${index}`}]
+        }
+        const calleeCode = recast.print(p.node.callee).code
+        if (calleeCode.trim().endsWith('toMatchInlineSnapshot') && p.node.arguments.length === 1) {
+          const index =
+            replacements.snapshots.push({
+              calleeCode,
+              argumentsCode: recast.print(p.node.arguments[0]).code,
+              arguments: p.node.arguments,
+            }) - 1
+          p.node.arguments = [{type: 'StringLiteral', value: `SNAPSHOT_PLACEHOLDER:${index}`}]
+        }
+        this.traverse(p)
+      },
+    })
+
+    return {
+      ast,
+      codeWithPlaceholders: recast.print(ast).code,
+      replacements,
+    }
+  }
+
+  function getRidOfCertainComments(code: string) {
+    return code
+      .replaceAll('// expect', 'expect') // allow manually commenting out specific assertions
+      .replaceAll('// await expect', 'await expect') // allow manually commenting out specific assertions
+      .split('// extra assertions')[0] // allow adding some extra assertions
+      .replaceAll('//\n', '') // get rid of comments that are just forcing prettier to make line breaks
+      .trim()
+  }
+
+  function removeLineComments(code: string) {
+    return code
+      .split('\n')
+      .filter(line => !line.trim().startsWith('//'))
+      .join('\n')
   }
 
   let expected = zod3.tests
-    .map(test => {
-      const parsed = parseTest(test)
+    .map(sourceTest => {
+      const sourceParsed = parseTest(removeLineComments(getRidOfCertainComments(sourceTest.code)))
 
-      const existingTest = current.tests.find(x => x.name === test.name)
-      if (!existingTest) return parsed.c
-      const existingParsed = parseTest(existingTest)
-      const existingPlaceholders = existingParsed.placeholders
-      let code = parsed.c
-      const zodExamples = [] as string[]
-      for (let i = 0; i < 10; i++) {
-        const placeholder = `__PLACEHOLDER__${i}__()`
-        if (i in parsed.placeholders) {
-          zodExamples[i] = dedent(parsed.placeholders[i].original)
+      const existingTargetTest = current.tests.find(x => x.name === sourceTest.name)
+      if (!existingTargetTest) return sourceTest.code
+
+      const existingCode = getRidOfCertainComments(existingTargetTest.code)
+      const existingParsed = parseTest(existingCode)
+
+      // the expected code is the *source* code, but we're going to swap in specific values from the existing (target) test code
+      let expectedCode = sourceParsed.codeWithPlaceholders
+      const inputPlaceholders = [...expectedCode.matchAll(/"INPUT_PLACEHOLDER:(\d+)"/g)].map(x => ({
+        string: x[0],
+        index: Number(x[1]),
+      }))
+      const findAndReplaces = [] as Array<{find: string; replace: string}>
+      for (const pl of inputPlaceholders) {
+        const existingInput = existingParsed.replacements.inputs[pl.index]
+        if (existingInput) findAndReplaces.push({find: pl.string, replace: existingInput.argumentsCode})
+      }
+      const snapshotPlaceholders = [...expectedCode.matchAll(/"SNAPSHOT_PLACEHOLDER:(\d+)"/g)].map(x => ({
+        string: x[0],
+        index: Number(x[1]),
+      }))
+      for (const pl of snapshotPlaceholders) {
+        const {calleeCode: calleeSource, argumentsCode: calleeArgs} = sourceParsed.replacements.snapshots[pl.index]
+        const targetReplacement = existingParsed.replacements.snapshots.find(x => x.calleeCode === calleeSource)
+        if (targetReplacement) findAndReplaces.push({find: pl.string, replace: targetReplacement.argumentsCode})
+        else findAndReplaces.push({find: pl.string, replace: calleeArgs})
+        if (existingTargetTest.code.includes(`// ${calleeSource}`)) {
+          // if the assertion has been manually commented out, keep it commented out in the expected code
+          findAndReplaces.push({find: calleeSource, replace: `// ${calleeSource}`})
         }
-        if (
-          code.includes(placeholder) &&
-          existingPlaceholders[i].original &&
-          existingPlaceholders[i].original !== placeholder
-        ) {
-          //   throw new Error(`replacing ${placeholder} with ${existingPlaceholders[i].original}`)
-          code = code.replaceAll(placeholder, existingPlaceholders[i].original)
+        if (existingTargetTest.code.includes(`// await ${calleeSource}`)) {
+          // if the assertion has been manually commented out, keep it commented out in the expected code
+          findAndReplaces.push({find: calleeSource, replace: `// await ${calleeSource}`})
         }
       }
-      const s = zodExamples.length > 1 ? 's' : ''
-      // TODO: remove this once the diff is in
-      // eslint-disable-next-line no-constant-condition
-      if (!existingTest.code.includes('__PLACEHOLDER__')) return code
-      return code.replace(
-        '\n',
-        [
-          '',
-          '/**',
-          `  * Type${s} should match the following zod schema${s}`,
-          '  * ```ts',
-          '  * ' + zodExamples.join('\n\n').replaceAll('\n', '\n  * '),
-          '  * ```',
-          '  */',
-          '',
-        ].join('\n'),
-      )
+
+      for (const r of findAndReplaces) {
+        expectedCode = expectedCode.replaceAll(r.find, r.replace)
+      }
+
+      const prettyCode = (input: string) => {
+        const ast = babelParser.parse(input, {sourceType: 'unambiguous', plugins: ['typescript'], attachComment: false})
+        return recast.prettyPrint(ast).code
+      }
+      /** ignore uninteresting differences in indentation - can occur even after pretty-printing because of snapshot indentations, which vitest ignores */
+      const unindentAllLines = (input: string) => {
+        const lines = input.split('\n')
+        return lines.map(line => line.trimStart()).join('\n')
+      }
+      const comparableCode = (input: string) =>
+        removeLineComments(unindentAllLines(prettyCode(getRidOfCertainComments(input))))
+
+      if (comparableCode(expectedCode) === comparableCode(existingCode)) {
+        return existingTargetTest.code
+      }
+
+      return expectedCode
     })
     .join('\n\n')
 
@@ -120,21 +166,5 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
     expected,
   ].join('\n')
 
-  const removeCruft = (code: string) => {
-    const splitter = '.toMatchInlineSnapshot(`'
-    const chunks = code.split(splitter)
-    let result = chunks[0] + splitter.replace('`', '')
-    for (const chunk of chunks.slice(1)) {
-      result += chunk.split('`').slice(1).join('`')
-    }
-    return result
-      .replaceAll('// expect', 'expect')
-      .replaceAll(/\n\s+\/\/.*?\n/g, '\n')
-      .replaceAll(/[\s"',]+/g, '')
-  }
-
-  if (removeCruft(expected) === removeCruft(meta.existingContent)) {
-    return meta.existingContent
-  }
   return expected
 }
