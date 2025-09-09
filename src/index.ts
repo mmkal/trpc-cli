@@ -606,21 +606,11 @@ function getMeta(procedure: {_def: {meta?: {}}}): Omit<TrpcCliMeta, 'cliMeta'> {
   return meta?.cliMeta || meta || {}
 }
 
-const isUpperCase = (char: string) => char >= 'A' && char <= 'Z'
-function kebabCase(propName: string) {
-  const letters: string[] = []
-  propName.split('').forEach((char, i, arr) => {
-    const prev = arr[i - 1]
-    const next = arr[i + 1]
-    if (isUpperCase(char) && !isUpperCase(prev)) {
-      letters.push('-')
-    } else if (isUpperCase(char) && !isUpperCase(next)) {
-      letters.push('-')
-    }
-    letters.push(char.toLowerCase())
-  })
-  return letters.join('').toLowerCase()
-}
+export const kebabCase = (str: string) =>
+  str
+    .replaceAll(/([\da-z])([A-Z])/g, '$1-$2')
+    .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase()
 
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli

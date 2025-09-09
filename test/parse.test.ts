@@ -224,3 +224,17 @@ test('positional array with title', async () => {
     `"Usage: program baz [options] <file collection...>"`,
   )
 })
+
+test('option with acronym', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(
+        z.object({
+          addHTTPHeaders: z.boolean(),
+        }),
+      )
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['foo', '--add-http-headers'])).toEqual({addHTTPHeaders: true})
+})
