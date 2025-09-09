@@ -12,6 +12,9 @@ echo "zod-to-json-schema version: $VERSION"
 
 # Get the git commit hash for that version from npm
 GIT_HEAD=$(npm view zod-to-json-schema@"$VERSION" gitHead)
+# rm quotes that npm annoyingly adds if parent command has --json
+GIT_HEAD="${GIT_HEAD%\"}"
+GIT_HEAD="${GIT_HEAD#\"}"
 if [[ -z "$GIT_HEAD" ]]; then
   echo "Could not find git commit hash for zod-to-json-schema@$VERSION from npm" >&2
   exit 1
