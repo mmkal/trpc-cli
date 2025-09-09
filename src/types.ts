@@ -32,6 +32,11 @@ export type TrpcServerModuleLike = {
  */
 
 export interface TrpcCliMeta {
+  /**
+   * If true, will always prompt the user for input, if false, will never prompt, if not set, will prompt if input is missing.
+   * Has no effect if `prompts` have not been passed to the `run` function.
+   */
+  prompt?: boolean
   /** Version of the script displayed in `--help` output. Use to avoid enabling `--version` option. */
   version?: string
   /** Description of the script or command to display in `--help` output. */

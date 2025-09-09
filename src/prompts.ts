@@ -8,6 +8,7 @@ import {
   Prompter,
   PromptsLike,
   ClackPromptsLike,
+  TrpcCliMeta,
 } from './types'
 
 type UpstreamOptionInfo = {
@@ -455,18 +456,12 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
     }
     await prompter.setup?.(baseContext)
 
-    // one day maybe consider making this more configurable by the user (or rather the package user -- the developer)
-    // it's kinda complicated. rn 'necessary' means only prompt if something's unspecified and required.
-    // but it'll then prompt for all unspecified args, even if they're not required.
-    const promptConfig = 'necessary' as 'always' | 'never' | 'necessary'
+    const procedureMeta = (analysis.command.original as {__trpcCli?: {meta: TrpcCliMeta}}).__trpcCli?.meta
 
     let shouldPrompt: boolean
-    if (promptConfig === 'always') {
-      shouldPrompt = true
-    } else if (promptConfig === 'never') {
-      shouldPrompt = false
+    if (typeof procedureMeta?.prompt === 'boolean') {
+      shouldPrompt = procedureMeta.prompt
     } else {
-      promptConfig satisfies 'necessary'
       const someRequiredArgsUnspecified = analysis.arguments.some(a => a.original.required && !a.specified)
       const someRequiredOptionsUnspecified = analysis.options.some(o => o.original.required && !o.specified)
       shouldPrompt = someRequiredArgsUnspecified || someRequiredOptionsUnspecified
