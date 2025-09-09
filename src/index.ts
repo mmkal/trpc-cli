@@ -238,6 +238,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       procedurePath: string,
       {meta, parsedProcedure, incompatiblePairs, procedure}: ProcedureInfo,
     ) => {
+      // add meta to the commander command so we can access it in prompt.ts
+      Object.assign(command, {__trpcCli: {path: procedurePath, meta}})
       const optionJsonSchemaProperties = flattenedProperties(parsedProcedure.optionsJsonSchema)
       command.exitOverride(ec => {
         _process.exit(ec.exitCode)
@@ -489,6 +491,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const parentCommand = commandTree[parentPath]
 
       const leafCommand = new Command(leafName && kebabCase(leafName))
+      console.log({procedurePath}, leafCommand.name())
       configureCommand(leafCommand, procedurePath, commandConfig)
       parentCommand.addCommand(leafCommand)
 
