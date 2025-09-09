@@ -13,11 +13,13 @@
   },
   "packageManager": "pnpm@10.12.4",
   "scripts": {
+    "ztjs": "./cp-zod-to-json-schema.sh",
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
     "compile": "tsc -p tsconfig.lib.json",
-    "build": "pnpm clean && pnpm compile",
+    "dts-ignore": "sed -i.bak \"s#declare module#\\n$(cat src/index.ts | grep ts-ignore | head -n 1)\\ndeclare module#g\" dist/index.d.ts && rm dist/index.d.ts.bak",
+    "build": "pnpm clean && pnpm ztjs && pnpm compile && pnpm dts-ignore",
     "dev": "cd test/fixtures && tsx",
     "test": "vitest run"
   },
@@ -37,41 +39,54 @@
   },
   "homepage": "https://github.com/mmkal/trpc-cli#readme",
   "peerDependencies": {
-    "@inquirer/prompts": "*",
-    "omelette": "*"
+    "@orpc/server": "^1.0.0",
+    "@trpc/server": "^10.45.2 || ^11.0.1",
+    "@valibot/to-json-schema": "^1.1.0",
+    "effect": "^3.14.2 || ^4.0.0",
+    "valibot": "^1.1.0",
+    "zod": "^3.24.0 || ^4.0.0"
   },
   "peerDependenciesMeta": {
-    "omelette": {
+    "@orpc/server": {
       "optional": true
     },
-    "@inquirer/prompts": {
+    "@trpc/server": {
+      "optional": true
+    },
+    "@valibot/to-json-schema": {
+      "optional": true
+    },
+    "effect": {
+      "optional": true
+    },
+    "valibot": {
+      "optional": true
+    },
+    "zod": {
       "optional": true
     }
   },
   "dependencies": {
-    "@trpc/server": "^11.1.1",
-    "@types/omelette": "^0.4.4",
-    "commander": "^14.0.0",
-    "picocolors": "^1.0.1",
-    "zod": "^3.25.3",
-    "zod-to-json-schema": "^3.23.0"
+    "commander": "^14.0.0"
   },
   "devDependencies": {
     "@clack/prompts": "0.11.0",
-    "@inquirer/prompts": "7.6.0",
-    "@orpc/contract": "1.6.6",
-    "@orpc/server": "1.6.6",
+    "@inquirer/prompts": "7.5.1",
+    "@orpc/contract": "1.5.0",
+    "@orpc/server": "1.5.0",
+    "@trpc/server": "11.4.3",
     "@types/json-schema": "7.0.15",
-    "@types/node": "20.19.4",
+    "@types/node": "20.17.48",
+    "@types/omelette": "0.4.5",
     "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.3.0",
     "arktype": "^2.1.20",
     "effect": "3.16.12",
     "enquirer": "2.4.1",
     "eslint": "8",
-    "eslint-plugin-mmkal": "0.10.2",
-    "execa": "9.6.0",
-    "expect-type": "1.2.2",
+    "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-codegen/eslint-plugin-mmkal@288006dd60273f9640446faa1cd3fcabfe9e84c1",
+    "execa": "9.3.1",
+    "expect-type": "1.2.1",
     "fs-syncer": "0.5.3",
     "np": "10.2.0",
     "pkg-pr-new": "^0.0.54",
@@ -82,6 +97,8 @@
     "tsx": "4.20.3",
     "typescript": "5.8.3",
     "valibot": "1.1.0",
-    "vitest": "3.2.4"
+    "vitest": "3.2.4",
+    "zod": "3.25.76",
+    "zod-to-json-schema": "3.24.6"
   }
 }
