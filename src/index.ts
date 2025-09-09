@@ -606,7 +606,7 @@ function getMeta(procedure: {_def: {meta?: {}}}): Omit<TrpcCliMeta, 'cliMeta'> {
   return meta?.cliMeta || meta || {}
 }
 
-const isUpperCase = (char: string) => char.toUpperCase() === char
+const isUpperCase = (char: string) => char >= 'A' && char <= 'Z'
 function kebabCase(propName: string) {
   const letters: string[] = []
   propName.split('').forEach((char, i, arr) => {
