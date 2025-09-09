@@ -491,7 +491,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       const parentCommand = commandTree[parentPath]
 
       const leafCommand = new Command(leafName && kebabCase(leafName))
-      console.log({procedurePath}, leafCommand.name())
       configureCommand(leafCommand, procedurePath, commandConfig)
       parentCommand.addCommand(leafCommand)
 
