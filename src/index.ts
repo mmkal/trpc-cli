@@ -606,8 +606,20 @@ function getMeta(procedure: {_def: {meta?: {}}}): Omit<TrpcCliMeta, 'cliMeta'> {
   return meta?.cliMeta || meta || {}
 }
 
+const isUpperCase = (char: string) => char.toUpperCase() === char
 function kebabCase(propName: string) {
-  return propName.replaceAll(/([A-Z])/g, '-$1').toLowerCase()
+  const letters: string[] = []
+  propName.split('').forEach((char, i, arr) => {
+    const prev = arr[i - 1]
+    const next = arr[i + 1]
+    if (isUpperCase(char) && !isUpperCase(prev)) {
+      letters.push('-')
+    } else if (isUpperCase(char) && !isUpperCase(next)) {
+      letters.push('-')
+    }
+    letters.push(char.toLowerCase())
+  })
+  return letters.join('').toLowerCase()
 }
 
 /** @deprecated renamed to `createCli` */
