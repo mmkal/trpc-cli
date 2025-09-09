@@ -1,12 +1,24 @@
 import {initTRPC} from '@trpc/server'
 import {expect, test} from 'vitest'
 import {z} from 'zod/v3'
-import {TrpcCliMeta} from '../src'
+import {kebabCase, TrpcCliMeta} from '../src'
 import {run, snapshotSerializer} from './test-run'
 
 expect.addSnapshotSerializer(snapshotSerializer)
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
+
+test('kebab case', () => {
+  expect(kebabCase('foo')).toMatchInlineSnapshot(`"foo"`)
+  expect(kebabCase('fooBar')).toMatchInlineSnapshot(`"foo-bar"`)
+  expect(kebabCase('fooBarBaz')).toMatchInlineSnapshot(`"foo-bar-baz"`)
+  expect(kebabCase('foBaBa')).toMatchInlineSnapshot(`"fo-ba-ba"`)
+  expect(kebabCase('useMCPServer')).toMatchInlineSnapshot(`"use-mcp-server"`)
+  expect(kebabCase('useMCP')).toMatchInlineSnapshot(`"use-mcp"`)
+  expect(kebabCase('useMCP1')).toMatchInlineSnapshot(`"use-mcp1"`)
+  expect(kebabCase('foo1')).toMatchInlineSnapshot(`"foo1"`)
+  expect(kebabCase('HTML')).toMatchInlineSnapshot(`"html"`)
+})
 
 test('default command', async () => {
   const router = t.router({
