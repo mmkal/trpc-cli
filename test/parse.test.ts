@@ -1,6 +1,6 @@
 import {initTRPC} from '@trpc/server'
 import {expect, test} from 'vitest'
-import {z} from 'zod/v3'
+import {z} from 'zod/v4'
 import {kebabCase, TrpcCliMeta} from '../src'
 import {run, snapshotSerializer} from './test-run'
 
@@ -109,13 +109,13 @@ test('json option', async () => {
   await expect(run(router, ['foo', '--obj', '{"abc":"abc"}'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: CliValidationError: ✖ Required → at obj.def
+        Caused by: CliValidationError: ✖ Invalid input: expected number, received undefined → at obj.def
     `,
   )
   await expect(run(router, ['foo', '--obj', '{"def":1}'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: CliValidationError: ✖ Required → at obj.abc
+        Caused by: CliValidationError: ✖ Invalid input: expected string, received undefined → at obj.abc
     `,
   )
 })
@@ -165,7 +165,7 @@ test('option union array with enum', async () => {
 
   await expect(run(router, ['foo', '--foo'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Expected array, received boolean → at foo
+      Caused by: CliValidationError: ✖ Invalid input: expected array, received boolean → at foo
   `)
   expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"{"foo":[]}"`)
   expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":[true]}"`)
@@ -242,11 +242,12 @@ test('option with acronym', async () => {
     foo: t.procedure
       .input(
         z.object({
-          addHTTPHeaders: z.boolean(),
+          addHTTPHeaders: z.boolean().meta({negatable: true}),
         }),
       )
       .query(({input}) => JSON.stringify(input)),
   })
 
   expect(await run(router, ['foo', '--add-http-headers'])).toEqual(`{"addHTTPHeaders":true}`)
+  expect(await run(router, ['foo', '--no-add-http-headers'])).toEqual(`{"addHTTPHeaders":false}`)
 })
