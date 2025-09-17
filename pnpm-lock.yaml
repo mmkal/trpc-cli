@@ -97,11 +97,11 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@20.17.48)(tsx@4.20.3)
       zod:
-        specifier: 3.25.76
-        version: 3.25.76
+        specifier: 4.1.9
+        version: 4.1.9
       zod-to-json-schema:
         specifier: 3.24.6
-        version: 3.24.6(zod@3.25.76)
+        version: 3.24.6(zod@4.1.9)
 
 packages:
 
@@ -4239,6 +4239,9 @@ packages:
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
+  zod@4.1.9:
+    resolution: {integrity: sha512-HI32jTq0AUAC125z30E8bQNz0RQ+9Uc+4J7V97gLYjZVKRjeydPgGt6dvQzFrav7MYOUGFqqOGiHpA/fdbd0cQ==}
 
   zx@8.8.1:
     resolution: {integrity: sha512-qvsKBnvWHstHKCluKPlEgI/D3+mdiQyMoSSeFR8IX/aXzWIas5A297KxKgPJhuPXdrR6ma0Jzx43+GQ/8sqbrw==}
@@ -8868,10 +8871,12 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  zod-to-json-schema@3.24.6(zod@3.25.76):
+  zod-to-json-schema@3.24.6(zod@4.1.9):
     dependencies:
-      zod: 3.25.76
+      zod: 4.1.9
 
   zod@3.25.76: {}
+
+  zod@4.1.9: {}
 
   zx@8.8.1: {}
