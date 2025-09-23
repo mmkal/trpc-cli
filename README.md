@@ -1117,6 +1117,8 @@ The user will then be asked to input any missing arguments or options. Booleans,
 
 You can also pass in a custom "Prompter". This in theory enables you to prompt in *any way* you'd like. You will be passed a `Command` instance, and then must define `input`, `select`, `confirm` and `checkbox` prompts. You can also define `setup` and `teardown` functions which run before and after the individual prompts for arguments and options. This could be used to render an all-in-one form filling in inputs. See [the tests for an example](./test/prompts.test.ts).
 
+> *Experimental* By default, if you define prompts, the user will be prompted for input if and only if there are some arguments missing. You can forcible enable or disable prompts via `.meta({prompt: true/false})`. If you need to more dynamically figure out if prompting should be enabled, create an issue. It might be possible to allow a callback function too.
+
 ### Completions
 
 > 🚧 Note: This feature is new! Please try it out and [file an issues](https://github.com/mmkal/trpc-cli/issues) if you have problems. 🚧
