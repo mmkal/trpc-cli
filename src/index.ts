@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError, Option} from 'commander'
+import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError} from 'commander'
+import {Option as BaseOption} from 'commander'
 import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
 import {addCompletions} from './completions'
@@ -283,6 +284,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       const unusedOptionAliases: Record<string, string> = {...meta.aliases?.options}
       const addOptionForProperty = ([propertyKey, propertyValue]: [string, JSONSchema7]) => {
+        class Option extends BaseOption {
+          attributeName() {
+            return propertyKey // by default commander uses camelcase(this.name()) which turns `use-mcp-server` into `useMcpServer` - when it might be `useMCPServer`
+          }
+        }
         const description = getDescription(propertyValue)
 
         const longOption = `--${kebabCase(propertyKey)}`
@@ -606,9 +612,11 @@ function getMeta(procedure: {_def: {meta?: {}}}): Omit<TrpcCliMeta, 'cliMeta'> {
   return meta?.cliMeta || meta || {}
 }
 
-function kebabCase(propName: string) {
-  return propName.replaceAll(/([A-Z])/g, '-$1').toLowerCase()
-}
+export const kebabCase = (str: string) =>
+  str
+    .replaceAll(/([\da-z])([A-Z])/g, '$1-$2')
+    .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase()
 
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
