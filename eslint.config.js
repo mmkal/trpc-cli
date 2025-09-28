@@ -1,5 +1,7 @@
-module.exports = [
-  ...require('eslint-plugin-mmkal').recommendedFlatConfigs,
+import mmkal from 'eslint-plugin-mmkal'
+
+export default [
+  ...mmkal.recommendedFlatConfigs,
   {
     rules: {
       'unicorn/prefer-switch': 'off', // mmkal
