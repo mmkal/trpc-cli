@@ -59,6 +59,9 @@ import * as path from "path";
 let content = fs.readFileSync("{}", "utf8");
 
 content = content
+  .replaceAll(`from "../Refs";`, `from "../Refs.js";`)
+  .replaceAll(`from "./Refs";`, `from "./Refs.js";`)
+  .replaceAll(`from "./parseTypes";`, `from "./parseTypes.js";`)
   .split(";")
   .map(s => {
     if (!s.trim().startsWith("import {")) return s;
