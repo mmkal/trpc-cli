@@ -60,6 +60,7 @@ jobs:
         working-directory: test-dir
         run: |
           npm init -y
+          npm pkg set type=module
           npm install ../pkg.tgz --save-dev --save-exact
           installDev() {
             npm install "$@@$(cat ./node_modules/trpc-cli/dist/devDependencies.json | jq -r ".$@")"
