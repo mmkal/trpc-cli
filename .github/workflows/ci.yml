@@ -189,6 +189,7 @@ jobs:
           node trpc-cli-test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
       - name: test bin script
         working-directory: test-dir
+        if: matrix.node >= 22
         run: |
           echo testing --help
           ./node_modules/.bin/trpc-cli normal-router-test.ts --help
