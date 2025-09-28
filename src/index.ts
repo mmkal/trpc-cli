@@ -39,7 +39,6 @@ const getOrcpServerModule = () => {
   return orpcServerOrError
 }
 
-
 // @ts-ignore zod is an optional peer dependency so might not be installed. oh well, you still get this one interface
 declare module 'zod/v4' {
   export interface GlobalMeta {
