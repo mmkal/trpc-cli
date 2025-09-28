@@ -24,7 +24,7 @@ jobs:
       - name: rename tgz
         run: mv $(ls | grep .tgz) pkg.tgz
       - name: arethetypeswrong
-        run: npx --yes @arethetypeswrong/cli ./pkg.tgz
+        run: npx --yes @arethetypeswrong/cli ./pkg.tgz --profile esm-only
       - name: write devDependencies to dist # we're only going to install some devDependencies, this helps ensure we get the right ones
         run: cat package.json | jq .devDependencies > dist/devDependencies.json
       - uses: actions/upload-artifact@v4
