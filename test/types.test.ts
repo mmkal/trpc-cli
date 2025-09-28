@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import {test, expectTypeOf} from 'vitest'
 import {z} from 'zod/v4'
-import {EnquirerLike, InquirerPromptsLike, Promptable} from '../src'
+import {EnquirerLike, InquirerPromptsLike, Promptable} from '../src/index.js'
 
 test('prompt types', async () => {
   expectTypeOf<typeof import('@inquirer/prompts')>().toExtend<InquirerPromptsLike>()

@@ -1,8 +1,8 @@
 import {Schema} from 'effect'
 import {initTRPC} from 'trpcserver11'
 import {expect, test} from 'vitest'
-import {TrpcCliMeta} from '../src'
-import {run, snapshotSerializer} from './test-run'
+import {TrpcCliMeta} from '../src/index.js'
+import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
 

@@ -1,9 +1,22 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
-import {CliValidationError} from './errors'
-import {getSchemaTypes} from './json-schema'
-import type {Dependencies, ParsedProcedure, Result} from './types'
-import {zodToJsonSchema} from './zod-to-json-schema'
+import {CliValidationError} from './errors.js'
+import {getSchemaTypes} from './json-schema.js'
+import type {Dependencies, ParsedProcedure, Result} from './types.js'
+import {zodToJsonSchema} from './zod-to-json-schema/index.js'
+
+const valibotOrError = await import('valibot').catch(String)
+const valibotToJsonSchemaOrError = await import('@valibot/to-json-schema').catch(String)
+const zodToJsonSchemaOrError = await import('zod-to-json-schema').catch(String)
+const arktypeOrError = await import('arktype').catch(String)
+const effectOrError = await import('effect').catch(String)
+const zod4CoreOrError = await import('zod/v4/core').catch(String)
+const getModule = <T>(moduleOrError: T | string): T => {
+  if (typeof moduleOrError === 'string') {
+    throw new Error(`${moduleOrError} could not be found - try installing it and re-running`)
+  }
+  return moduleOrError
+}
 
 /**
  * Attempts to convert a trpc procedure input to JSON schema.
@@ -508,7 +521,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
     zod: (input: unknown) => {
       // @ts-expect-error don't worry lots of ?.
       if (input._zod?.version?.major == 4) {
-        const zod4 = require('zod/v4/core') as typeof import('zod/v4/core')
+        const zod4 = getModule(zod4CoreOrError)
         return zod4.toJSONSchema(input as never, {
           io: 'input',
           // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
@@ -538,14 +551,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       }) as JSONSchema7
     },
     valibot: (input: unknown) => {
-      let valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema']
-      if (!valibotToJsonSchemaLib) {
-        try {
-          valibotToJsonSchemaLib = require('@valibot/to-json-schema')
-        } catch (e: unknown) {
-          throw new Error(`@valibot/to-json-schema could not be found - try installing it and re-running`, {cause: e})
-        }
-      }
+      const valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema'] || getModule(valibotToJsonSchemaOrError)
 
       const valibotToJsonSchema = valibotToJsonSchemaLib?.toJsonSchema
       if (!valibotToJsonSchema) {
@@ -553,13 +559,11 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
           `no 'toJsonSchema' function found in @valibot/to-json-schema - check you are using a supported version`,
         )
       }
-      let v: typeof import('valibot')
-      try {
-        v = require('valibot')
-      } catch {
+      if (typeof valibotOrError === 'string') {
         // couldn't load valibot, maybe it's aliased to something else? anyway bad luck, you won't know about optional positional parameters, but that's a rare-ish case so not a big deal
-        return valibotToJsonSchema(input)
+        return valibotToJsonSchema(input as never)
       }
+      const v = getModule(valibotOrError)
       const parent = valibotToJsonSchema(v.object({child: input as import('valibot').StringSchema<undefined>}), {
         errorMode: 'ignore',
       })
@@ -567,7 +571,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
       return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
     },
     effect: (input: unknown) => {
-      const effect = dependencies.effect || (require('effect') as Dependencies['effect'])
+      const effect = dependencies.effect || getModule(effectOrError)
       if (!effect) {
         throw new Error(`effect dependency could not be found - try installing it and re-running`)
       }
@@ -575,7 +579,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
         const message = `input was not an effect schema - please use effect version 3.14.2 or higher. See https://github.com/mmkal/trpc-cli/pull/63`
         throw new Error(message)
       }
-      return effect.JSONSchema.make(input)
+      return effect.JSONSchema.make(input as never) as JSONSchema7
     },
   } satisfies Record<string, (input: unknown) => JSONSchema7>
 }

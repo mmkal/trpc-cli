@@ -1,8 +1,8 @@
 import {initTRPC} from '@trpc/server'
 import {expect, test} from 'vitest'
 import {z} from 'zod'
-import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src'
-import {looksLikeInstanceof} from '../src/util'
+import {AnyRouter, createCli, TrpcCliMeta, TrpcCliParams} from '../src/index.js'
+import {looksLikeInstanceof} from '../src/util.js'
 
 expect.addSnapshotSerializer({
   test: val => looksLikeInstanceof(val, Error),

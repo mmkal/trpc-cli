@@ -2,8 +2,8 @@ import {initTRPC as initTRPC_v10} from 'trpcserver10'
 import {initTRPC as initTRPC_v11} from 'trpcserver11'
 import {expect, expectTypeOf, test} from 'vitest'
 import {z} from 'zod/v3'
-import {createCli, TrpcCliMeta, TrpcServerModuleLike} from '../src'
-import {isOrpcRouter, Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat'
+import {createCli, TrpcCliMeta, TrpcServerModuleLike} from '../src/index.js'
+import {isOrpcRouter, Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat.js'
 
 expect.addSnapshotSerializer({
   test: val => val?.cause && val.message,

@@ -1,4 +1,4 @@
-import {Log, Logger} from './types'
+import {Log, Logger} from './types.js'
 
 export const lineByLineLogger = getLoggerTransformer(log => {
   /**

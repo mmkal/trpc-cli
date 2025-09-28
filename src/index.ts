@@ -3,9 +3,9 @@ import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArg
 import {Option as BaseOption} from 'commander'
 import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
-import {addCompletions} from './completions'
-import {FailedToExitError, CliValidationError} from './errors'
-import {commandToJSON} from './json'
+import {addCompletions} from './completions.js'
+import {FailedToExitError, CliValidationError} from './errors.js'
+import {commandToJSON} from './json.js'
 import {
   flattenedProperties,
   incompatiblePropertyPairs,
@@ -13,12 +13,12 @@ import {
   getSchemaTypes,
   getEnumChoices,
   getAllowedSchemas,
-} from './json-schema'
-import {lineByLineConsoleLogger} from './logging'
-import {parseProcedureInputs} from './parse-procedure'
-import {promptify} from './prompts'
-import {prettifyStandardSchemaError} from './standard-schema/errors'
-import {looksLikeStandardSchemaFailure} from './standard-schema/utils'
+} from './json-schema.js'
+import {lineByLineConsoleLogger} from './logging.js'
+import {parseProcedureInputs} from './parse-procedure.js'
+import {promptify} from './prompts.js'
+import {prettifyStandardSchemaError} from './standard-schema/errors.js'
+import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {
   type AnyProcedure,
   type AnyRouter,
@@ -27,9 +27,18 @@ import {
   type OrpcRouterLike,
   type Trpc10RouterLike,
   type Trpc11RouterLike,
-} from './trpc-compat'
-import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types'
-import {looksLikeInstanceof} from './util'
+} from './trpc-compat.js'
+import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types.js'
+import {looksLikeInstanceof} from './util.js'
+
+const orpcServerOrError = await import('@orpc/server').catch(String)
+const getOrcpServerModule = () => {
+  if (typeof orpcServerOrError === 'string') {
+    throw new Error(`@orpc/server must be installed. Error loading: ${orpcServerOrError}`)
+  }
+  return orpcServerOrError
+}
+
 
 // @ts-ignore zod is an optional peer dependency so might not be installed. oh well, you still get this one interface
 declare module 'zod/v4' {
@@ -69,7 +78,7 @@ declare module 'zod' {
   }
 }
 
-export * from './types'
+export * from './types.js'
 
 /** @deprecated use `import * as trpcServer from '@trpc/server'` instead */
 export const trpcServer = "@deprecated use `import * as trpcServer from '@trpc/server'` instead"
@@ -93,7 +102,7 @@ export class Command extends BaseCommand {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 
-export {type AnyRouter, type AnyProcedure} from './trpc-compat'
+export {type AnyRouter, type AnyProcedure} from './trpc-compat.js'
 
 /**
  * @internal takes a trpc router and returns an object that you **could** use to build a CLI, or UI, or a bunch of other things with.
@@ -131,9 +140,7 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
   const entries: [string, ProcedureInfo][] = []
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const {traverseContractProcedures, isProcedure} = require('@orpc/server') as typeof import('@orpc/server')
+  const {traverseContractProcedures, isProcedure} = getOrcpServerModule()
   const router = params.router as import('@orpc/server').AnyRouter
   const lazyRoutes = traverseContractProcedures({path: [], router}, ({contract, path}) => {
     let procedure: Record<string, unknown> = params.router
@@ -452,8 +459,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
         } else if (isOrpcRouter(router)) {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const {call} = require('@orpc/server') as typeof import('@orpc/server')
+          const {call} = getOrcpServerModule()
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         } else {
@@ -652,7 +658,7 @@ function transformError(err: unknown, command: Command) {
   return err
 }
 
-export {FailedToExitError, CliValidationError} from './errors'
+export {FailedToExitError, CliValidationError} from './errors.js'
 
 const numberParser = (val: string, {fallback = val as unknown} = {}) => {
   const number = Number(val)

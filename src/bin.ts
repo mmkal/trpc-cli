@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import {createCli} from '.'
+import {createCli} from './index.js'
 import {Command} from 'commander'
 import * as path from 'path'
-import {isOrpcRouter, Trpc11RouterLike} from './trpc-compat'
+import {isOrpcRouter, Trpc11RouterLike} from './trpc-compat.js'
 
 const program = new Command('trpc-cli')
 
