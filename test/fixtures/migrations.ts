@@ -92,7 +92,11 @@ const cli = createCli({
   version: '1.0.0',
   description: 'Manage migrations',
 })
-void cli.run()
+
+if (process.argv[1] === new URL(import.meta.url).pathname) { // no import.meta.main yet https://github.com/nodejs/node/issues/57616
+  void cli.run()
+}
+
 function getMigrations() {
   return [
     {name: 'one', content: 'create table one(id int, name text)', status: 'executed'},
