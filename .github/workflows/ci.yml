@@ -92,7 +92,7 @@ jobs:
           echo '
           import {createCli} from "trpc-cli"
           import * as trpcServer from "@trpc/server"
-          import {InputSchema} from "./input-schema"
+          import {InputSchema} from "./input-schema.js"
 
           const t = trpcServer.initTRPC.create()
 
@@ -112,7 +112,7 @@ jobs:
           echo '
           import {createCli} from "trpc-cli"
           import {os} from "@orpc/server"
-          import {InputSchema} from "./input-schema"
+          import {InputSchema} from "./input-schema.js"
 
           export const router = os.router({
             sayHello: os
