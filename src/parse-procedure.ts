@@ -5,15 +5,16 @@ import {getSchemaTypes} from './json-schema.js'
 import type {Dependencies, ParsedProcedure, Result} from './types.js'
 import {zodToJsonSchema} from './zod-to-json-schema/index.js'
 
-const valibotOrError = await import('valibot').catch(String)
-const valibotToJsonSchemaOrError = await import('@valibot/to-json-schema').catch(String)
-const zodToJsonSchemaOrError = await import('zod-to-json-schema').catch(String)
-const arktypeOrError = await import('arktype').catch(String)
-const effectOrError = await import('effect').catch(String)
-const zod4CoreOrError = await import('zod/v4/core').catch(String)
+const [valibotOrError, valibotToJsonSchemaOrError, effectOrError, zod4CoreOrError] = await Promise.all([
+  import('valibot').catch(String),
+  import('@valibot/to-json-schema').catch(String),
+  import('effect').catch(String),
+  import('zod/v4/core').catch(String),
+])
+
 const getModule = <T>(moduleOrError: T | string): T => {
   if (typeof moduleOrError === 'string') {
-    throw new Error(`${moduleOrError} could not be found - try installing it and re-running`)
+    throw new Error(`${moduleOrError} - try installing it and re-running`)
   }
   return moduleOrError
 }

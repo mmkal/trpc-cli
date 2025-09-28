@@ -93,9 +93,7 @@ const cli = createCli({
   description: 'Manage migrations',
 })
 
-if (process.argv[1] === new URL(import.meta.url).pathname) { // no import.meta.main yet https://github.com/nodejs/node/issues/57616
-  void cli.run()
-}
+void cli.run()
 
 function getMigrations() {
   return [
