@@ -36,7 +36,7 @@ jobs:
     needs: [create_tgz]
     strategy:
       matrix:
-        node: [23, 22]
+        node: [23, 22, 18]
         rpc_lib: 
           # - '@trpc/server@^10.45.2' # doesn't work w valibot
           - '@trpc/server@^11.0.1'
