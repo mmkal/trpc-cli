@@ -32,7 +32,7 @@ import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} 
 import {looksLikeInstanceof} from './util.js'
 
 const orpcServerOrError = await import('@orpc/server').catch(String)
-const getOrcpServerModule = () => {
+const getOrpcServerModule = () => {
   if (typeof orpcServerOrError === 'string') {
     throw new Error(`@orpc/server must be installed. Error loading: ${orpcServerOrError}`)
   }
@@ -139,7 +139,7 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
   const entries: [string, ProcedureInfo][] = []
-  const {traverseContractProcedures, isProcedure} = getOrcpServerModule()
+  const {traverseContractProcedures, isProcedure} = getOrpcServerModule()
   const router = params.router as import('@orpc/server').AnyRouter
   const lazyRoutes = traverseContractProcedures({path: [], router}, ({contract, path}) => {
     let procedure: Record<string, unknown> = params.router
@@ -458,7 +458,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
         } else if (isOrpcRouter(router)) {
-          const {call} = getOrcpServerModule()
+          const {call} = getOrpcServerModule()
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         } else {
