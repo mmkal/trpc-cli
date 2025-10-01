@@ -47,7 +47,7 @@ const runServer = async () => {
     if (!success) continue
   }
 
-  return {server, client}
+  return server
 }
 
 let server: Awaited<ReturnType<typeof runServer>>
@@ -57,11 +57,15 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  server.server.close()
+  server.close()
 })
 
 test('proxy', async () => {
-  const proxiedRouter = proxify(router, async () => server.client)
+  const proxiedRouter = proxify(router, async () => {
+    return createTRPCClient<typeof router>({
+      links: [httpLink({url: 'http://localhost:7500'})],
+    })
+  })
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
   expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
     `"Goodbye Bob"`,
