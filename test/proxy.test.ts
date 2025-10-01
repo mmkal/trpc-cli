@@ -62,7 +62,7 @@ afterAll(async () => {
 })
 
 test('proxy', async () => {
-  const proxiedRouter = proxify(router, 'http://localhost:7500')
+  const proxiedRouter = proxify(router, async () => server.client)
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
   expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
     `"Goodbye Bob"`,

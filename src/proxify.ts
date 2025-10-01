@@ -2,15 +2,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
-import {createTRPCClient, httpLink} from '@trpc/client'
 import {initTRPC} from '@trpc/server'
 import {StandardSchemaV1} from './standard-schema/contract'
 import {AnyProcedure, AnyRouter} from './trpc-compat'
 
-export const proxify = <R extends AnyRouter>(router: R, url: string) => {
-  const client = createTRPCClient({
-    links: [httpLink({url})],
-  })
+export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePath: string) => unknown) => {
   const trpc = initTRPC.create()
   const outputRouterRecord = {}
   const entries = Object.entries<AnyProcedure>((router as any)._def.procedures)
@@ -28,12 +24,14 @@ export const proxify = <R extends AnyRouter>(router: R, url: string) => {
       newProc = newProc.input(input)
     })
     if (oldProc._def.type === 'query') {
-      newProc = newProc.query(({input}: any) => {
-        return (client[procedurePath] as any).query(input)
+      newProc = newProc.query(async ({input}: any) => {
+        const client: any = await getClient(procedurePath)
+        return client[procedurePath].query(input)
       })
     } else if (oldProc._def.type === 'mutation') {
-      newProc = newProc.mutation(({input}: any) => {
-        return (client[procedurePath] as any).mutate(input)
+      newProc = newProc.mutation(async ({input}: any) => {
+        const client: any = await getClient(procedurePath)
+        return client[procedurePath].mutate(input)
       })
     }
 
