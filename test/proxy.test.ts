@@ -3,10 +3,8 @@ import {initTRPC} from '@trpc/server'
 import {createHTTPServer} from '@trpc/server/adapters/standalone'
 import {afterAll, beforeAll, expect, test} from 'vitest'
 import {z} from 'zod'
-import {AnyProcedure, AnyRouter, parseRouter, TrpcCliMeta} from '../src'
+import {TrpcCliMeta} from '../src'
 import {proxify} from '../src/proxify'
-import {StandardSchemaV1} from '../src/standard-schema/contract'
-import {run, snapshotSerializer} from './test-run'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
