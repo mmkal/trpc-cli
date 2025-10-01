@@ -5,6 +5,7 @@ import {afterAll, beforeAll, expect, test} from 'vitest'
 import {z} from 'zod'
 import {TrpcCliMeta} from '../src'
 import {proxify} from '../src/proxify'
+import {run} from './test-run'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
