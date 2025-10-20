@@ -1,5 +1,5 @@
-import {StandardSchemaV1} from './contract'
-import {looksLikeStandardSchemaFailure} from './utils'
+import {StandardSchemaV1} from './contract.js'
+import {looksLikeStandardSchemaFailure} from './utils.js'
 
 export const prettifyStandardSchemaError = (error: unknown): string | null => {
   if (!looksLikeStandardSchemaFailure(error)) return null

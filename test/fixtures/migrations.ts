@@ -1,7 +1,7 @@
 import * as trpcServer from '@trpc/server'
 import {z} from 'zod/v4'
-import {createCli, type TrpcCliMeta} from '../../src'
-import * as trpcCompat from '../../src/trpc-compat'
+import {createCli, type TrpcCliMeta} from '../../src/index.js'
+import * as trpcCompat from '../../src/trpc-compat.js'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -92,9 +92,9 @@ const cli = createCli({
   version: '1.0.0',
   description: 'Manage migrations',
 })
-if (require.main === module) {
-  void cli.run()
-}
+
+void cli.run()
+
 function getMigrations() {
   return [
     {name: 'one', content: 'create table one(id int, name text)', status: 'executed'},

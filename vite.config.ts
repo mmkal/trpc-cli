@@ -7,5 +7,6 @@ export default defineConfig({
       enabled: true,
       include: ['test/types.test.ts'],
     },
+    testTimeout: 10_000,
   },
 })

@@ -1,4 +1,4 @@
-import {OmeletteInstanceLike} from '.'
+import {OmeletteInstanceLike} from './index.js'
 import {Command} from 'commander'
 import type omelette from 'omelette'
 
