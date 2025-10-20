@@ -1,5 +1,5 @@
 import {beforeEach, expect, test, vi} from 'vitest'
-import {lineByLineLogger} from '../src/logging'
+import {lineByLineLogger} from '../src/logging.js'
 
 const info = vi.fn()
 const error = vi.fn()

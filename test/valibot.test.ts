@@ -2,8 +2,8 @@ import * as trpcServer from '@trpc/server'
 import {inspect} from 'util'
 import * as v from 'valibot'
 import {expect, test} from 'vitest'
-import {createCli, TrpcCliMeta} from '../src'
-import {run, snapshotSerializer} from './test-run'
+import {createCli, TrpcCliMeta} from '../src/index.js'
+import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
 
@@ -592,12 +592,13 @@ test('defaults and negations', async () => {
 })
 // codegen:end
 
-test('valibot schemas to JSON schema', () => {
+test('valibot schemas to JSON schema', async () => {
+  const vtjs = await import('@valibot/to-json-schema')
   // just a test to quickly see how valibot schemas are converted to JSON schema
   // honestly not a test of trpc-cli at all but useful for debugging
   const toJsonSchema = (schema: any) => {
     try {
-      return require('@valibot/to-json-schema').toJsonSchema(schema, {errorMode: 'ignore'})
+      return vtjs.toJsonSchema(schema, {errorMode: 'ignore'})
     } catch (e) {
       return e
     }

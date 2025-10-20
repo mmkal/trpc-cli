@@ -4,8 +4,8 @@ import {type} from 'arktype'
 import {initTRPC} from 'trpcserver11'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import {createCli, TrpcCliMeta} from '../src'
-import {run, snapshotSerializer} from './test-run'
+import {createCli, TrpcCliMeta} from '../src/index.js'
+import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
 

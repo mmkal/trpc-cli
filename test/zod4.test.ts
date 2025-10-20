@@ -2,8 +2,8 @@ import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
 import {z} from 'zod/v4'
-import {createCli, TrpcCliMeta} from '../src'
-import {run, snapshotSerializer} from './test-run'
+import {createCli, TrpcCliMeta} from '../src/index.js'
+import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
 

@@ -9,7 +9,7 @@ import {
   PromptsLike,
   ClackPromptsLike,
   TrpcCliMeta,
-} from './types'
+} from './types.js'
 
 type UpstreamOptionInfo = {
   typeName: 'UpstreamOptionInfo'

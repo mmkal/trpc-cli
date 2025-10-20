@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import * as trpcServer from '@trpc/server'
 import {z} from 'zod/v4'
-import {createCli, type TrpcCliMeta} from '../../src'
+import {createCli, type TrpcCliMeta} from '../../src/index.js'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 

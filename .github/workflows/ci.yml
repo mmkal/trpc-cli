@@ -24,7 +24,7 @@ jobs:
       - name: rename tgz
         run: mv $(ls | grep .tgz) pkg.tgz
       - name: arethetypeswrong
-        run: npx --yes @arethetypeswrong/cli ./pkg.tgz
+        run: npx --yes @arethetypeswrong/cli ./pkg.tgz --profile esm-only
       - name: write devDependencies to dist # we're only going to install some devDependencies, this helps ensure we get the right ones
         run: cat package.json | jq .devDependencies > dist/devDependencies.json
       - uses: actions/upload-artifact@v4
@@ -36,7 +36,7 @@ jobs:
     needs: [create_tgz]
     strategy:
       matrix:
-        node: [23, 22]
+        node: [23, 22, 18]
         rpc_lib: 
           # - '@trpc/server@^10.45.2' # doesn't work w valibot
           - '@trpc/server@^11.0.1'
@@ -60,6 +60,7 @@ jobs:
         working-directory: test-dir
         run: |
           npm init -y
+          npm pkg set type=module
           npm install ../pkg.tgz --save-dev --save-exact
           installDev() {
             npm install "$@@$(cat ./node_modules/trpc-cli/dist/devDependencies.json | jq -r ".$@")"
@@ -91,7 +92,7 @@ jobs:
           echo '
           import {createCli} from "trpc-cli"
           import * as trpcServer from "@trpc/server"
-          import {InputSchema} from "./input-schema"
+          import {InputSchema} from "./input-schema.js"
 
           const t = trpcServer.initTRPC.create()
 
@@ -111,7 +112,7 @@ jobs:
           echo '
           import {createCli} from "trpc-cli"
           import {os} from "@orpc/server"
-          import {InputSchema} from "./input-schema"
+          import {InputSchema} from "./input-schema.js"
 
           export const router = os.router({
             sayHello: os
@@ -188,6 +189,7 @@ jobs:
           node trpc-cli-test.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
       - name: test bin script
         working-directory: test-dir
+        if: matrix.node >= 22
         run: |
           echo testing --help
           ./node_modules/.bin/trpc-cli normal-router-test.ts --help
