@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import {StandardSchemaV1} from './standard-schema/contract'
+import {StandardSchemaV1} from './standard-schema/contract.js'
 
 /**
  * Type which looks *enough* like a trpc v11(+?) router to infer its types correctly

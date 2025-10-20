@@ -1,8 +1,8 @@
 globalThis.require = require
 
 import {expect} from 'vitest'
-import {AnyRouter, FailedToExitError, TrpcCliParams, createCli} from '../src'
-import {looksLikeInstanceof} from '../src/util'
+import {AnyRouter, FailedToExitError, TrpcCliParams, createCli} from '../src/index.js'
+import {looksLikeInstanceof} from '../src/util.js'
 
 export const run = <R extends AnyRouter>(router: R, argv: string[], {expectJsonInput = false} = {}) => {
   return runWith({router}, argv, {expectJsonInput})

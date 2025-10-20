@@ -534,11 +534,11 @@ cli.run() // e.g. `mycli add 1 2`
 Here's a more involved example, along with what it outputs:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/calculator.ts} -->
-<!-- hash:1cf3ca377bfbcbdc438a2347fcf64054 -->
+<!-- hash:ca846094dd993fe7d2317316ec61de32 -->
 ```ts
 import * as trpcServer from '@trpc/server'
-import {createCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod/v4'
+import {createCli, type TrpcCliMeta} from '../../src/index.js'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -706,12 +706,12 @@ const appRouter = trpc.router({
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:e936e1bd03532ba755f3d46a3485e22f -->
+<!-- hash:aa4cd72750b41b9734014c462e0a4d8d -->
 ```ts
 import * as trpcServer from '@trpc/server'
-import {createCli, type TrpcCliMeta} from 'trpc-cli'
 import {z} from 'zod/v4'
-import * as trpcCompat from '../../src/trpc-compat'
+import {createCli, type TrpcCliMeta} from '../../src/index.js'
+import * as trpcCompat from '../../src/trpc-compat.js'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -823,9 +823,9 @@ const cli = createCli({
   version: '1.0.0',
   description: 'Manage migrations',
 })
-if (require.main === module) {
-  void cli.run()
-}
+
+void cli.run()
+
 function getMigrations() {
   return [
     {
@@ -1207,7 +1207,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L207)
+#### [createCli](./src/index.ts#L213)
 
 Run a trpc router as a CLI.
 

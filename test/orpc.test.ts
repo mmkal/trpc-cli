@@ -6,7 +6,7 @@ import {implement, os, unlazyRouter} from '@orpc/server'
 import * as v from 'valibot'
 import {expect, test} from 'vitest'
 import {z} from 'zod/v4'
-import {run, snapshotSerializer} from './test-run'
+import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer({
   test: val => val instanceof z.ZodType,

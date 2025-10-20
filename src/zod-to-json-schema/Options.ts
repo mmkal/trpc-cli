@@ -1,6 +1,6 @@
 import type { ZodSchema, ZodTypeDef } from "zod";
-import type { Refs, Seen } from "./Refs";
-import type { JsonSchema7Type } from "./parseTypes";
+import type { Refs, Seen } from "./Refs.js";
+import type { JsonSchema7Type } from "./parseTypes.js";
 
 export type Targets =
   | "jsonSchema7"
