@@ -3,8 +3,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {initTRPC} from '@trpc/server'
-import {StandardSchemaV1} from './standard-schema/contract'
-import {AnyProcedure, AnyRouter} from './trpc-compat'
+import {StandardSchemaV1} from './standard-schema/contract.js'
+import {AnyProcedure, AnyRouter} from './trpc-compat.js'
 
 export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePath: string) => unknown) => {
   const trpc = initTRPC.create()
