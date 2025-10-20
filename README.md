@@ -909,7 +909,7 @@ import {createCli} from 'trpc-cli'
 import {z} from 'zod'
 
 export const router = os.router({
-  add: os.procedure
+  add: os
     .input(z.object({left: z.number(), right: z.number()}))
     .handler(({input}) => input.left + input.right),
 })
@@ -927,7 +927,7 @@ import {z} from 'zod'
 
 export const router = os.router({
   real: {
-    add: os.procedure
+    add: os
       .input(z.object({left: z.number(), right: z.number()}))
       .handler(({input}) => input.left + input.right),
   },
