@@ -25,8 +25,8 @@ importers:
         specifier: 1.5.0
         version: 1.5.0
       '@trpc/server':
-        specifier: 11.4.3
-        version: 11.4.3(typescript@5.8.3)
+        specifier: 11.6.0
+        version: 11.6.0(typescript@5.8.3)
       '@types/json-schema':
         specifier: 7.0.15
         version: 7.0.15
@@ -932,6 +932,11 @@ packages:
 
   '@trpc/server@11.4.3':
     resolution: {integrity: sha512-wnWq3wiLlMOlYkaIZz+qbuYA5udPTLS4GVVRyFkr6aT83xpdCHyVtURT+u4hSoIrOXQM9OPCNXSXsAujWZDdaw==}
+    peerDependencies:
+      typescript: '>=5.7.2'
+
+  '@trpc/server@11.6.0':
+    resolution: {integrity: sha512-skTso0AWbOZck40jwNeYv++AMZXNWLUWdyk+pB5iVaYmEKTuEeMoPrEudR12VafbEU6tZa8HK3QhBfTYYHDCdg==}
     peerDependencies:
       typescript: '>=5.7.2'
 
@@ -5080,6 +5085,10 @@ snapshots:
   '@trpc/server@10.45.2': {}
 
   '@trpc/server@11.4.3(typescript@5.8.3)':
+    dependencies:
+      typescript: 5.8.3
+
+  '@trpc/server@11.6.0(typescript@5.8.3)':
     dependencies:
       typescript: 5.8.3
 
