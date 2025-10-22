@@ -5,7 +5,7 @@ import stripAnsi from 'strip-ansi'
 import {expect, test as baseTest} from 'vitest'
 import '../src' // make sure vitest reruns this file after every change
 
-const test = process.env.CI ? baseTest.skip : baseTest
+const test = process.env.RUN_COMPLETIONS_TESTS ? baseTest : baseTest.skip
 
 const execAll = async (program: string, args: string[], options: import('execa').Options = {}) => {
   const {all} = await execa(program, args, {
