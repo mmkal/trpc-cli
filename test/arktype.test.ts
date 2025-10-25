@@ -1,5 +1,3 @@
-/* eslint-disable vitest/expect-expect */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import {type} from 'arktype'
 import {initTRPC} from 'trpcserver11'
 import {inspect} from 'util'

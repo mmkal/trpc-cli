@@ -374,7 +374,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
   })
   const types = `[${items.map(s => schemaDefPropValue(s, 'type')).join(', ')}]`
 
-  if (flagsSchemaIndex > -1 && flagsSchemaIndex !== items.length - 1) {
+  if (flagsSchemaIndex !== -1 && flagsSchemaIndex !== items.length - 1) {
     return {
       success: false,
       error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
@@ -510,11 +510,6 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 }
 
 // #region vendor specific stuff
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-require-imports */
 
 /** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
 const getJsonSchemaConverters = (dependencies: Dependencies) => {

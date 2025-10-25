@@ -99,8 +99,6 @@ export class Command extends BaseCommand {
 
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-
 export {type AnyRouter, type AnyProcedure} from './trpc-compat.js'
 
 /**
@@ -368,7 +366,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         let option: Option | null = null
 
-        // eslint-disable-next-line unicorn/prefer-switch
         if (propertyType === 'string') {
           option = new Option(`${flags} ${bracketise('string')}`, description)
         } else if (propertyType === 'boolean') {
