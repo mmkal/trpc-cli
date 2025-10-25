@@ -2,7 +2,6 @@ import type {JSONSchema7} from 'json-schema'
 import {CommandJSON} from './json.js'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat.js'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** A tRPC router. Procedures will become CLI commands. */
   router: R

@@ -1,4 +1,3 @@
-/* eslint-disable import-x/order */
 import {Argument, Command, Option} from 'commander'
 import {
   CommanderProgramLike,
@@ -361,7 +360,6 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
   const command = program as Command
   type ParseOptions = {from: 'user' | 'node' | 'electron'}
   const analyseThenParse = async (argv: string[], parseOptions?: ParseOptions) => {
-    // eslint-disable-next-line no-console
     if (parseOptions?.from === 'electron') {
       // eslint-disable-next-line no-console
       console.warn(
