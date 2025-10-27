@@ -55,8 +55,8 @@ importers:
         specifier: 9.38.0
         version: 9.38.0
       eslint-plugin-mmkal:
-        specifier: 0.11.2
-        version: 0.11.2(@typescript-eslint/utils@8.46.2(eslint@9.38.0)(typescript@5.8.3))(typescript@5.8.3)(vitest@3.2.4(@types/node@20.17.48))
+        specifier: 0.11.3
+        version: 0.11.3(@typescript-eslint/utils@8.46.2(eslint@9.38.0)(typescript@5.8.3))(typescript@5.8.3)(vitest@3.2.4(@types/node@20.17.48))
       execa:
         specifier: 9.3.1
         version: 9.3.1
@@ -2032,8 +2032,8 @@ packages:
       unrs-resolver:
         optional: true
 
-  eslint-plugin-codegen@0.34.0:
-    resolution: {integrity: sha512-EbmoWjZMmV3bKNsdbC0T/FzFmA3+0AbjcfpaD1H4OQpmw09I/isIMy2lMLvfc0FEMHjeUJ4iNTni1aUc4ZegJg==}
+  eslint-plugin-codegen@0.34.1:
+    resolution: {integrity: sha512-Z9N+8eIP5G61Ta+kYf87h9fN8RkxtT6Kjy9goHVGeSgAPryPhcU2SrS4265z2qtKhrNlpSU6gYIcETMbUySfXg==}
     engines: {node: '>=18.0.0'}
 
   eslint-plugin-functional@7.3.0:
@@ -2079,8 +2079,8 @@ packages:
     peerDependencies:
       eslint: '>=8'
 
-  eslint-plugin-mmkal@0.11.2:
-    resolution: {integrity: sha512-AmZRdKG0EcId0L50rWLqkwCzGoitCOYintPgvd9Y8T5NDndMMCQ2GN4JNJr7bKPi+oOWInnYEoF2cNgP3Eh06A==}
+  eslint-plugin-mmkal@0.11.3:
+    resolution: {integrity: sha512-cGsFc4bH8AQYSAiwEPvmiW2M3R24DU/TrRFcHoUT+QuXdhljr2vgTiWOoNsbvtHoBhUfX1fEV9yCYmfHl3cKNw==}
     engines: {node: '>=18'}
 
   eslint-plugin-prettier@5.5.4:
@@ -6182,7 +6182,7 @@ snapshots:
     optionalDependencies:
       unrs-resolver: 1.11.1
 
-  eslint-plugin-codegen@0.34.0(eslint@9.38.0):
+  eslint-plugin-codegen@0.34.1(eslint@9.38.0):
     dependencies:
       '@babel/core': 7.28.5
       '@babel/generator': 7.28.5
@@ -6197,7 +6197,6 @@ snapshots:
       '@types/glob': 7.1.3
       '@types/js-yaml': 3.12.5
       '@types/lodash': 4.17.20
-      '@types/node': 20.17.48
       cheerio: 1.1.2
       dedent: 1.7.0
       eslint-plugin-markdown: 4.0.1(eslint@9.38.0)
@@ -6284,7 +6283,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-mmkal@0.11.2(@typescript-eslint/utils@8.46.2(eslint@9.38.0)(typescript@5.8.3))(typescript@5.8.3)(vitest@3.2.4(@types/node@20.17.48)):
+  eslint-plugin-mmkal@0.11.3(@typescript-eslint/utils@8.46.2(eslint@9.38.0)(typescript@5.8.3))(typescript@5.8.3)(vitest@3.2.4(@types/node@20.17.48)):
     dependencies:
       '@eslint/js': 9.38.0
       '@next/eslint-plugin-next': 15.5.6
@@ -6298,7 +6297,7 @@ snapshots:
       eslint-config-xo: 0.49.0(eslint@9.38.0)
       eslint-config-xo-react: 0.28.0(eslint@9.38.0)
       eslint-config-xo-typescript: 9.0.0(eslint@9.38.0)(typescript@5.8.3)
-      eslint-plugin-codegen: 0.34.0(eslint@9.38.0)
+      eslint-plugin-codegen: 0.34.1(eslint@9.38.0)
       eslint-plugin-functional: 7.3.0(eslint@9.38.0)(typescript@5.8.3)
       eslint-plugin-import-x: 4.16.1(@typescript-eslint/utils@8.46.2(eslint@9.38.0)(typescript@5.8.3))(eslint@9.38.0)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.38.0)
