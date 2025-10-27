@@ -374,7 +374,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
   })
   const types = `[${items.map(s => schemaDefPropValue(s, 'type')).join(', ')}]`
 
-  if (flagsSchemaIndex !== -1 && flagsSchemaIndex !== items.length - 1) {
+  if (flagsSchemaIndex > -1 && flagsSchemaIndex !== items.length - 1) {
     return {
       success: false,
       error: `Invalid input type ${types}. Positional parameters must be strings, numbers or booleans.`,
