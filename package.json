@@ -84,7 +84,7 @@
     "arktype": "^2.1.20",
     "effect": "3.16.12",
     "enquirer": "2.4.1",
-    "eslint": "8",
+    "eslint": "9",
     "eslint-plugin-mmkal": "https://pkg.pr.new/mmkal/eslint-plugin-codegen/eslint-plugin-mmkal@288006dd60273f9640446faa1cd3fcabfe9e84c1",
     "execa": "9.3.1",
     "expect-type": "1.2.1",
