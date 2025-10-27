@@ -39,7 +39,7 @@ export const testSuite: import('eslint-plugin-mmkal').CodegenPreset = ({
   const current = parseTestFile(meta.existingContent)
 
   const parseTest = (testCode: string, ast: ReturnType<typeof babelParser.parse> = recast.parse(testCode)) => {
-    type CallExpression = import('eslint-plugin-mmkal').codegen.dependencies.recast.types.namedTypes.CallExpression
+    type CallExpression = any // todo: extract useful parts from here: https://github.com/mmkal/eslint-plugin-codegen/commit/8e9a73a3bfaa9a905526e35c031867b1809b87e9 import('eslint-plugin-mmkal').codegen.dependencies.recast.types.namedTypes.CallExpression
     const replacements = {
       inputs: [] as {argumentsCode: string}[],
       snapshots: [] as {calleeCode: string; argumentsCode: string; arguments: CallExpression['arguments']}[],
