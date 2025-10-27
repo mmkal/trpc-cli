@@ -5,7 +5,6 @@ import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
 import {addCompletions} from './completions.js'
 import {FailedToExitError, CliValidationError} from './errors.js'
-import {commandToJSON} from './json.js'
 import {
   flattenedProperties,
   incompatiblePropertyPairs,
@@ -14,6 +13,7 @@ import {
   getEnumChoices,
   getAllowedSchemas,
 } from './json-schema.js'
+import {commandToJSON} from './json.js'
 import {lineByLineConsoleLogger} from './logging.js'
 import {parseProcedureInputs} from './parse-procedure.js'
 import {promptify} from './prompts.js'
