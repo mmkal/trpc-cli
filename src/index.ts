@@ -5,7 +5,6 @@ import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
 import {addCompletions} from './completions.js'
 import {FailedToExitError, CliValidationError} from './errors.js'
-import {commandToJSON} from './json.js'
 import {
   flattenedProperties,
   incompatiblePropertyPairs,
@@ -14,6 +13,7 @@ import {
   getEnumChoices,
   getAllowedSchemas,
 } from './json-schema.js'
+import {commandToJSON} from './json.js'
 import {lineByLineConsoleLogger} from './logging.js'
 import {parseProcedureInputs} from './parse-procedure.js'
 import {promptify} from './prompts.js'
@@ -98,8 +98,6 @@ export class Command extends BaseCommand {
 }
 
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 
 export {type AnyRouter, type AnyProcedure} from './trpc-compat.js'
 
@@ -368,7 +366,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         let option: Option | null = null
 
-        // eslint-disable-next-line unicorn/prefer-switch
         if (propertyType === 'string') {
           option = new Option(`${flags} ${bracketise('string')}`, description)
         } else if (propertyType === 'boolean') {
