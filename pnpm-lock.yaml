@@ -3424,10 +3424,6 @@ packages:
     resolution: {integrity: sha512-Pzd/4IFnTb8E+I1P5rbLQoqpUHcXKg48qTYKi4EANg+sTPwGFEMOcYGiiZz6xuQcOMZP7MPsrdAPx+16Q8qahg==}
     engines: {node: '>=18'}
 
-  quick-lru@7.0.1:
-    resolution: {integrity: sha512-kLjThirJMkWKutUKbZ8ViqFc09tDQhlbQo2MNuVeLWbRauqYP96Sm6nzlQ24F0HFjUNZ4i9+AgldJ9H6DZXi7g==}
-    engines: {node: '>=18'}
-
   radash@12.1.1:
     resolution: {integrity: sha512-h36JMxKRqrAxVD8201FrCpyeNuUY9Y5zZwujr20fFO77tpUtGa6EZzfKw/3WaiBX95fq7+MpsuMLNdSnORAwSA==}
     engines: {node: '>=14.18.0'}
@@ -3979,12 +3975,12 @@ packages:
     resolution: {integrity: sha512-tLq3bSNx+xSpwvAJnzrK0Ep5CLNWjvFTOp71URMaAEWBfRb9nnJiBoUe0tF8bI4ZFO3omgBR6NvnbzVUT3Ly4g==}
     engines: {node: '>=14.16'}
 
-  type-fest@4.18.2:
-    resolution: {integrity: sha512-+suCYpfJLAe4OXS6+PPXjW3urOS4IoP9waSiLuXfLgqZODKw/aWwASvzqE886wA0kQgGy0mIWyhd87VpqIy6Xg==}
-    engines: {node: '>=16'}
-
   type-fest@4.37.0:
     resolution: {integrity: sha512-S/5/0kFftkq27FPNye0XM1e2NsnoD/3FS+pBmbjmmtLT6I+i344KoOf7pvXreaFsDamWeaJX55nczA1m5PsBDg==}
+    engines: {node: '>=16'}
+
+  type-fest@4.41.0:
+    resolution: {integrity: sha512-TeTSQ6H5YHvpqVwBRcnLDCBnDOHWYu7IvGbHT6N8AOymcr9PJGjc1GTtiWZTYg0NCgYwvnYWEkVChQAr9bjfwA==}
     engines: {node: '>=16'}
 
   type-fest@5.1.0:
@@ -5806,7 +5802,7 @@ snapshots:
       chalk: 5.6.2
       cli-boxes: 3.0.0
       string-width: 7.2.0
-      type-fest: 4.41.0
+      type-fest: 4.37.0
       widest-line: 5.0.0
       wrap-ansi: 9.0.2
 
@@ -6143,7 +6139,7 @@ snapshots:
 
   dot-prop@9.0.0:
     dependencies:
-      type-fest: 4.41.0
+      type-fest: 4.37.0
 
   dunder-proto@1.0.1:
     dependencies:
@@ -6567,7 +6563,7 @@ snapshots:
       '@eslint-community/eslint-utils': 4.9.0(eslint@8.57.1)
       ci-info: 4.3.0
       clean-regexp: 1.0.0
-      core-js-compat: 3.45.1
+      core-js-compat: 3.43.0
       eslint: 8.57.1
       esquery: 1.6.0
       globals: 15.15.0
@@ -8019,8 +8015,6 @@ snapshots:
 
   quick-lru@7.1.0: {}
 
-  quick-lru@7.0.1: {}
-
   radash@12.1.1: {}
 
   rc@1.2.8:
@@ -8038,7 +8032,7 @@ snapshots:
     dependencies:
       find-up-simple: 1.0.1
       read-pkg: 9.0.1
-      type-fest: 4.41.0
+      type-fest: 4.37.0
 
   read-pkg-up@7.0.1:
     dependencies:
@@ -8058,7 +8052,7 @@ snapshots:
       '@types/normalize-package-data': 2.4.4
       normalize-package-data: 6.0.2
       parse-json: 8.3.0
-      type-fest: 4.41.0
+      type-fest: 4.37.0
       unicorn-magic: 0.1.0
 
   readable-stream@3.6.2:
@@ -8595,9 +8589,9 @@ snapshots:
 
   type-fest@3.13.1: {}
 
-  type-fest@4.18.2: {}
-
   type-fest@4.37.0: {}
+
+  type-fest@4.41.0: {}
 
   type-fest@5.1.0:
     dependencies:
