@@ -85,7 +85,7 @@
     "effect": "3.15.2",
     "enquirer": "2.4.1",
     "eslint": "9.38.0",
-    "eslint-plugin-mmkal": "0.11.0",
+    "eslint-plugin-mmkal": "0.11.2",
     "execa": "9.3.1",
     "expect-type": "1.2.1",
     "fs-syncer": "0.5.3",
