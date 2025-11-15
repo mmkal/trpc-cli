@@ -3,9 +3,9 @@ import {initTRPC} from '@trpc/server'
 import {createHTTPServer} from '@trpc/server/adapters/standalone'
 import {afterAll, beforeAll, expect, test} from 'vitest'
 import {z} from 'zod'
-import {TrpcCliMeta} from '../src'
-import {proxify} from '../src/proxify'
-import {run} from './test-run'
+import {TrpcCliMeta} from '../src/index.js'
+import {proxify} from '../src/proxify.js'
+import {run} from './test-run.js'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
