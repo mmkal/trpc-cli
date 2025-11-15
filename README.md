@@ -909,7 +909,7 @@ import {createCli} from 'trpc-cli'
 import {z} from 'zod'
 
 export const router = os.router({
-  add: os.procedure
+  add: os
     .input(z.object({left: z.number(), right: z.number()}))
     .handler(({input}) => input.left + input.right),
 })
@@ -927,7 +927,7 @@ import {z} from 'zod'
 
 export const router = os.router({
   real: {
-    add: os.procedure
+    add: os
       .input(z.object({left: z.number(), right: z.number()}))
       .handler(({input}) => input.left + input.right),
   },
@@ -1207,7 +1207,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L213)
+#### [createCli](./src/index.ts#L211)
 
 Run a trpc router as a CLI.
 
