@@ -6,6 +6,10 @@ import {initTRPC} from '@trpc/server'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 import {AnyProcedure, AnyRouter} from './trpc-compat.js'
 
+/**
+ * EXPERIMENTAL: Don't use unless you're willing to help figure out the API, and whether it should even exist.
+ * See description in https://github.com/mmkal/trpc-cli/pull/153
+ */
 export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePath: string) => unknown) => {
   const trpc = initTRPC.create()
   const outputRouterRecord = {}
