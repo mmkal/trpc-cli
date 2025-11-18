@@ -63,6 +63,10 @@ export type OrpcRouterLike<Ctx> = {
   [key: string]: OrpcProcedureLike<Ctx> | OrpcRouterLike<Ctx>
 }
 
+export type ZodFunctionRouterLike = {
+  [key: string]: import('zod').ZodFunction<any, any> | ZodFunctionRouterLike
+}
+
 export type CreateCallerFactoryLike<Procedures = Record<string, (input: unknown) => unknown>> = (
   router: any,
 ) => (context: any) => Procedures

@@ -46,6 +46,37 @@ const router = o.router({
   },
 })
 
+test('norpc-cli', async () => {
+  const router = {
+    greet: z
+      .function({
+        input: z.tuple([
+          z.object({
+            foo: z.string(),
+            bar: z.number(),
+          }),
+        ]),
+      })
+      .implement(async input => `hello ${input.foo} ${input.bar}`),
+    nested: {
+      echo: z
+        .function({
+          input: z.tuple([
+            z.object({
+              message: z.string().meta({positional: true}),
+              capitalize: z.boolean().optional(),
+            }),
+          ]),
+        })
+        .implement(input => {
+          return `you said: ${input.capitalize ? input.message.toUpperCase() : input.message}`
+        }),
+    },
+  }
+
+  expect(await run(router, ['greet', '--foo', 'world', '--bar', '42'])).toMatchInlineSnapshot(`"hello world 42"`)
+})
+
 test('orpc-cli', async () => {
   expect(await run(router, ['hello', '--foo', 'world', '--bar', '42'])).toMatchInlineSnapshot(`"hello world 42"`)
   expect(await run(router, ['with-valibot', '--abc', 'hello', '--def', '42'])).toMatchInlineSnapshot(
