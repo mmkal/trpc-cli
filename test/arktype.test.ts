@@ -369,7 +369,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: [1] must be boolean (was "bad")
+      Caused by: CliValidationError: value at [1] must be boolean (was "bad")
   `)
 })
 

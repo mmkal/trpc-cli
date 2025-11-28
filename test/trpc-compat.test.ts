@@ -88,7 +88,7 @@ test('trpc v11 shape check', async () => {
   expect(router._def.procedures).toHaveProperty('abc.def')
   expect(router._def.procedures).not.toHaveProperty('abc')
 
-  // @ts-expect-error for some reason trpc11 doesn't expose `.inputs` at the type level
+  // NO LONGER A `@ts-expect-error`: for some reason trpc11 didn't expose `.inputs` at the type level
   expect(router._def.procedures.add._def.inputs).toEqual([expect.any(z.ZodType)])
   expect(router._def.procedures.add._def.meta).toEqual({description: 'Add two numbers'})
   expect((router._def.procedures.add._def as any).mutation).toBeUndefined()
