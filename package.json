@@ -97,7 +97,7 @@
     "trpcserver10": "npm:@trpc/server@^10.45.2",
     "trpcserver11": "npm:@trpc/server@^11.1.1",
     "tsx": "4.21.0",
-    "typescript": "5.8.3",
+    "typescript": "5.9.3",
     "valibot": "1.2.0",
     "vitest": "3.2.4",
     "zod": "3.25.76",
