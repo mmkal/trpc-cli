@@ -48,7 +48,7 @@ jobs:
           - 'zod@^4.0.0'
           - 'valibot@^1.0.0'
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
       - uses: actions/download-artifact@v4
