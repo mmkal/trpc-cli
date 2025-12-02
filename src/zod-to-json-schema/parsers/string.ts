@@ -1,4 +1,4 @@
-import type { ZodStringDef } from "zod";
+import type { ZodStringDef } from "zod/v3";
 import { type ErrorMessages, setResponseValueAndErrors } from "../errorMessages.js";
 import type { Refs } from "../Refs.js";
 
@@ -277,7 +277,6 @@ export function parseStringDef(
         case "trim":
           break;
         default:
-          /* c8 ignore next */
           ((_: never) => {})(check);
       }
     }
