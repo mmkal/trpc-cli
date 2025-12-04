@@ -27,7 +27,7 @@ jobs:
         run: npx --yes @arethetypeswrong/cli ./pkg.tgz --profile esm-only
       - name: write devDependencies to dist # we're only going to install some devDependencies, this helps ensure we get the right ones
         run: cat package.json | jq .devDependencies > dist/devDependencies.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: tarball
           path: pkg.tgz
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           name: tarball
       - run: ls
