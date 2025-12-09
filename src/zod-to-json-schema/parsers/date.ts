@@ -1,4 +1,4 @@
-import type { ZodDateDef } from "zod";
+import type { ZodDateDef } from "zod/v3";
 import type { Refs } from "../Refs.js";
 import { type ErrorMessages, setResponseValueAndErrors } from "../errorMessages.js";
 import type { JsonSchema7NumberType } from "./number.js";
