@@ -78,7 +78,7 @@
     "@trpc/client": "11.7.2",
     "@trpc/server": "11.7.2",
     "@types/json-schema": "7.0.15",
-    "@types/node": "24.10.2",
+    "@types/node": "24.10.3",
     "@types/omelette": "0.4.5",
     "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.4.0",
