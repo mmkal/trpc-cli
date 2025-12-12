@@ -43,8 +43,8 @@ importers:
         specifier: 2.4.9
         version: 2.4.9
       '@valibot/to-json-schema':
-        specifier: 1.4.0
-        version: 1.4.0(valibot@1.2.0(typescript@5.9.3))
+        specifier: 1.5.0
+        version: 1.5.0(valibot@1.2.0(typescript@5.9.3))
       arktype:
         specifier: ^2.1.20
         version: 2.1.28
@@ -1574,8 +1574,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@valibot/to-json-schema@1.4.0':
-    resolution: {integrity: sha512-xziHfrrB6al8uoUI876eAYU5x+nZFYifCssYnxS/P7JYe9LjzeKWnqwb8Yno7ulL84Gp0ZNj2GUR+3GXtU8CZQ==}
+  '@valibot/to-json-schema@1.5.0':
+    resolution: {integrity: sha512-GE7DmSr1C2UCWPiV0upRH6mv0cCPsqYGs819fb6srCS1tWhyXrkGGe+zxUiwzn/L1BOfADH4sNjY/YHCuP8phQ==}
     peerDependencies:
       valibot: ^1.2.0
 
@@ -5788,7 +5788,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@valibot/to-json-schema@1.4.0(valibot@1.2.0(typescript@5.9.3))':
+  '@valibot/to-json-schema@1.5.0(valibot@1.2.0(typescript@5.9.3))':
     dependencies:
       valibot: 1.2.0(typescript@5.9.3)
 
