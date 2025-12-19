@@ -73,8 +73,8 @@
   "devDependencies": {
     "@clack/prompts": "0.11.0",
     "@inquirer/prompts": "8.1.0",
-    "@orpc/contract": "1.12.3",
-    "@orpc/server": "1.12.3",
+    "@orpc/contract": "1.13.0",
+    "@orpc/server": "1.13.0",
     "@trpc/client": "11.8.0",
     "@trpc/server": "11.8.0",
     "@types/json-schema": "7.0.15",
