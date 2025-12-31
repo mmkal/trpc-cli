@@ -1,4 +1,4 @@
-import type { ZodBrandedDef } from "zod";
+import type { ZodBrandedDef } from "zod/v3";
 import { parseDef } from "../parseDef.js";
 import type { Refs } from "../Refs.js";
 
