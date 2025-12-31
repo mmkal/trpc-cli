@@ -12,7 +12,7 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@10.26.2",
+  "packageManager": "pnpm@10.27.0",
   "scripts": {
     "ztjs": "./cp-zod-to-json-schema.sh",
     "prepare": "pnpm build",
