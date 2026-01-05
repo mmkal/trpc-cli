@@ -539,6 +539,7 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
     },
     arktype: (input: unknown) => {
       const type = prepareArktypeType(input) as import('arktype').Type
+      const jsonSchema = type['~standard'].jsonSchema.input({target: 'draft-07'})
       return type.toJsonSchema({
         fallback: ctx => {
           if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, optional: true}

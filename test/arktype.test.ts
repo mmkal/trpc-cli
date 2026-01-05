@@ -353,7 +353,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: must be valid according to an anonymous predicate (was [1.2])
+      Caused by: CommanderError: error: too many arguments for 'foo'. Expected 0 arguments but got 1.
   `)
 })
 
@@ -429,11 +429,11 @@ test('record input', async () => {
     "Usage: program test [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type { '$schema':
-                      'https://json-schema.org/draft/2020-12/schema', anyOf: [ {
-                      type: 'object', additionalProperties: [Object] }, { optional:
-                      true } ] }, expected object or tuple.)
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be converted to CLI arguments: Failed to convert input to JSON Schema: {
+          code: "unit",
+          base: {},
+          unit: undefined
+      })
       -h, --help      display help for command
     "
   `)
@@ -732,6 +732,58 @@ test('arktype issues', () => {
   expect(toJsonSchema(type('string | undefined'))).toMatchInlineSnapshot(`
     {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "optional": true,
+        },
+      ],
+    }
+  `)
+})
+
+test('arktype json schema', () => {
+  const schema = type({
+    foo: 'string | number',
+  })
+  const jsonSchema = schema['~standard'].jsonSchema.input({target: 'draft-07', libraryOptions: {}})
+  expect(jsonSchema).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "foo": {
+          "anyOf": [
+            {
+              "type": "number",
+            },
+            {
+              "type": "string",
+            },
+          ],
+        },
+      },
+      "required": [
+        "foo",
+      ],
+      "type": "object",
+    }
+  `)
+
+  expect(
+    type('string | undefined')['~standard'].jsonSchema.input({
+      target: 'draft-07',
+      libraryOptions: {
+        fallback: ctx => {
+          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, optional: true}
+          return ctx.base
+        },
+      },
+    }),
+  ).toMatchInlineSnapshot(`
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
       "anyOf": [
         {
           "type": "string",
