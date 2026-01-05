@@ -459,7 +459,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         } else {
-          const resolvedTrpcServer = await (params.trpcServer || (await import('@trpc/server')))
+          const resolvedTrpcServer = await (params.trpcServer ||
+            (await import('@trpc/server').catch(e => {
+              throw new Error(`@trpc/server must be installed when using tRPC-style routers. Error loading: ${e}`)
+            })))
           const createCallerFactor = resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike
           caller = createCallerFactor(router)(params.context)
         }
