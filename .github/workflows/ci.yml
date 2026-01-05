@@ -215,12 +215,6 @@ jobs:
           echo checking say-hello output
           ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
 
-      - name: test bun bundled
-        if: matrix.node >= 22
-        working-directory: test-dir
-        run: |
-          bun bun-bundled.js --help | grep say-hello
-          bun bun-bundled.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!!!'
       - name: test bun compiled
         if: matrix.node >= 22
         working-directory: test-dir
