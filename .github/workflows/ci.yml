@@ -48,7 +48,8 @@ jobs:
           - 'zod@^4.0.0'
           - 'valibot@^1.0.0'
     steps:
-      - uses: actions/setup-node@v4
+      - name: setup node ${{ matrix.node }}
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
       - uses: actions/download-artifact@v4
@@ -173,6 +174,17 @@ jobs:
         working-directory: test-dir
         run: npx tsc -p .
 
+      # let's also make sure we can bundle and compile with bun (which sometimes has stricter checks for missing peer dependencies)
+      - uses: oven-sh/setup-bun@v2
+      - name: bun build
+        if: matrix.node >= 22
+        working-directory: test-dir
+        run: bun build trpc-cli-test.ts > bun-bundled.js
+      - name: bun compile
+        if: matrix.node >= 22
+        working-directory: test-dir
+        run: bun build trpc-cli-test.ts --compile --outfile bun-compiled-cli
+
       - name: run test
         working-directory: test-dir
         run: |
@@ -202,6 +214,13 @@ jobs:
 
           echo checking say-hello output
           ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+
+      - name: test bun compiled
+        if: matrix.node >= 22
+        working-directory: test-dir
+        run: |
+          ./bun-compiled-cli --help | grep say-hello
+          ./bun-compiled-cli say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!!!'
       - name: tsx test
         if: failure()
         working-directory: test-dir
