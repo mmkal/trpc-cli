@@ -173,6 +173,15 @@ jobs:
         working-directory: test-dir
         run: npx tsc -p .
 
+      # let's also make sure we can bundle and compile with bun (which sometimes has stricter checks for missing peer dependencies)
+      - uses: oven-sh/setup-bun@v2
+      - name: bun build
+        working-directory: test-dir
+        run: bun build trpc-cli-test.ts > bun-bundled.js
+      - name: bun compile
+        working-directory: test-dir
+        run: bun build trpc-cli-test.ts --compile --outfile bun-compiled-cli
+
       - name: run test
         working-directory: test-dir
         run: |
@@ -202,6 +211,17 @@ jobs:
 
           echo checking say-hello output
           ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+
+      - name: test bun bundled
+        working-directory: test-dir
+        run: |
+          bun bun-bundled.js --help | grep say-hello
+          bun bun-bundled.js say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!!!'
+      - name: test bun compiled
+        working-directory: test-dir
+        run: |
+          ./bun-compiled-cli --help | grep say-hello
+          ./bun-compiled-cli say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!!!'
       - name: tsx test
         if: failure()
         working-directory: test-dir
@@ -210,52 +230,3 @@ jobs:
           npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
       - run: ls -R && cat test-dir/normal-router-test.ts
         if: always()
-  test_build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: corepack enable
-      - run: pnpm install
-      - run: pnpm build
-      - uses: oven-sh/setup-bun@v2
-      - uses: actions/download-artifact@v4
-        with:
-          name: tarball
-      - run: ls
-      - run: mkdir test-dir
-      - name: setup test-dir
-        working-directory: test-dir
-        run: |
-          npm init -y
-          npm pkg set type=module
-          npm install ../pkg.tgz --save-dev --save-exact
-          npm install zod @orpc/server --save-dev --save-exact
-
-          echo '
-            import {createCli} from "trpc-cli"
-            import {os} from "@orpc/server"
-
-            export const router = os.router({
-              sayHello: os
-                .input(z.object({name: z.string(), enthusiasm: z.number()}))
-                .handler(({input}) => `Hello ${input.name}!`.repeat(input.enthusiasm))
-            })
-
-            void createCli({router}).run()
-          ' > cli.ts
-      - name: bundle
-        working-directory: test-dir
-        run: |
-          bun build cli.ts > bundled.js
-      - name: run
-        working-directory: test-dir
-        run: |
-          bun bundled.js --help | grep say-hello
-      - name: compile
-        working-directory: test-dir
-        run: |
-          bun build cli.ts --compile --outfile my-compiled-cli
-      - name: run compiled
-        working-directory: test-dir
-        run: |
-          ./my-compiled-cli --help | grep say-hello
