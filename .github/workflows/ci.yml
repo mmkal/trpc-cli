@@ -210,3 +210,52 @@ jobs:
           npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
       - run: ls -R && cat test-dir/normal-router-test.ts
         if: always()
+  test_build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - run: pnpm install
+      - run: pnpm build
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/download-artifact@v4
+        with:
+          name: tarball
+      - run: ls
+      - run: mkdir test-dir
+      - name: setup test-dir
+        working-directory: test-dir
+        run: |
+          npm init -y
+          npm pkg set type=module
+          npm install ../pkg.tgz --save-dev --save-exact
+          npm install zod @orpc/server --save-dev --save-exact
+
+          echo '
+            import {createCli} from "trpc-cli"
+            import {os} from "@orpc/server"
+
+            export const router = os.router({
+              sayHello: os
+                .input(z.object({name: z.string(), enthusiasm: z.number()}))
+                .handler(({input}) => `Hello ${input.name}!`.repeat(input.enthusiasm))
+            })
+
+            void createCli({router}).run()
+          ' > cli.ts
+      - name: bundle
+        working-directory: test-dir
+        run: |
+          bun build cli.ts > bundled.js
+      - name: run
+        working-directory: test-dir
+        run: |
+          bun bundled.js --help | grep say-hello
+      - name: compile
+        working-directory: test-dir
+        run: |
+          bun build cli.ts --compile --outfile my-compiled-cli
+      - name: run compiled
+        working-directory: test-dir
+        run: |
+          ./my-compiled-cli --help | grep say-hello
