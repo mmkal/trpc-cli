@@ -58,6 +58,13 @@ export interface TrpcCliMeta {
   cliMeta?: TrpcCliMeta
   /** If set to true, add a "--no-*" option to negate each boolean option by default. Can still be overriden by doing `z.boolean().meta({negatable: ...})` or equivalent. */
   negateBooleans?: boolean
+  /**
+   * If true, allows unknown CLI options to be passed through to the procedure.
+   * This is useful when building CLI wrappers that need to forward options to underlying tools.
+   * Unknown options will be collected and passed as additional properties in the input object.
+   * Works with schemas like `z.object({}).passthrough()` or `z.record(z.string(), z.unknown())`.
+   */
+  allowUnknownOptions?: boolean
 }
 
 export interface ParsedProcedure {
@@ -75,6 +82,11 @@ export interface ParsedProcedure {
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
   getPojoInput: (argv: {positionalValues: Array<string | string[]>; options: Record<string, unknown>}) => unknown
+  /**
+   * Whether the schema allows additional properties (e.g. via `z.object({}).passthrough()` or `z.record()`).
+   * When true and `allowUnknownOptions` meta is set, unknown CLI options will be passed through.
+   */
+  hasAdditionalProperties?: boolean
 }
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}
