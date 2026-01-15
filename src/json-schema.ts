@@ -65,6 +65,29 @@ export const incompatiblePropertyPairs = (sch: JSONSchema7): Array<[string, stri
   })
 }
 /**
+ * Checks if anyOf represents a simple type union (e.g., {anyOf: [{type: 'boolean'}, {type: 'number'}]})
+ * Returns the types if it is, null otherwise.
+ */
+const getSimpleTypeUnion = (v: JSONSchema7): string[] | null => {
+  if (!('anyOf' in v) || !Array.isArray(v.anyOf)) return null
+  const types: string[] = []
+  for (const sub of v.anyOf) {
+    if (
+      sub &&
+      typeof sub === 'object' &&
+      'type' in sub &&
+      typeof sub.type === 'string' &&
+      Object.keys(sub).length === 1
+    ) {
+      types.push(sub.type)
+    } else {
+      return null // not a simple type union
+    }
+  }
+  return types.length > 0 ? types : null
+}
+
+/**
  * Tries fairly hard to build a roughly human-readable description of a json-schema type.
  * A few common properties are given special treatment, most others are just stringified and output in `key: value` format.
  */
@@ -73,29 +96,49 @@ export const getDescription = (v: JSONSchema7, depth = 0): string => {
     const {items, ...rest} = v
     return [getDescription(items as JSONSchema7, 1), getDescription(rest), 'array'].filter(Boolean).join(' ')
   }
-  return (
-    Object.entries(v)
-      .filter(([k, vv]) => {
-        if (k === 'default' || k === 'additionalProperties' || k === 'optional') return false
-        if (k === 'type' && typeof vv === 'string') return depth > 0 // don't show type: string at depth 0, that's the default
-        if (k.startsWith('$')) return false // helpers props to add on to a few different external library output formats
-        if (k === 'maximum' && vv === Number.MAX_SAFE_INTEGER) return false // zod adds this for `z.number().int().positive()`
-        if (depth <= 1 && k === 'enum' && getEnumChoices(v)?.type === 'string_enum') return false // don't show Enum: ["a","b"], that's handled by commander's `choices`
-        return true
-      })
-      .sort(([a], [b]) => {
-        const scores = [a, b].map(k => (k === 'description' ? 0 : 1))
-        return scores[0] - scores[1]
-      })
-      .map(([k, vv], i) => {
-        if (k === 'type' && Array.isArray(vv)) return `type: ${vv.join(' or ')}`
-        if (k === 'description' && i === 0) return String(vv)
-        if (k === 'properties') return `Object (json formatted)`
-        if (typeof vv === 'object') return `${capitaliseFromCamelCase(k)}: ${JSON.stringify(vv)}`
-        return `${capitaliseFromCamelCase(k)}: ${vv}`
-      })
-      .join('; ') || ''
-  )
+
+  // Check for simple type unions like {anyOf: [{type: 'boolean'}, {type: 'number'}]}
+  // These should render as "type: boolean or number" not "anyOf: [...]"
+  const simpleTypeUnion = getSimpleTypeUnion(v)
+
+  const parts = Object.entries(v)
+    .filter(([k, vv]) => {
+      if (k === 'default' || k === 'additionalProperties' || k === 'optional') return false
+      if (k === 'type' && typeof vv === 'string') return depth > 0 // don't show type: string at depth 0, that's the default
+      if (k.startsWith('$')) return false // helpers props to add on to a few different external library output formats
+      if (k === 'maximum' && vv === Number.MAX_SAFE_INTEGER) return false // zod adds this for `z.number().int().positive()`
+      if (depth <= 1 && k === 'enum' && getEnumChoices(v)?.type === 'string_enum') return false // don't show Enum: ["a","b"], that's handled by commander's `choices`
+      // don't show anyOf: [...] when it's enum choices handled by commander
+      if (depth <= 1 && k === 'anyOf' && getEnumChoices(v)?.type === 'string_enum') return false
+      // don't show anyOf: [...] for simple type unions - we'll render it as "type: X or Y" instead
+      if (k === 'anyOf' && simpleTypeUnion) return false
+      return true
+    })
+    .sort(([a], [b]) => {
+      const scores = [a, b].map(k => (k === 'description' ? 0 : 1))
+      return scores[0] - scores[1]
+    })
+    .map(([k, vv], i) => {
+      if (k === 'type' && Array.isArray(vv)) return `type: ${vv.join(' or ')}`
+      if (k === 'description' && i === 0) return String(vv)
+      if (k === 'properties') return `Object (json formatted)`
+      if (typeof vv === 'object') return `${capitaliseFromCamelCase(k)}: ${JSON.stringify(vv)}`
+      return `${capitaliseFromCamelCase(k)}: ${vv}`
+    })
+
+  // If we have a simple type union, add it to the description
+  if (simpleTypeUnion) {
+    parts.push(`type: ${simpleTypeUnion.join(' or ')}`)
+  }
+
+  // For string enums (including union of string literals), add "Type: string" at depth 1
+  // This ensures arrays of union literals show "Type: string array" not just "array"
+  const enumType = getEnumChoices(v)
+  if (depth > 0 && enumType?.type === 'string_enum' && !('type' in v)) {
+    parts.unshift('Type: string')
+  }
+
+  return parts.join('; ') || ''
 }
 
 export const getSchemaTypes = (
@@ -139,17 +182,14 @@ export const getEnumChoices = (propertyValue: JSONSchema7) => {
   if (!propertyValue) return null
   if (!('enum' in propertyValue && Array.isArray(propertyValue.enum))) {
     // arktype prefers {anyOf: [{const: 'foo'}, {const: 'bar'}]} over {enum: ['foo', 'bar']} 🤷
+    // zod 4 produces {anyOf: [{type: 'string', const: 'foo'}, {type: 'string', const: 'bar'}]}
     if (
       'anyOf' in propertyValue &&
       propertyValue.anyOf?.every(subSchema => {
-        if (
-          subSchema &&
-          typeof subSchema === 'object' &&
-          'const' in subSchema &&
-          Object.keys(subSchema).length === 1 &&
-          typeof subSchema.const === 'string'
-        ) {
-          return true
+        if (subSchema && typeof subSchema === 'object' && 'const' in subSchema && typeof subSchema.const === 'string') {
+          // Allow {const: 'foo'} or {type: 'string', const: 'foo'}
+          const keys = Object.keys(subSchema)
+          return keys.length === 1 || (keys.length === 2 && 'type' in subSchema && subSchema.type === 'string')
         }
         return false
       })
@@ -164,19 +204,18 @@ export const getEnumChoices = (propertyValue: JSONSchema7) => {
     if (
       'anyOf' in propertyValue &&
       propertyValue.anyOf?.every(subSchema => {
-        if (
-          subSchema &&
-          typeof subSchema === 'object' &&
-          'const' in subSchema &&
-          Object.keys(subSchema).length === 1 &&
-          typeof subSchema.const === 'number'
-        ) {
-          return true
+        if (subSchema && typeof subSchema === 'object' && 'const' in subSchema && typeof subSchema.const === 'number') {
+          // Allow {const: 123} or {type: 'number', const: 123} or {type: 'integer', const: 123}
+          const keys = Object.keys(subSchema)
+          return (
+            keys.length === 1 ||
+            (keys.length === 2 && 'type' in subSchema && (subSchema.type === 'number' || subSchema.type === 'integer'))
+          )
         }
         return false
       })
     ) {
-      // all the subschemas are string literals, so we can use them as choices
+      // all the subschemas are number literals, so we can use them as choices
       return {
         type: 'number_enum',
         choices: propertyValue.anyOf.map(subSchema => (subSchema as {const: number}).const),
