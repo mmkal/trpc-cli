@@ -100,7 +100,7 @@
     "typescript": "5.8.3",
     "valibot": "1.2.0",
     "vitest": "3.2.4",
-    "zod": "3.25.76",
-    "zod-to-json-schema": "3.24.6"
+    "zod-to-json-schema": "3.24.6",
+    "zod3": "npm:zod@3.25.76"
   }
 }

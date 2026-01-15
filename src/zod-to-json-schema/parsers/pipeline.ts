@@ -1,4 +1,4 @@
-import type { ZodPipelineDef } from "zod";
+import type { ZodPipelineDef } from "zod/v3";
 import { parseDef } from "../parseDef.js";
 import type { JsonSchema7Type } from "../parseTypes.js";
 import type { Refs } from "../Refs.js";
