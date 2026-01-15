@@ -1,4 +1,4 @@
-import type { ZodCatchDef } from "zod";
+import type { ZodCatchDef } from "zod/v3";
 import { parseDef } from "../parseDef.js";
 import type { Refs } from "../Refs.js";
 

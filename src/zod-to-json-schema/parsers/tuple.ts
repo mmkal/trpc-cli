@@ -1,4 +1,4 @@
-import type { ZodTupleDef, ZodTupleItems, ZodTypeAny } from "zod";
+import type { ZodTupleDef, ZodTupleItems, ZodTypeAny } from "zod/v3";
 import { parseDef } from "../parseDef.js";
 import type { JsonSchema7Type } from "../parseTypes.js";
 import type { Refs } from "../Refs.js";

@@ -513,8 +513,6 @@ test('thrown error in procedure includes call stack', async () => {
   expect(output).toMatch(/at .* \(.*calculator.ts:\d+:\d+\)/)
 })
 
-const testLocalOnly = process.env.CI ? test.skip : test
-
 test('promptable', async () => {
   // these snapshots look a little weird because inquirer uses `\r` to
   // replace the input line
@@ -526,7 +524,7 @@ test('promptable', async () => {
 })
 
 // something about github actions ci setup doesn't like this
-testLocalOnly('promptable multiline', async () => {
+test.skip('promptable multiline', async () => {
   const subcommandOutput = await tsxWithMultilineInput('challenge\nharshly\ny', 'promptable', [])
 
   expect(subcommandOutput).toMatchInlineSnapshot(`

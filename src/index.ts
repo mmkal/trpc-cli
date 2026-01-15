@@ -314,9 +314,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         const allowedSchemas = getAllowedSchemas(propertyValue)
         const firstSchemaWithDefault = allowedSchemas.find(subSchema => 'default' in subSchema)
-        const defaultValue = firstSchemaWithDefault
-          ? ({exists: true, value: firstSchemaWithDefault.default} as const)
-          : ({exists: false} as const)
+        // Check for default value - first in the allowed schemas, then on the root property itself
+        const defaultValue =
+          firstSchemaWithDefault && 'default' in firstSchemaWithDefault
+            ? ({exists: true, value: firstSchemaWithDefault.default} as const)
+            : 'default' in propertyValue
+              ? ({exists: true, value: propertyValue.default} as const)
+              : ({exists: false} as const)
 
         const rootTypes = getSchemaTypes(propertyValue).sort()
 
@@ -335,6 +339,17 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         }
 
         const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
+
+        // Check if this is an enum (including union of literals like z.union([z.literal('foo'), z.literal('bar')]))
+        // If so, handle it as a string with choices, not as a multi-type union
+        const enumChoices = getEnumChoices(propertyValue)
+        if (enumChoices?.type === 'string_enum') {
+          const option = new Option(`${flags} ${bracketise('string')}`, description)
+          option.choices(enumChoices.choices)
+          if (defaultValue.exists) option.default(defaultValue.value)
+          command.addOption(option)
+          return
+        }
 
         if (allowedSchemas.length > 1) {
           const option = new Option(`${flags} [value]`, description)
@@ -404,9 +419,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option.makeOptionMandatory()
         }
 
-        const enumChoices = getEnumChoices(propertyValue)
-        if (enumChoices?.type === 'string_enum') {
-          option.choices(enumChoices.choices)
+        // Note: enum choices for union of literals are handled earlier (before allowedSchemas.length > 1 check)
+        // This handles z.enum() style enums which don't go through the multi-schema path
+        const propertyEnumChoices = getEnumChoices(propertyValue)
+        if (propertyEnumChoices?.type === 'string_enum') {
+          option.choices(propertyEnumChoices.choices)
         }
 
         option.conflicts(
