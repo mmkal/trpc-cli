@@ -12,7 +12,7 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@10.27.0",
+  "packageManager": "pnpm@10.28.0",
   "scripts": {
     "ztjs": "./cp-zod-to-json-schema.sh",
     "prepare": "pnpm build",
@@ -72,18 +72,18 @@
   },
   "devDependencies": {
     "@clack/prompts": "0.11.0",
-    "@inquirer/prompts": "8.1.0",
-    "@orpc/contract": "1.13.2",
-    "@orpc/server": "1.13.2",
+    "@inquirer/prompts": "8.2.0",
+    "@orpc/contract": "1.13.4",
+    "@orpc/server": "1.13.4",
     "@trpc/client": "11.8.1",
     "@trpc/server": "11.8.1",
     "@types/json-schema": "7.0.15",
-    "@types/node": "24.10.4",
+    "@types/node": "24.10.8",
     "@types/omelette": "0.4.5",
     "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.5.0",
     "arktype": "^2.1.20",
-    "effect": "3.19.13",
+    "effect": "3.19.14",
     "enquirer": "2.4.1",
     "eslint": "9.39.2",
     "eslint-plugin-mmkal": "0.11.3",
@@ -99,7 +99,7 @@
     "tsx": "4.21.0",
     "typescript": "5.9.3",
     "valibot": "1.2.0",
-    "vitest": "4.0.16",
+    "vitest": "4.0.17",
     "zod": "3.25.76",
     "zod-to-json-schema": "3.25.1"
   }
