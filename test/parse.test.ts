@@ -251,3 +251,104 @@ test('option with acronym', async () => {
   expect(await run(router, ['foo', '--add-http-headers'])).toEqual(`{"addHTTPHeaders":true}`)
   expect(await run(router, ['foo', '--no-add-http-headers'])).toEqual(`{"addHTTPHeaders":false}`)
 })
+
+test('allowUnknownOptions with passthrough schema', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .meta({allowUnknownOptions: true})
+      .input(z.object({known: z.string().optional()}).passthrough())
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  // Known options work as expected
+  expect(await run(router, ['foo', '--known', 'value'])).toMatchInlineSnapshot(`"{"known":"value"}"`)
+
+  // Unknown options are passed through
+  expect(await run(router, ['foo', '--unknown', 'value'])).toMatchInlineSnapshot(`"{"unknown":"value"}"`)
+
+  // Multiple unknown options
+  expect(await run(router, ['foo', '--one', 'a', '--two', 'b'])).toMatchInlineSnapshot(`"{"one":"a","two":"b"}"`)
+
+  // Mix of known and unknown options
+  expect(await run(router, ['foo', '--known', 'k', '--unknown', 'u'])).toMatchInlineSnapshot(
+    `"{"known":"k","unknown":"u"}"`,
+  )
+
+  // Boolean flags
+  expect(await run(router, ['foo', '--flag'])).toMatchInlineSnapshot(`"{"flag":true}"`)
+
+  // Negated boolean flags
+  expect(await run(router, ['foo', '--no-flag'])).toMatchInlineSnapshot(`"{"flag":false}"`)
+
+  // Equals syntax
+  expect(await run(router, ['foo', '--key=value'])).toMatchInlineSnapshot(`"{"key":"value"}"`)
+
+  // Numeric values
+  expect(await run(router, ['foo', '--count', '42'])).toMatchInlineSnapshot(`"{"count":42}"`)
+
+  // Boolean string values
+  expect(await run(router, ['foo', '--enabled', 'true'])).toMatchInlineSnapshot(`"{"enabled":true}"`)
+  expect(await run(router, ['foo', '--disabled', 'false'])).toMatchInlineSnapshot(`"{"disabled":false}"`)
+
+  // Kebab-case to camelCase conversion
+  expect(await run(router, ['foo', '--my-option', 'value'])).toMatchInlineSnapshot(`"{"myOption":"value"}"`)
+})
+
+test('allowUnknownOptions with record schema', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .meta({allowUnknownOptions: true})
+      .input(z.record(z.string(), z.unknown()))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  // Unknown options are passed through
+  expect(await run(router, ['foo', '--any-key', 'any-value'])).toMatchInlineSnapshot(`"{"anyKey":"any-value"}"`)
+
+  // Multiple options
+  expect(await run(router, ['foo', '--a', '1', '--b', '2', '--c', '3'])).toMatchInlineSnapshot(
+    `"{"a":1,"b":2,"c":3}"`,
+  )
+})
+
+test('allowUnknownOptions requires schema to allow additional properties', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .meta({allowUnknownOptions: true})
+      .input(z.object({known: z.string()})) // No .passthrough(), so additionalProperties is false
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  // Without passthrough, unknown options should still be rejected even with meta.allowUnknownOptions
+  await expect(run(router, ['foo', '--known', 'value', '--unknown', 'value'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--unknown'
+    (Did you mean --known?)
+  `)
+})
+
+test('passthrough schema without allowUnknownOptions falls back to json input', async () => {
+  const router = t.router({
+    foo: t.procedure
+      .input(z.object({known: z.string().optional()}).passthrough())
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  // Without allowUnknownOptions in meta, passthrough schemas fall back to JSON input mode
+  // for backward compatibility with existing z.record() behavior
+  expect(await run(router, ['foo', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
+    "Usage: program foo [options]
+
+    Options:
+      --input [json]  Input formatted as JSON (procedure's schema couldn't be
+                      converted to CLI arguments: Inputs with additional properties
+                      are not currently supported)
+      -h, --help      display help for command
+    "
+  `)
+
+  // JSON input works
+  expect(await run(router, ['foo', '--input', '{"known":"value","extra":"data"}'])).toMatchInlineSnapshot(
+    `"{"known":"value","extra":"data"}"`,
+  )
+})

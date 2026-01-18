@@ -405,9 +405,54 @@ Rather than ignoring these procedures, trpc-cli makes them available through JSO
 
 You can also explicitly opt into this behavior for any procedure by setting `jsonInput: true` in its meta, regardless of whether its input could be mapped to CLI arguments.
 
+#### Passthrough/Unknown Options
+
+If you're building a CLI wrapper that needs to forward arbitrary options to an underlying tool, you can enable passthrough mode using `allowUnknownOptions: true` in the procedure's meta. This works with schemas that allow additional properties, like `z.object({}).passthrough()` or `z.record()`:
+
+```ts
+const router = t.router({
+  biome: t.procedure
+    .meta({
+      description: 'Run biome with any flags',
+      allowUnknownOptions: true,  // Enable passthrough
+    })
+    .input(z.object({
+      // Define known options
+      config: z.string().optional().describe('Path to config file'),
+    }).passthrough())  // Allow additional properties
+    .mutation(async ({input}) => {
+      // input contains both known and unknown options
+      // e.g. { config: './biome.json', fix: true, unsafe: true }
+      const args = Object.entries(input).flatMap(([key, value]) =>
+        value === true ? [`--${key}`] : [`--${key}`, String(value)]
+      )
+      // Forward to underlying tool...
+    }),
+})
+```
+
+Usage:
+```bash
+# Known and unknown options are all passed through
+mycli biome --config ./biome.json --fix --unsafe --max-diagnostics 10
+```
+
+**How it works:**
+- Unknown options like `--fix`, `--unsafe`, and `--max-diagnostics` are parsed and included in the input object
+- Option names are converted from kebab-case to camelCase (e.g. `--max-diagnostics` becomes `maxDiagnostics`)
+- Boolean flags (options without values) are set to `true`
+- Negated flags like `--no-fix` are set to `false`
+- Numeric and boolean string values are automatically converted to their respective types
+
+**Requirements:**
+- The procedure must have `allowUnknownOptions: true` in its meta
+- The input schema must allow additional properties (e.g. via `.passthrough()` or using `z.record()`)
+
+This is useful when building CLI wrappers around tools like linters, formatters, or build tools where you want to forward flags without having to enumerate every possible option.
+
 #### Advanced Meta Configuration
 
-If you don't want to put properties (like `default`, `aliases`, `jsonInput` or `negateBooleans`) at the top level of a procedure's meta, you can nest them under `cliMeta`:
+If you don't want to put properties (like `default`, `aliases`, `jsonInput`, `negateBooleans` or `allowUnknownOptions`) at the top level of a procedure's meta, you can nest them under `cliMeta`:
 
 ```ts
 const router = t.router({
@@ -1232,6 +1277,7 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 - `process.exit(...)` called with either 0 or 1 depending on successful resolve
 - Help text shown on invalid inputs
 - Support option aliases via `aliases` meta property (see migrations example below)
+- Support passthrough of unknown options via `allowUnknownOptions` meta property (useful for CLI wrappers)
 - Union types work, but they should ideally be non-overlapping for best results
    - e.g. `z.object({ foo: z.object({ bar: z.number() }) }))` can be supplied via using `--foo '{"bar": 123}'`
 - Limitation: No `subscription` support.

@@ -143,9 +143,7 @@ function parseProcedureInputsInner(inputs: unknown[], dependencies: Dependencies
 }
 
 function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> {
-  if (mergedSchema.additionalProperties) {
-    return {success: false, error: `Inputs with additional properties are not currently supported`}
-  }
+  const hasAdditionalProperties = Boolean(mergedSchema.additionalProperties)
 
   if (acceptedPrimitiveTypes(mergedSchema).length > 0) {
     return parsePrimitiveInput(mergedSchema)
@@ -168,6 +166,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
           positionalParameters: [],
           optionsJsonSchema: mergedSchema,
           getPojoInput: argv => argv.options,
+          hasAdditionalProperties,
         },
       }
     }
@@ -189,6 +188,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
       positionalParameters: [],
       optionsJsonSchema: mergedSchema,
       getPojoInput: argv => argv.options,
+      hasAdditionalProperties,
     },
   }
 }

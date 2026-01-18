@@ -128,6 +128,16 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
     }
 
     const procedureInputs = procedureInputsResult.value
+
+    // Fall back to JSON input when schema has additionalProperties but allowUnknownOptions is not enabled
+    // This preserves backward compatibility for z.record() schemas
+    if (procedureInputs.hasAdditionalProperties && !meta.allowUnknownOptions) {
+      const jsonInputs = jsonProcedureInputs(
+        `procedure's schema couldn't be converted to CLI arguments: Inputs with additional properties are not currently supported`,
+      )
+      return [procedurePath, {meta, parsedProcedure: jsonInputs, incompatiblePairs: [], procedure}]
+    }
+
     const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
 
     return [procedurePath, {meta: getMeta(procedure), parsedProcedure: procedureInputs, incompatiblePairs, procedure}]
@@ -165,6 +175,17 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
     }
 
     const parsedProcedure = procedureInputsResult.value
+
+    // Fall back to JSON input when schema has additionalProperties but allowUnknownOptions is not enabled
+    // This preserves backward compatibility for z.record() schemas
+    if (parsedProcedure.hasAdditionalProperties && !meta.allowUnknownOptions) {
+      const jsonInputs = jsonProcedureInputs(
+        `procedure's schema couldn't be converted to CLI arguments: Inputs with additional properties are not currently supported`,
+      )
+      entries.push([procedurePath, {meta, parsedProcedure: jsonInputs, incompatiblePairs: [], procedure}])
+      return
+    }
+
     const incompatiblePairs = incompatiblePropertyPairs(parsedProcedure.optionsJsonSchema)
 
     entries.push([procedurePath, {procedure, meta, incompatiblePairs, parsedProcedure}])
@@ -445,11 +466,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         throw new Error(`Invalid option aliases: ${invalidOptionAliases.join(', ')}`)
       }
 
+      // Allow unknown options to pass through when configured
+      const allowUnknownOptions = meta.allowUnknownOptions && parsedProcedure.hasAdditionalProperties
+      if (allowUnknownOptions) {
+        command.allowUnknownOption()
+        command.allowExcessArguments() // Unknown options may be parsed as arguments
+      }
+
       // Set the action for this command
       command.action(async (...args) => {
         program.__ran ||= []
         program.__ran.push(command)
-        const options = command.opts()
+        let options = command.opts()
 
         if (args.at(-2) !== options) {
           // This is a code bug and not recoverable. Will hopefully never happen but if commander totally changes their API this will break
@@ -462,6 +490,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
         const positionalValues = args.slice(0, -2)
+
+        // Parse and merge unknown options when allowUnknownOptions is enabled
+        if (allowUnknownOptions) {
+          const unknownOptions = parseUnknownOptions(command.args)
+          options = {...options, ...unknownOptions}
+        }
 
         const input = parsedProcedure.getPojoInput({positionalValues, options})
 
@@ -739,4 +773,78 @@ const parseJson = (
   } catch {
     throw new ErrorClass(hint)
   }
+}
+
+/**
+ * Parses unknown options from command.args into a key-value object.
+ * Handles formats like:
+ * - `--flag value` (flag with space-separated value)
+ * - `--flag=value` (flag with equals sign)
+ * - `--flag` (boolean flag, set to true)
+ * - `--no-flag` (negated boolean flag, set to false)
+ * - `-f value` or `-f=value` (short flags)
+ */
+const parseUnknownOptions = (args: string[]): Record<string, unknown> => {
+  const result: Record<string, unknown> = {}
+  let i = 0
+
+  while (i < args.length) {
+    const arg = args[i]
+
+    // Check if it's an option (starts with - or --)
+    if (arg.startsWith('-')) {
+      let key: string
+      let value: unknown
+
+      // Handle --key=value or -k=value format
+      const equalsIndex = arg.indexOf('=')
+      if (equalsIndex !== -1) {
+        key = arg.slice(0, equalsIndex)
+        value = arg.slice(equalsIndex + 1)
+      } else {
+        key = arg
+        // Check if next arg is a value (doesn't start with -)
+        const nextArg = args[i + 1]
+        if (nextArg !== undefined && !nextArg.startsWith('-')) {
+          value = nextArg
+          i++ // Skip the value in the next iteration
+        } else {
+          // Boolean flag
+          value = true
+        }
+      }
+
+      // Convert key to camelCase property name
+      // Remove leading dashes and handle --no- prefix for negation
+      let normalizedKey = key.replace(/^-+/, '')
+      if (normalizedKey.startsWith('no-') && value === true) {
+        normalizedKey = normalizedKey.slice(3)
+        value = false
+      }
+
+      // Convert kebab-case to camelCase
+      normalizedKey = normalizedKey.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())
+
+      // Try to parse the value as JSON if it's a string
+      if (typeof value === 'string') {
+        // Try parsing as number
+        const num = Number(value)
+        if (!Number.isNaN(num)) {
+          value = num
+        } else if (value === 'true') {
+          value = true
+        } else if (value === 'false') {
+          value = false
+        }
+        // Otherwise keep as string
+      }
+
+      result[normalizedKey] = value
+    }
+    // Skip non-option args (positional arguments are handled elsewhere)
+
+    i++
+  }
+
+  return result
 }
