@@ -13,4 +13,5 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - uses: mmkal/runovate@d72c93c725713366780f67639cdcd9389a682565
+      # - uses: mmkal/runovate@d72c93c725713366780f67639cdcd9389a682565
+      - run: echo temporarily disabled
