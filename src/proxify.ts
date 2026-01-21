@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {initTRPC} from '@trpc/server'
 import {StandardSchemaV1} from './standard-schema/contract.js'
-import {AnyProcedure, AnyRouter} from './trpc-compat.js'
+import {AnyProcedure, AnyRouter, isCliProcedure, isOrpcProcedure} from './trpc-compat.js'
 
 /**
  * EXPERIMENTAL: Don't use unless you're willing to help figure out the API, and whether it should even exist.
@@ -21,6 +21,9 @@ export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePat
       currentRouter = currentRouter[part] ||= {}
     }
     let newProc: any = trpc.procedure
+
+    if (isCliProcedure(oldProc)) throw new Error('Cannot proxy CLI procedures')
+    if (isOrpcProcedure(oldProc)) throw new Error('Cannot proxy ORPC procedures')
 
     const inputs = oldProc._def.inputs as StandardSchemaV1[]
 
