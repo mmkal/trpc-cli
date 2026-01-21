@@ -20,12 +20,17 @@ import {promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {
-  type AnyProcedure,
   type AnyRouter,
+  CLIProcedureLike,
+  CLIRouterLike,
   type CreateCallerFactoryLike,
+  isCliProcedure,
+  isCliRouter,
   isOrpcRouter,
   type OrpcRouterLike,
+  Trpc10ProcedureLike,
   type Trpc10RouterLike,
+  Trpc11ProcedureLike,
   type Trpc11RouterLike,
 } from './trpc-compat.js'
 import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types.js'
@@ -107,13 +112,14 @@ export {type AnyRouter, type AnyProcedure} from './trpc-compat.js'
  */
 // todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
 export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
+  if (isCliRouter(router)) return parseCliRouter({router, ...params})
   if (isOrpcRouter(router)) return parseOrpcRouter({router, ...params})
 
   return parseTrpcRouter({router, ...params})
 }
 
 const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router, ...params}: TrpcCliParams<R>) => {
-  const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
+  const defEntries = Object.entries<Trpc10ProcedureLike | Trpc11ProcedureLike>(router._def.procedures as {})
   return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
     const meta = getMeta(procedure)
     if (meta.jsonInput) {
@@ -134,6 +140,38 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
   })
 }
 
+const parseCliRouter = <R extends CLIRouterLike>(params: TrpcCliParams<R>) => {
+  const entries: [string, ProcedureInfo][] = []
+  const addEntries = (r: CLIRouterLike, parentPath: string) => {
+    Object.entries(r).forEach(([prop, procedure]) => {
+      const childPath = parentPath ? `${parentPath}.${prop}` : prop
+      if (isCliProcedure(procedure as CLIProcedureLike)) {
+        const meta = (procedure.meta || {}) as TrpcCliMeta
+        if (meta.jsonInput) {
+          entries.push([childPath, {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure}])
+          return
+        }
+        const procedureInputsResult = parseProcedureInputs([procedure.input], params)
+        if (!procedureInputsResult.success) {
+          const parsedProcedure = jsonProcedureInputs(
+            `procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error}`,
+          )
+          entries.push([childPath, {meta, parsedProcedure, incompatiblePairs: [], procedure}])
+          return
+        }
+        const incompatiblePairs = incompatiblePropertyPairs(procedureInputsResult.value.optionsJsonSchema)
+        entries.push([childPath, {meta, parsedProcedure: procedureInputsResult.value, incompatiblePairs, procedure}])
+        return
+      }
+      if (isCliRouter(procedure)) {
+        addEntries(procedure, childPath)
+      }
+    })
+  }
+  addEntries(params.router, '')
+  return entries
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
   const entries: [string, ProcedureInfo][] = []
@@ -149,7 +187,7 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
       effect: params.effect,
     })
     const procedurePath = path.join('.')
-    const procedureish = {_def: {meta: contract['~orpc'].meta}} as AnyProcedure
+    const procedureish = {_def: {meta: contract['~orpc'].meta}}
     const meta = getMeta(procedureish)
 
     if (meta.jsonInput) {
@@ -471,6 +509,17 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           const message = `Using deprecated \`createCallerFactory\` option. Use \`trpcServer\` instead. e.g. \`createCli({router: myRouter, trpcServer: import('@trpc/server')})\``
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
+        } else if (isCliRouter(router)) {
+          caller = Object.fromEntries(
+            parseCliRouter({router}).map(([path]) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              let prc = router as any
+              const parts = path.split('.')
+              for (const part of parts) prc = prc[part]
+              const proc = prc as CLIProcedureLike
+              return [path, proc.call]
+            }),
+          )
         } else if (isOrpcRouter(router)) {
           const {call} = getOrpcServerModule()
           // create an object which acts enough like a trpc caller to be used for this specific procedure
@@ -740,3 +789,5 @@ const parseJson = (
     throw new ErrorClass(hint)
   }
 }
+
+export {t} from './t.js'

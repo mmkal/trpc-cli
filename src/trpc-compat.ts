@@ -1,6 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import {StandardSchemaV1} from './standard-schema/contract.js'
+import {TrpcCliMeta} from './types.js'
+
+export type CLIProcedureLike = {
+  type: 'trpc-cli-command'
+  input: StandardSchemaV1
+  meta: TrpcCliMeta
+  fn: (params: {input: any}) => any
+  call: (input: unknown) => unknown
+}
+
+export type CLIRouterLike = {
+  [key: string]: CLIProcedureLike | CLIRouterLike
+}
 
 /**
  * Type which looks *enough* like a trpc v11(+?) router to infer its types correctly
@@ -67,9 +80,9 @@ export type CreateCallerFactoryLike<Procedures = Record<string, (input: unknown)
   router: any,
 ) => (context: any) => Procedures
 
-export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any>
+export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any> | CLIRouterLike
 
-export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike
+export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike | CLIProcedureLike
 
 export type inferRouterContext<R extends AnyRouter> = R extends Trpc10RouterLike | Trpc11RouterLike
   ? R['_def']['_config']['$types']['ctx']
@@ -78,11 +91,23 @@ export type inferRouterContext<R extends AnyRouter> = R extends Trpc10RouterLike
     : never
 
 export const isTrpc11Procedure = (procedure: AnyProcedure): procedure is Trpc11ProcedureLike => {
-  return 'type' in procedure._def && typeof procedure._def.type === 'string'
+  return '_def' in procedure && 'type' in procedure._def && typeof procedure._def.type === 'string'
+}
+
+export const isCliRouter = (router: AnyRouter | AnyProcedure): router is CLIRouterLike => {
+  return (
+    typeof router === 'object' &&
+    Object.values(router).every(v => isCliProcedure(v as AnyProcedure) || isCliRouter(v as AnyRouter))
+  )
+}
+
+export const isCliProcedure = (procedure: AnyProcedure): procedure is CLIProcedureLike => {
+  return typeof procedure === 'object' && 'type' in procedure && procedure.type === 'trpc-cli-command'
 }
 
 export const isTrpc11Router = (router: AnyRouter): router is Trpc11RouterLike => {
   if (isOrpcRouter(router)) return false
+  if (isCliRouter(router)) return false
   const procedure = Object.values(router._def.procedures)[0] as AnyProcedure | undefined
   return Boolean(procedure && isTrpc11Procedure(procedure))
 }
