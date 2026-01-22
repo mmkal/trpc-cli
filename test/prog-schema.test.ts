@@ -1,50 +1,6 @@
 import {expect, expectTypeOf, test} from 'vitest'
-import {StandardSchemaV1} from '../src/standard-schema/contract.js'
+import {obj} from '../src/progressive-object.js'
 import {prettifyStandardSchemaError} from '../src/standard-schema/errors.js'
-
-const progressiveObjectSchema = <Shape extends Record<string, StandardSchemaV1<any>>>(
-  props: Array<{
-    propName: string
-    propType: StandardSchemaV1<any> | ((soFar: any) => StandardSchemaV1<any>)
-  }>,
-): ProgSchema<Shape> => {
-  const schema: StandardSchemaV1<Shape> = {
-    '~standard': {
-      version: 1,
-      vendor: 'prog-schema',
-      validate: async _input => {
-        const input = _input as Record<string, unknown>
-        let obj: Record<string, unknown> = {}
-        for (const {propName, propType} of props) {
-          const type = typeof propType === 'function' ? propType(obj) : propType
-          const parsed = await type['~standard'].validate(input[propName])
-          if ('issues' in parsed) {
-            return {
-              issues: parsed.issues?.map(iss => ({...iss, path: [propName, ...(iss.path || [])]})),
-            } as StandardSchemaV1.FailureResult
-          }
-          obj = {...obj, [propName]: parsed.value!}
-        }
-        return {value: obj} as StandardSchemaV1.SuccessResult<Shape>
-      },
-    },
-  }
-  return {
-    ...schema,
-    prop: (name, type) => progressiveObjectSchema([...props, {propName: name, propType: type}]),
-  }
-}
-
-export const obj = progressiveObjectSchema<{}>([])
-
-type ProgSchema<T extends Record<string, StandardSchemaV1<any>>> = StandardSchemaV1<T> & {
-  prop: <Name extends string, Type extends StandardSchemaV1<any>>(
-    name: Name,
-    type:
-      | Type
-      | ((soFar: Record<string, never> | {[K in keyof T]: NonNullable<T[K]['~standard']['types']>['output']}) => Type),
-  ) => ProgSchema<T & Record<Name, Type>>
-}
 
 test('progSchema', async () => {
   const {z} = await import('zod')
@@ -120,6 +76,55 @@ test('progSchema with mixded libraries', async () => {
         "framework": "react",
         "typescript": true,
       },
+    }
+  `)
+})
+
+test('json schema', async () => {
+  const {z} = await import('zod')
+  const Person = obj
+    .prop('name', z.string()) //
+    .prop('age', z.number())
+
+  const Config = obj
+    .prop('framework', z.enum(['react', 'vue'])) //
+    .prop('typescript', props => z.boolean().default(props.framework === 'react'))
+
+  expect(Person.toJsonSchema()).toMatchInlineSnapshot(`
+    {
+      "properties": {
+        "age": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "number",
+        },
+        "name": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "string",
+        },
+      },
+      "type": "object",
+    }
+  `)
+
+  expect(Config.toJsonSchema()).toMatchInlineSnapshot(`
+    {
+      "properties": {
+        "framework": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "enum": [
+            "react",
+            "vue",
+          ],
+          "type": "string",
+        },
+        "typescript": {
+          "$comment": "Note: this schema may differ at runtime based on the value of \`framework\`",
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "default": false,
+          "type": "boolean",
+        },
+      },
+      "type": "object",
     }
   `)
 })
