@@ -23,7 +23,7 @@ const getModule = <T>(moduleOrError: T | string): T => {
  * Attempts to convert a trpc procedure input to JSON schema.
  * Uses @see jsonSchemaConverters to convert the input to JSON schema.
  */
-function toJsonSchema(input: unknown, dependencies: Dependencies): Result<JSONSchema7> {
+export function toJsonSchema(input: unknown, dependencies: Dependencies): Result<JSONSchema7> {
   try {
     const jsonSchemaConverters = getJsonSchemaConverters(dependencies)
     const vendor = getVendor(input)
