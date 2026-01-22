@@ -83,7 +83,7 @@
     "@types/prompts": "2.4.9",
     "@valibot/to-json-schema": "1.5.0",
     "arktype": "^2.1.20",
-    "effect": "3.19.14",
+    "effect": "3.19.15",
     "enquirer": "2.4.1",
     "eslint": "9.39.2",
     "eslint-plugin-mmkal": "0.11.3",
