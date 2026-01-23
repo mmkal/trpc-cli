@@ -2,6 +2,7 @@ import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
 import {CliValidationError} from './errors.js'
 import {getSchemaTypes} from './json-schema.js'
+import {ProgressiveObjectSchema} from './progressive-object.js'
 import type {Dependencies, ParsedProcedure, Result} from './types.js'
 import {zodToJsonSchema} from './zod-to-json-schema/index.js'
 
@@ -194,7 +195,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 }
 
 // zod-to-json-schema turns `z.string().optional()` into `{"anyOf":[{"not":{}},{"type":"string"}]}`
-function isOptional(schema: JSONSchema7Definition) {
+export function isOptional(schema: JSONSchema7Definition) {
   if (schema && typeof schema === 'object' && 'optional' in schema) return schema.optional === true
   if (schemaDefPropValue(schema, 'not') && JSON.stringify(schema) === '{"not":{}}') return true
   const anyOf = schemaDefPropValue(schema, 'anyOf')
@@ -514,6 +515,9 @@ const acceptsObject = (schema: JSONSchema7): boolean => {
 /** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
 const getJsonSchemaConverters = (dependencies: Dependencies) => {
   return {
+    'progressive-object-schema': (input: unknown) => {
+      return (input as ProgressiveObjectSchema<{}>).toJsonSchema()
+    },
     zod: (input: unknown) => {
       // @ts-expect-error don't worry lots of ?.
       if (input._zod?.version?.major == 4) {
