@@ -4,11 +4,13 @@ import {JSONSchema7} from 'json-schema'
 import {isOptional, toJsonSchema} from './parse-procedure.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 
+export type ProgressiveProp = {
+  propName: string
+  propType: StandardSchemaV1<any> | ((soFar: any) => StandardSchemaV1<any>)
+}
+
 const progressiveObjectSchema = <Shape extends Record<string, StandardSchemaV1<any>>>(
-  props: Array<{
-    propName: string
-    propType: StandardSchemaV1<any> | ((soFar: any) => StandardSchemaV1<any>)
-  }>,
+  props: ProgressiveProp[],
 ): ProgressiveObjectSchema<Shape> => {
   const schema: StandardSchemaV1<Shape> = {
     '~standard': {
@@ -33,6 +35,7 @@ const progressiveObjectSchema = <Shape extends Record<string, StandardSchemaV1<a
   }
   return {
     ...schema,
+    __progressiveProps: props,
     toJsonSchema: () => {
       const propertyEntries = props.map(({propName, propType: propTypeOrFn}) => {
         const usedProps: string[] = []
@@ -59,13 +62,13 @@ const progressiveObjectSchema = <Shape extends Record<string, StandardSchemaV1<a
       })
       const required = propertyEntries.flatMap(([name, schema]) => {
         if (isOptional(schema as {})) return []
-        return [name]
+        return [name as string]
       })
       return {
         type: 'object',
         required,
         properties: Object.fromEntries(propertyEntries),
-      }
+      } satisfies JSONSchema7
     },
     prop: (name, type) => progressiveObjectSchema([...props, {propName: name, propType: type}]),
   }
@@ -74,6 +77,7 @@ const progressiveObjectSchema = <Shape extends Record<string, StandardSchemaV1<a
 export const obj = progressiveObjectSchema<{}>([])
 
 export type ProgressiveObjectSchema<T extends Record<string, StandardSchemaV1<any>>> = StandardSchemaV1<T> & {
+  __progressiveProps: ProgressiveProp[]
   toJsonSchema: () => JSONSchema7
   prop: <Name extends string, Type extends StandardSchemaV1<any>>(
     name: Name,
@@ -81,4 +85,14 @@ export type ProgressiveObjectSchema<T extends Record<string, StandardSchemaV1<an
       | Type
       | ((soFar: Record<string, never> | {[K in keyof T]: NonNullable<T[K]['~standard']['types']>['output']}) => Type),
   ) => ProgressiveObjectSchema<T & Record<Name, Type>>
+}
+
+/** Check if a value is a ProgressiveObjectSchema */
+export function isProgressiveObjectSchema(value: unknown): value is ProgressiveObjectSchema<any> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '__progressiveProps' in value &&
+    Array.isArray((value as ProgressiveObjectSchema<any>).__progressiveProps)
+  )
 }

@@ -116,21 +116,32 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
   const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
   return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
     const meta = getMeta(procedure)
+    const inputs = procedure._def.inputs as unknown[]
+    const originalInputSchema = inputs[0]
     if (meta.jsonInput) {
-      return [procedurePath, {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure}]
+      return [
+        procedurePath,
+        {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure, originalInputSchema},
+      ]
     }
-    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], params)
+    const procedureInputsResult = parseProcedureInputs(inputs, params)
     if (!procedureInputsResult.success) {
       const procedureInputs = jsonProcedureInputs(
         `procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error}`,
       )
-      return [procedurePath, {meta, parsedProcedure: procedureInputs, incompatiblePairs: [], procedure}]
+      return [
+        procedurePath,
+        {meta, parsedProcedure: procedureInputs, incompatiblePairs: [], procedure, originalInputSchema},
+      ]
     }
 
     const procedureInputs = procedureInputsResult.value
     const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
 
-    return [procedurePath, {meta: getMeta(procedure), parsedProcedure: procedureInputs, incompatiblePairs, procedure}]
+    return [
+      procedurePath,
+      {meta: getMeta(procedure), parsedProcedure: procedureInputs, incompatiblePairs, procedure, originalInputSchema},
+    ]
   })
 }
 
@@ -144,7 +155,8 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
     for (const p of path) procedure = procedure[p] as Record<string, unknown>
     if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
 
-    const procedureInputsResult = parseProcedureInputs([contract['~orpc'].inputSchema], {
+    const originalInputSchema = contract['~orpc'].inputSchema
+    const procedureInputsResult = parseProcedureInputs([originalInputSchema], {
       '@valibot/to-json-schema': params['@valibot/to-json-schema'],
       effect: params.effect,
     })
@@ -153,21 +165,27 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
     const meta = getMeta(procedureish)
 
     if (meta.jsonInput) {
-      entries.push([procedurePath, {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure}])
+      entries.push([
+        procedurePath,
+        {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure, originalInputSchema},
+      ])
       return
     }
     if (!procedureInputsResult.success) {
       const parsedProcedure = jsonProcedureInputs(
         `procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error}`,
       )
-      entries.push([procedurePath, {meta, parsedProcedure: parsedProcedure, incompatiblePairs: [], procedure}])
+      entries.push([
+        procedurePath,
+        {meta, parsedProcedure: parsedProcedure, incompatiblePairs: [], procedure, originalInputSchema},
+      ])
       return
     }
 
     const parsedProcedure = procedureInputsResult.value
     const incompatiblePairs = incompatiblePropertyPairs(parsedProcedure.optionsJsonSchema)
 
-    entries.push([procedurePath, {procedure, meta, incompatiblePairs, parsedProcedure}])
+    entries.push([procedurePath, {procedure, meta, incompatiblePairs, parsedProcedure, originalInputSchema}])
   })
   if (lazyRoutes.length) {
     const suggestion = `Please use \`import {unlazyRouter} from '@orpc/server'\` to unlazy the router before passing it to trpc-cli`
@@ -198,6 +216,8 @@ type ProcedureInfo = {
   parsedProcedure: ParsedProcedure
   incompatiblePairs: [string, string][]
   procedure: {}
+  /** The original input schema (first element of the inputs array), used for progressive schemas */
+  originalInputSchema?: unknown
 }
 
 /**
@@ -241,10 +261,10 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const configureCommand = (
       command: Command,
       procedurePath: string,
-      {meta, parsedProcedure, incompatiblePairs, procedure}: ProcedureInfo,
+      {meta, parsedProcedure, incompatiblePairs, procedure, originalInputSchema}: ProcedureInfo,
     ) => {
       // add meta to the commander command so we can access it in prompt.ts
-      Object.assign(command, {__trpcCli: {path: procedurePath, meta}})
+      Object.assign(command, {__trpcCli: {path: procedurePath, meta, originalInputSchema}})
       const optionJsonSchemaProperties = flattenedProperties(parsedProcedure.optionsJsonSchema)
       command.exitOverride(ec => {
         _process.exit(ec.exitCode)
