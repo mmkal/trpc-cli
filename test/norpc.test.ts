@@ -99,6 +99,35 @@ describe('trpc style', () => {
       `"foo is world and bar is 42"`,
     )
   })
+
+  test('middleware with context (trpc style uses ctx)', async () => {
+    // Create a reusable procedure with middleware that adds context
+    const withUser = t.procedure.use(async ({next}) => {
+      return next({
+        ctx: {user: {id: 1, name: 'Alice'}},
+      })
+    })
+
+    const withPermissions = withUser.use(async ({ctx, next}) => {
+      return next({
+        ctx: {permissions: ctx.user.id === 1 ? ['admin'] : ['guest']},
+      })
+    })
+
+    const router = t.router({
+      whoami: withUser.query(({ctx}) => `I am ${ctx.user.name} (id: ${ctx.user.id})`),
+      permissions: withPermissions.query(
+        ({ctx}) => `User ${ctx.user.name} has permissions: ${ctx.permissions.join(', ')}`,
+      ),
+      greet: withUser
+        .input(z.object({greeting: z.string()}))
+        .mutation(({input, ctx}) => `${input.greeting}, ${ctx.user.name}!`),
+    })
+
+    expect(await run(router, ['whoami'])).toMatchInlineSnapshot(`"I am Alice (id: 1)"`)
+    expect(await run(router, ['permissions'])).toMatchInlineSnapshot(`"User Alice has permissions: admin"`)
+    expect(await run(router, ['greet', '--greeting', 'Hello'])).toMatchInlineSnapshot(`"Hello, Alice!"`)
+  })
 })
 
 describe('orpc style', () => {
@@ -181,5 +210,35 @@ describe('orpc style', () => {
     expect(await run(router, ['hello', '--input', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
       `"foo is world and bar is 42"`,
     )
+  })
+
+  test('middleware with context (orpc style uses context)', async () => {
+    // Create a reusable procedure with middleware that adds context
+    // oRPC uses `context` instead of `ctx`
+    const withUser = os.use(async ({next}) => {
+      return next({
+        context: {user: {id: 1, name: 'Bob'}},
+      })
+    })
+
+    const withPermissions = withUser.use(async ({context, next}) => {
+      return next({
+        context: {permissions: context.user.id === 1 ? ['admin'] : ['guest']},
+      })
+    })
+
+    const router = os.router({
+      whoami: withUser.handler(({context}) => `I am ${context.user.name} (id: ${context.user.id})`),
+      permissions: withPermissions.handler(
+        ({context}) => `User ${context.user.name} has permissions: ${context.permissions.join(', ')}`,
+      ),
+      greet: withUser
+        .input(z.object({greeting: z.string()}))
+        .handler(({input, context}) => `${input.greeting}, ${context.user.name}!`),
+    })
+
+    expect(await run(router, ['whoami'])).toMatchInlineSnapshot(`"I am Bob (id: 1)"`)
+    expect(await run(router, ['permissions'])).toMatchInlineSnapshot(`"User Bob has permissions: admin"`)
+    expect(await run(router, ['greet', '--greeting', 'Hi'])).toMatchInlineSnapshot(`"Hi, Bob!"`)
   })
 })

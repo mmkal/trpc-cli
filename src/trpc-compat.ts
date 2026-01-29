@@ -7,8 +7,8 @@ export type CLIProcedureLike = {
   type: 'trpc-cli-command'
   input: StandardSchemaV1
   meta: TrpcCliMeta
-  fn: (params: {input: any}) => any
-  call: (input: unknown) => unknown
+  fn: (params: {input: any; ctx?: any; context?: any}) => any
+  call: (input: unknown, context?: unknown) => unknown
 }
 
 export type CLIRouterLike = {

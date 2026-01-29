@@ -974,7 +974,43 @@ const router = os.router({
 createCli({router}).run()
 ```
 
-> Note: The standalone `t`/`os` helpers don't support tRPC features like middleware or context. If you need those features, use `@trpc/server` or `@orpc/server` directly.
+#### Middleware and Context
+
+The standalone helpers support middleware via `.use()` for context injection, similar to tRPC and oRPC:
+
+```ts
+import {t, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+// Create a reusable procedure with middleware
+const withUser = t.procedure.use(async ({next}) => {
+  return next({
+    ctx: {user: {id: 1, name: 'Alice'}}, // tRPC style uses `ctx`
+    // context: {...}  // oRPC style uses `context` - both work!
+  })
+})
+
+const router = t.router({
+  whoami: withUser.query(({ctx}) => `I am ${ctx.user.name}`),
+  greet: withUser
+    .input(z.object({greeting: z.string()}))
+    .mutation(({input, ctx}) => `${input.greeting}, ${ctx.user.name}!`),
+})
+
+createCli({router}).run()
+```
+
+You can chain multiple middleware to build up context:
+
+```ts
+const withPermissions = withUser.use(async ({ctx, next}) => {
+  return next({
+    ctx: {permissions: ctx.user.id === 1 ? ['admin'] : ['guest']},
+  })
+})
+```
+
+> Note: The standalone middleware is simpler than full tRPC/oRPC middleware. It doesn't support features like `path`, `procedure` params, or cleanup logic. If you need advanced middleware features, use `@trpc/server` or `@orpc/server` directly.
 
 ### Output and Lifecycle
 
