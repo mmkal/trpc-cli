@@ -790,4 +790,4 @@ const parseJson = (
   }
 }
 
-export {t} from './t.js'
+export {t, os} from './norpc.js'

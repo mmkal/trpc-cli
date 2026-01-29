@@ -16,6 +16,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ oRPC support
+- ✅ Standalone mode - build CLIs without `@trpc/server` or `@orpc/server`
 - ✅ No configuration required. Run on an existing router with `npx trpc-cli src/your-router.ts`
 
 ---
@@ -42,6 +43,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - [Other Features](#other-features)
    - [tRPC v10 vs v11](#trpc-v10-vs-v11)
    - [oRPC](#orpc)
+   - [Standalone Mode (No tRPC/oRPC Required)](#standalone-mode-no-trpcorpc-required)
    - [Output and Lifecycle](#output-and-lifecycle)
    - [Testing your CLI](#testing-your-cli)
    - [Programmatic Usage](#programmatic-usage)
@@ -937,6 +939,42 @@ export const router = os.router({
 const cli = createCli({router: await unlazyRouter(router)})
 cli.run()
 ```
+
+### Standalone Mode (No tRPC/oRPC Required)
+
+If you just want to build a CLI without depending on `@trpc/server` or `@orpc/server`, you can use the built-in `t` helper:
+
+```ts
+import {t, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const router = t.router({
+  greet: t.procedure
+    .input(z.object({name: z.string()}))
+    .handler(({input}) => `Hello, ${input.name}!`),
+})
+
+createCli({router}).run()
+```
+
+This works with any standard-schema compatible validator (zod, valibot, arktype, etc.).
+
+If you prefer oRPC's API style, you can use the `os` export instead:
+
+```ts
+import {os, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const router = os.router({
+  greet: os
+    .input(z.object({name: z.string()}))
+    .handler(({input}) => `Hello, ${input.name}!`),
+})
+
+createCli({router}).run()
+```
+
+> Note: The standalone `t`/`os` helpers don't support tRPC features like middleware or context. If you need those features, use `@trpc/server` or `@orpc/server` directly.
 
 ### Output and Lifecycle
 

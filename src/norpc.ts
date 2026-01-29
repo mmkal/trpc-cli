@@ -16,7 +16,7 @@ const createProcedure = <Input>(params: {
     call: async unvalidated => {
       const parsed = await params.input['~standard'].validate(unvalidated)
       if ('issues' in parsed) {
-        throw new Error(`CROUTER Invalid input: ${prettifyStandardSchemaError(parsed)}`)
+        throw new Error(`Invalid input: ${prettifyStandardSchemaError(parsed)}`)
       }
       return params.fn({input: parsed.value})
     },
@@ -32,17 +32,23 @@ const StandardSchemaVoid: StandardSchemaV1<void> = {
   '~standard': {version: 1, vendor: 'trpc-cli', validate: async () => ({value: void 0})},
 }
 
-export const t = {
-  procedure: Object.assign(createProcedure, {
-    input: <Input>(schema: StandardSchemaV1<Input>) => ({
-      meta: (meta: TrpcCliMeta) => handlers(meta, schema),
-      ...handlers({}, schema),
-    }),
-    meta: (meta: TrpcCliMeta) => ({
-      input: <Input>(schema: StandardSchemaV1<Input>) => handlers(meta, schema),
-      ...handlers(meta, StandardSchemaVoid),
-    }),
-    ...handlers({}, StandardSchemaVoid),
+const router = <Procedures extends Record<string, CLIProcedureLike | CLIRouterLike>>(procedures: Procedures) =>
+  procedures
+
+const procedure = Object.assign(createProcedure, {
+  input: <Input>(schema: StandardSchemaV1<Input>) => ({
+    meta: (meta: TrpcCliMeta) => handlers(meta, schema),
+    ...handlers({}, schema),
   }),
-  router: <Procedures extends Record<string, CLIProcedureLike | CLIRouterLike>>(procedures: Procedures) => procedures,
-}
+  meta: (meta: TrpcCliMeta) => ({
+    input: <Input>(schema: StandardSchemaV1<Input>) => handlers(meta, schema),
+    ...handlers(meta, StandardSchemaVoid),
+  }),
+  ...handlers({}, StandardSchemaVoid),
+})
+
+/** Use trpc-cli without depending on @trpc/server or @orpc/server. Use like tRPC's `t` */
+export const t = {router, procedure}
+
+/** Use trpc-cli without depending on @trpc/server or @orpc/server. Use like oRPC's `os` */
+export const os = {router, ...procedure}
