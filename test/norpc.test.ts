@@ -27,7 +27,7 @@ describe('trpc style', () => {
           bar: z.number(),
         }),
       )
-      .handler(({input}) => `hello ${input.foo} ${input.bar}`),
+      .query(({input}) => `hello ${input.foo} ${input.bar}`),
     withValibot: t.procedure
       .input(
         v.object({
@@ -35,10 +35,10 @@ describe('trpc style', () => {
           def: v.number(),
         }),
       )
-      .handler(({input}) => `abc is ${input.abc} and def is ${input.def}`),
+      .mutation(({input}) => `abc is ${input.abc} and def is ${input.def}`),
     deeply: {
       nested: {
-        greeting: t.procedure.input(z.string()).handler(({input}) => `hello ${input}`),
+        greeting: t.procedure.input(z.string()).query(({input}) => `hello ${input}`),
       },
     },
   })
@@ -60,7 +60,7 @@ describe('trpc style', () => {
             return typeof value?.foo === 'string' && typeof value.bar === 'number'
           }),
         )
-        .handler(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
+        .mutation(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
     })
 
     expect(await run(router, ['hello', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
@@ -84,7 +84,7 @@ describe('trpc style', () => {
       hello: t.procedure
         .meta({jsonInput: true})
         .input(z.object({foo: z.string(), bar: z.number()}))
-        .handler(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
+        .query(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
     })
 
     expect(await run(router, ['hello', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
