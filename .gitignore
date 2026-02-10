@@ -2,3 +2,4 @@ node_modules
 dist
 *ignoreme*
 *.log
+session-ses_*.md
