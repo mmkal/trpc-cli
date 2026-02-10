@@ -95,10 +95,8 @@ export const isTrpc11Procedure = (procedure: AnyProcedure): procedure is Trpc11P
 }
 
 export const isCliRouter = (router: AnyRouter | AnyProcedure): router is CLIRouterLike => {
-  return (
-    typeof router === 'object' &&
-    Object.values(router).every(v => isCliProcedure(v as AnyProcedure) || isCliRouter(v as AnyRouter))
-  )
+  if (!router || typeof router !== 'object' || Array.isArray(router)) return false
+  return Object.values(router).every(v => isCliProcedure(v as AnyProcedure) || isCliRouter(v as AnyRouter))
 }
 
 export const isCliProcedure = (procedure: AnyProcedure): procedure is CLIProcedureLike => {
