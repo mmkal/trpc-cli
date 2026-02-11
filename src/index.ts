@@ -55,6 +55,10 @@ declare module 'zod/v4' {
      * Note: this is only valid for options, not positional arguments.
      */
     alias?: string
+    /**
+     * If true, this option will not appear in the --help output but will still be functional.
+     */
+    hidden?: boolean
   }
 }
 
@@ -74,6 +78,10 @@ declare module 'zod' {
      * Note: this is only valid for options, not positional arguments.
      */
     alias?: string
+    /**
+     * If true, this option will not appear in the --help output but will still be functional.
+     */
+    hidden?: boolean
   }
 }
 
@@ -312,6 +320,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           delete unusedOptionAliases[propertyKey]
         }
 
+        const isHidden = 'hidden' in propertyValue && propertyValue.hidden === true
+        const addOption = (opt: InstanceType<typeof BaseOption>) => {
+          if (isHidden) opt.hideHelp()
+          command.addOption(opt)
+        }
+
         const allowedSchemas = getAllowedSchemas(propertyValue)
         const firstSchemaWithDefault = allowedSchemas.find(subSchema => 'default' in subSchema)
         // Check for default value - first in the allowed schemas, then on the root property itself
@@ -347,7 +361,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           const option = new Option(`${flags} ${bracketise('string')}`, description)
           option.choices(enumChoices.choices)
           if (defaultValue.exists) option.default(defaultValue.value)
-          command.addOption(option)
+          addOption(option)
           return
         }
 
@@ -356,7 +370,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           if (defaultValue.exists) option.default(defaultValue.value)
           else if (rootTypes.includes('boolean')) option.default(false)
           option.argParser(getOptionValueParser(propertyValue))
-          command.addOption(option)
+          addOption(option)
           if (rootTypes.includes('boolean')) negate()
           return
         }
@@ -364,7 +378,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         if (rootTypes.length !== 1) {
           const option = new Option(`${flags} ${bracketise('json')}`, description)
           option.argParser(getOptionValueParser(propertyValue))
-          command.addOption(option)
+          addOption(option)
           return
         }
 
@@ -374,7 +388,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           // don't set a default value of `false`, because `undefined` is accepted by the procedure
           if (isValueRequired) option.default(false)
           else if (defaultValue.exists) option.default(defaultValue.value)
-          command.addOption(option)
+          addOption(option)
           negate()
           return
         }
@@ -434,7 +448,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }),
         )
 
-        command.addOption(option)
+        addOption(option)
         if (propertyType === 'boolean') negate() // just in case we refactor the code above and don't handle booleans as a special case
       }
 

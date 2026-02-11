@@ -830,6 +830,28 @@ test('complex positionals', async () => {
   )
 })
 
+test('hidden option via zod meta', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.object({
+          visible: z.string().optional(),
+          secret: z.string().optional().meta({hidden: true}),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  const help = await run(router, ['test', '--help'])
+  expect(help).toContain('--visible')
+  expect(help).not.toContain('--secret')
+
+  expect(await run(router, ['test', '--secret', 'shhh'])).toMatchInlineSnapshot(`"{"secret":"shhh"}"`)
+  expect(await run(router, ['test', '--visible', 'hi', '--secret', 'shhh'])).toMatchInlineSnapshot(
+    `"{"visible":"hi","secret":"shhh"}"`,
+  )
+})
+
 {
   // type errors for invalid meta
   // @ts-expect-error - positional is a boolean
