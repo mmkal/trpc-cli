@@ -320,7 +320,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           delete unusedOptionAliases[propertyKey]
         }
 
-
         const isHidden = 'hidden' in propertyValue && propertyValue.hidden === true
         const addOption = (opt: InstanceType<typeof BaseOption>) => {
           if (isHidden) opt.hideHelp()
