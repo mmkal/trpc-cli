@@ -517,7 +517,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
               const parts = path.split('.')
               for (const part of parts) prc = prc[part]
               const proc = prc as CLIProcedureLike
-              return [path, (input: unknown) => proc.call(input, params.context)]
+              return [path, (_input: unknown) => proc.call(_input, params.context)]
             }),
           )
         } else if (isOrpcRouter(router)) {
