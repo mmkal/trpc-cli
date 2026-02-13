@@ -1,4 +1,7 @@
 import {Argument, Command, Option} from 'commander'
+import {getEnumChoices} from './json-schema.js'
+import {toJsonSchema} from './parse-procedure.js'
+import {isProgressiveObjectSchema} from './progressive-object.js'
 import {
   CommanderProgramLike,
   EnquirerLike,
@@ -454,7 +457,9 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
     }
     await prompter.setup?.(baseContext)
 
-    const procedureMeta = (analysis.command.original as {__trpcCli?: {meta: TrpcCliMeta}}).__trpcCli?.meta
+    const trpcCliMeta = (analysis.command.original as {__trpcCli?: TrpcCliCommandMeta}).__trpcCli
+    const procedureMeta = trpcCliMeta?.meta
+    const originalInputSchema = trpcCliMeta?.originalInputSchema
 
     let shouldPrompt: boolean
     if (typeof procedureMeta?.prompt === 'boolean') {
@@ -466,6 +471,16 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
     }
 
     if (shouldPrompt) {
+      // Track values collected so far for progressive schema support
+      const collectedValues: Record<string, unknown> = {}
+
+      // Initialize with already-specified option values (use attributeName for camelCase property names)
+      for (const opt of analysis.options) {
+        if (opt.specified && opt.value !== undefined) {
+          collectedValues[opt.original.attributeName()] = opt.value
+        }
+      }
+
       for (const arg of analysis.arguments) {
         const ctx = {...baseContext, argument: arg.original}
         if (!arg.specified) {
@@ -497,14 +512,25 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
         if (!option.specified) {
           const fullFlag = option.original.long || `--${option.original.name()}`
           const isBoolean = option.original.isBoolean() || option.original.flags.includes('[boolean]')
+          // Use attributeName() for property lookup since schema properties are camelCase
+          const propName = option.original.attributeName()
+
+          // Get progressive property info if available (re-evaluates schema with collected values)
+          const progressiveInfo = originalInputSchema
+            ? getProgressivePropertyInfo(originalInputSchema, propName, collectedValues)
+            : null
+
           if (isBoolean) {
+            // For booleans, use progressive default if available
+            const defaultValue = progressiveInfo?.default ?? option.original.defaultValue
             const promptedValue = await prompter.confirm(
               {
                 message: getMessage(option.original),
-                default: (option.original.defaultValue as boolean | undefined) ?? false,
+                default: (defaultValue as boolean | undefined) ?? false,
               },
               ctx,
             )
+            collectedValues[propName] = promptedValue
             if (promptedValue) nextArgv.push(fullFlag)
           } else if (option.original.variadic && option.original.argChoices) {
             const choices = option.original.argChoices.slice()
@@ -519,26 +545,31 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
               },
               ctx,
             )
+            collectedValues[propName] = results
             results.forEach(result => {
               if (typeof result === 'string') nextArgv.push(fullFlag, result)
             })
-          } else if (option.original.argChoices) {
-            const choices = option.original.argChoices.slice()
+          } else if (option.original.argChoices || progressiveInfo?.choices) {
+            // Use progressive choices if available, otherwise fall back to static choices
+            const choices = progressiveInfo?.choices ?? option.original.argChoices?.slice() ?? []
+            const defaultValue = progressiveInfo?.default ?? option.original.defaultValue
             const set = new Set(choices)
             const promptedValue = await prompter.select(
               {
                 message: getMessage(option.original),
                 choices,
-                default: option.original.defaultValue as string,
+                default: defaultValue as string,
                 // required: option.original.required,
               },
               ctx,
             )
+            collectedValues[propName] = promptedValue
             if (set.has(promptedValue)) {
               nextArgv.push(fullFlag, promptedValue)
             }
           } else if (option.original.variadic) {
             const values: string[] = []
+            const collectedArray: string[] = []
             do {
               const promptedValue = await prompter.input(
                 {
@@ -549,17 +580,21 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
               )
               if (!promptedValue) break
               values.push(fullFlag, promptedValue)
+              collectedArray.push(promptedValue)
             } while (values)
+            collectedValues[propName] = collectedArray
             nextArgv.push(...values)
           } else {
             // let's handle this as a string - but the `parseArg` function could turn it into a number or boolean or whatever
             const getParsedValue = (input: string) => {
               return option.original.parseArg ? option.original.parseArg(input, undefined as string | undefined) : input
             }
+            // Use progressive default if available
+            const defaultValue = progressiveInfo?.default ?? option.value
             const promptedValue = await prompter.input(
               {
                 message: getMessage(option.original),
-                default: option.value,
+                default: defaultValue as string | undefined,
                 required: option.original.required,
                 validate: input => {
                   const parsed = getParsedValue(input)
@@ -569,6 +604,7 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
               },
               ctx,
             )
+            collectedValues[propName] = promptedValue
             if (promptedValue) nextArgv.push(fullFlag, getParsedValue(promptedValue) ?? promptedValue)
           }
         }
@@ -592,4 +628,41 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
       return Reflect.get(target, prop, receiver) as {}
     },
   }) satisfies CommanderProgramLike
+}
+
+type TrpcCliCommandMeta = {
+  meta: TrpcCliMeta
+  originalInputSchema?: unknown
+}
+
+/**
+ * For progressive schemas, evaluates the property schema given the values collected so far.
+ * Returns the choices and default for the property, if applicable.
+ */
+const getProgressivePropertyInfo = (
+  originalInputSchema: unknown,
+  propertyName: string,
+  collectedValues: Record<string, unknown>,
+): {choices?: string[]; default?: unknown} | null => {
+  if (!isProgressiveObjectSchema(originalInputSchema)) {
+    return null
+  }
+
+  const prop = originalInputSchema.__progressiveProps.find(p => p.propName === propertyName)
+  if (!prop) return null
+
+  // Get the actual schema by evaluating the function with collected values
+  const propType = typeof prop.propType === 'function' ? prop.propType(collectedValues) : prop.propType
+
+  // Convert to JSON schema to extract choices and default
+  const jsonSchemaResult = toJsonSchema(propType, {})
+  if (!jsonSchemaResult.success) return null
+
+  const jsonSchema = jsonSchemaResult.value
+  const enumChoices = getEnumChoices(jsonSchema)
+
+  return {
+    choices: enumChoices?.type === 'string_enum' ? enumChoices.choices : undefined,
+    default: jsonSchema.default,
+  }
 }
