@@ -81,6 +81,7 @@ export const getDescription = (v: JSONSchema7, depth = 0): string => {
         if (k.startsWith('$')) return false // helpers props to add on to a few different external library output formats
         if (k === 'maximum' && vv === Number.MAX_SAFE_INTEGER) return false // zod adds this for `z.number().int().positive()`
         if (depth <= 1 && k === 'enum' && getEnumChoices(v)?.type === 'string_enum') return false // don't show Enum: ["a","b"], that's handled by commander's `choices`
+        if (depth === 0 && k === 'anyOf' && getEnumChoices(v)?.type === 'string_enum') return false
         return true
       })
       .sort(([a], [b]) => {
@@ -89,6 +90,21 @@ export const getDescription = (v: JSONSchema7, depth = 0): string => {
       })
       .map(([k, vv], i) => {
         if (k === 'type' && Array.isArray(vv)) return `type: ${vv.join(' or ')}`
+        if (k === 'anyOf') {
+          const anyOf = (v.anyOf || []) as JSONSchema7[]
+          const isSimpleAnyOf = anyOf.every(subSchema => {
+            if (!subSchema || typeof subSchema !== 'object') return false
+            return Object.keys(subSchema).every(key => key === 'type' || key === 'const')
+          })
+
+          if (isSimpleAnyOf) {
+            const types = [...new Set(anyOf.flatMap(getSchemaTypes))]
+            if (types.length > 0) {
+              const label = depth > 0 ? 'Type' : 'type'
+              return `${label}: ${types.join(' or ')}`
+            }
+          }
+        }
         if (k === 'description' && i === 0) return String(vv)
         if (k === 'properties') return `Object (json formatted)`
         if (typeof vv === 'object') return `${capitaliseFromCamelCase(k)}: ${JSON.stringify(vv)}`
@@ -126,6 +142,7 @@ export const getSchemaTypes = (
 /** Returns a list of all allowed subschemas. If the schema is not a union, returns a list with a single item. */
 export const getAllowedSchemas = (schema: JSONSchema7): JSONSchema7[] => {
   if (!schema) return []
+  if (getEnumChoices(schema)) return [schema]
   if ('anyOf' in schema && Array.isArray(schema.anyOf))
     return (schema.anyOf as JSONSchema7[]).flatMap(getAllowedSchemas)
   if ('oneOf' in schema && Array.isArray(schema.oneOf))
@@ -136,24 +153,22 @@ export const getAllowedSchemas = (schema: JSONSchema7): JSONSchema7[] => {
 }
 
 export const getEnumChoices = (propertyValue: JSONSchema7) => {
+  const isLiteralAnyOfEntry = (
+    subSchema: unknown,
+    expectedType: 'string' | 'number',
+  ): subSchema is {const: string} | {const: number} => {
+    if (!subSchema || typeof subSchema !== 'object' || !('const' in subSchema)) return false
+    if (typeof subSchema.const !== expectedType) return false
+    if ('type' in subSchema && subSchema.type != null && ![subSchema.type].flat().includes(expectedType)) {
+      return false
+    }
+    return Object.keys(subSchema).every(key => key === 'const' || key === 'type')
+  }
+
   if (!propertyValue) return null
   if (!('enum' in propertyValue && Array.isArray(propertyValue.enum))) {
     // arktype prefers {anyOf: [{const: 'foo'}, {const: 'bar'}]} over {enum: ['foo', 'bar']} 🤷
-    if (
-      'anyOf' in propertyValue &&
-      propertyValue.anyOf?.every(subSchema => {
-        if (
-          subSchema &&
-          typeof subSchema === 'object' &&
-          'const' in subSchema &&
-          Object.keys(subSchema).length === 1 &&
-          typeof subSchema.const === 'string'
-        ) {
-          return true
-        }
-        return false
-      })
-    ) {
+    if ('anyOf' in propertyValue && propertyValue.anyOf?.every(subSchema => isLiteralAnyOfEntry(subSchema, 'string'))) {
       // all the subschemas are string literals, so we can use them as choices
       return {
         type: 'string_enum',
@@ -161,21 +176,7 @@ export const getEnumChoices = (propertyValue: JSONSchema7) => {
       } as const
     }
 
-    if (
-      'anyOf' in propertyValue &&
-      propertyValue.anyOf?.every(subSchema => {
-        if (
-          subSchema &&
-          typeof subSchema === 'object' &&
-          'const' in subSchema &&
-          Object.keys(subSchema).length === 1 &&
-          typeof subSchema.const === 'number'
-        ) {
-          return true
-        }
-        return false
-      })
-    ) {
+    if ('anyOf' in propertyValue && propertyValue.anyOf?.every(subSchema => isLiteralAnyOfEntry(subSchema, 'number'))) {
       // all the subschemas are string literals, so we can use them as choices
       return {
         type: 'number_enum',

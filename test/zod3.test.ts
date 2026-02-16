@@ -1,7 +1,7 @@
 import {initTRPC} from '@trpc/server'
 import {inspect} from 'util'
 import {expect, test} from 'vitest'
-import {z} from 'zod/v3' // same as 'zod' but this is more explicit
+import {z} from 'zod3'
 import {createCli, TrpcCliMeta} from '../src/index.js'
 import {run, snapshotSerializer} from './test-run.js'
 
