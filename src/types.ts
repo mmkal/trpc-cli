@@ -1,4 +1,4 @@
-import type {JSONSchema7} from 'json-schema'
+import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {CommandJSON} from './json.js'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat.js'
 
@@ -20,6 +20,28 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   // createCallerFactory?: CreateCallerFactoryLike
   trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
 }
+
+/**
+ * `createCli` params for a router that has already been parsed via `parseRouter`/`proxify.parseRouter`.
+ * Useful for CLIs that fetch procedure metadata at runtime instead of importing a full server router package.
+ */
+export interface ParsedRouterCliParams extends Dependencies {
+  router: ParsedRouter | RawParsedRouter
+  name?: string
+  version?: string
+  description?: string
+  usage?: string | string[]
+  context?: unknown
+  /** @deprecated this is actually **removed** not deprecated; use `aliases` on each procedure `meta` instead */
+  alias?: never
+  /** @deprecated this is actually **removed** not deprecated; set `default: true` on the procedure `meta` instead */
+  _default?: never
+
+  /** Included for API parity with `TrpcCliParams`. Ignored when using parsed routers. */
+  trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
+}
+
+export type CreateCliParams<R extends AnyRouter = AnyRouter> = TrpcCliParams<R> | ParsedRouterCliParams
 
 /** Rough shape of the `@trpc/server` (v10) module. Needed to pass in to `createCli` when using trpc v10. */
 export type TrpcServerModuleLike = {
@@ -60,6 +82,21 @@ export interface TrpcCliMeta {
   negateBooleans?: boolean
 }
 
+export type ProcedureType = 'query' | 'mutation' | 'subscription' | (string & {})
+
+export type ParsedProcedureInputPlan =
+  | {kind: 'empty_object'}
+  | {kind: 'options_object'}
+  | {kind: 'json_input_option'}
+  | {kind: 'primitive'; schema: JSONSchema7}
+  | {kind: 'array'; itemsSchema: JSONSchema7Definition}
+  | {kind: 'tuple'; positionalSchemas: JSONSchema7Definition[]; hasFlagsSchema: boolean}
+  | {
+      kind: 'option_positionals'
+      optionPositionals: Array<{key: string; schema: JSONSchema7Definition}>
+      inner: ParsedProcedureInputPlan
+    }
+
 export interface ParsedProcedure {
   positionalParameters: Array<{
     name: string
@@ -74,8 +111,38 @@ export interface ParsedProcedure {
    * Function for taking parsed argv output and transforming it so it can be passed into the procedure.
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
+  inputPlan: ParsedProcedureInputPlan
   getPojoInput: (argv: {positionalValues: Array<string | string[]>; options: Record<string, unknown>}) => unknown
 }
+
+/** Serializable form of `ParsedProcedure` - suitable for returning over HTTP. */
+export type RawParsedProcedure = Omit<ParsedProcedure, 'getPojoInput'>
+
+export type ProcedureInfo = {
+  meta: TrpcCliMeta
+  parsedProcedure: ParsedProcedure
+  incompatiblePairs: [string, string][]
+  procedure: {}
+  /**
+   * Procedure type (`query`/`mutation`) if known. Needed when proxifying without a full router.
+   */
+  procedureType?: ProcedureType
+  /**
+   * Optional pre-bound invoker. If present, `createCli` will use this directly.
+   */
+  invoke?: (input: unknown) => Promise<unknown>
+}
+
+/** Serializable form of `ProcedureInfo` - suitable for returning over HTTP. */
+export type RawProcedureInfo = Omit<ProcedureInfo, 'parsedProcedure' | 'procedure' | 'invoke'> & {
+  parsedProcedure: RawParsedProcedure
+}
+
+/** Hydrated parsed router entries (contains `getPojoInput` functions). */
+export type ParsedRouter = Array<[string, ProcedureInfo]>
+
+/** Serializable parsed router entries (no functions). */
+export type RawParsedRouter = Array<[string, RawProcedureInfo]>
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}
 

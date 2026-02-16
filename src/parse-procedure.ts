@@ -2,7 +2,7 @@ import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
 import {CliValidationError} from './errors.js'
 import {getSchemaTypes} from './json-schema.js'
-import type {Dependencies, ParsedProcedure, Result} from './types.js'
+import type {Dependencies, ParsedProcedure, ParsedProcedureInputPlan, Result} from './types.js'
 import {zodToJsonSchema} from './zod-to-json-schema/index.js'
 
 const [valibotOrError, valibotToJsonSchemaOrError, effectOrError, zod4CoreOrError] = await Promise.all([
@@ -17,6 +17,79 @@ const getModule = <T>(moduleOrError: T | string): T => {
     throw new Error(`${moduleOrError} - try installing it and re-running`)
   }
   return moduleOrError
+}
+
+type ParsedProcedureWithoutGetter = Omit<ParsedProcedure, 'getPojoInput'>
+
+const withPojoInputGetter = (parsedProcedure: ParsedProcedureWithoutGetter): ParsedProcedure => {
+  return {
+    ...parsedProcedure,
+    getPojoInput: createPojoInputGetter(parsedProcedure.inputPlan),
+  }
+}
+
+/**
+ * Hydrate a serializable parsed procedure back into a runtime parsed procedure with `getPojoInput`.
+ */
+export const hydrateParsedProcedure = (parsedProcedure: ParsedProcedureWithoutGetter): ParsedProcedure => {
+  return withPojoInputGetter(parsedProcedure)
+}
+
+export const createPojoInputGetter = (inputPlan: ParsedProcedureInputPlan): ParsedProcedure['getPojoInput'] => {
+  switch (inputPlan.kind) {
+    case 'empty_object': {
+      return () => ({})
+    }
+    case 'options_object': {
+      return argv => argv.options
+    }
+    case 'json_input_option': {
+      return argv => argv.options.input
+    }
+    case 'primitive': {
+      return argv => convertPositional(inputPlan.schema, argv.positionalValues[0] as string)
+    }
+    case 'array': {
+      return argv => (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(inputPlan.itemsSchema, s))
+    }
+    case 'tuple': {
+      return commandArgs => {
+        const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
+          const correspondingSchema = inputPlan.positionalSchemas[i]
+          if (looksLikeArray(correspondingSchema)) {
+            if (!Array.isArray(v)) {
+              throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
+            }
+            return v.map(s => {
+              if (!correspondingSchema.items || Array.isArray(correspondingSchema.items)) return s
+              return convertPositional(correspondingSchema.items, s)
+            })
+          }
+          if (typeof v !== 'string' && v !== undefined) {
+            throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
+          }
+          return convertPositional(correspondingSchema, v)
+        })
+
+        if (inputPlan.hasFlagsSchema) {
+          inputs.push(commandArgs.options)
+        }
+        return inputs
+      }
+    }
+    case 'option_positionals': {
+      const inner = createPojoInputGetter(inputPlan.inner)
+      return params => {
+        const positionalValues = [...params.positionalValues]
+        const options = {...params.options}
+        for (const {key, schema} of inputPlan.optionPositionals) {
+          options[key] = convertPositional(schema, positionalValues.shift() as string)
+        }
+
+        return inner({positionalValues, options})
+      }
+    }
+  }
 }
 
 /**
@@ -70,7 +143,7 @@ export function parseProcedureInputs(inputs: unknown[], dependencies: Dependenci
       if (optionishPositionals.length > 0) {
         return {
           success: true,
-          value: {
+          value: withPojoInputGetter({
             positionalParameters: [
               ...inner.value.positionalParameters,
               ...optionishPositionals.map(({key, schema}): (typeof inner.value.positionalParameters)[number] => ({
@@ -87,16 +160,12 @@ export function parseProcedureInputs(inputs: unknown[], dependencies: Dependenci
                 Object.entries(optionsProps).filter(([key]) => !optionishPositionals.some(x => x.key === key)),
               ),
             } as JSONSchema7,
-            getPojoInput: params => {
-              const positionalValues = [...params.positionalValues]
-              const options = {...params.options}
-              for (const {key, schema} of optionishPositionals) {
-                options[key] = convertPositional(schema, positionalValues.shift() as string)
-              }
-
-              return inner.value.getPojoInput({positionalValues, options})
+            inputPlan: {
+              kind: 'option_positionals',
+              optionPositionals: optionishPositionals.map(({key, schema}) => ({key, schema})),
+              inner: inner.value.inputPlan,
             },
-          },
+          }),
         }
       }
     }
@@ -109,11 +178,11 @@ function parseProcedureInputsInner(inputs: unknown[], dependencies: Dependencies
   if (inputs.length === 0) {
     return {
       success: true,
-      value: {
+      value: withPojoInputGetter({
         positionalParameters: [],
         optionsJsonSchema: {},
-        getPojoInput: () => ({}),
-      },
+        inputPlan: {kind: 'empty_object'},
+      }),
     }
   }
 
@@ -164,11 +233,11 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
     if (allObjects) {
       return {
         success: true,
-        value: {
+        value: withPojoInputGetter({
           positionalParameters: [],
           optionsJsonSchema: mergedSchema,
-          getPojoInput: argv => argv.options,
-        },
+          inputPlan: {kind: 'options_object'},
+        }),
       }
     }
     if (mergedSchema.anyOf.length === 2 && JSON.stringify(mergedSchema.anyOf[0]) === '{"not":{}}') {
@@ -185,11 +254,11 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
 
   return {
     success: true,
-    value: {
+    value: withPojoInputGetter({
       positionalParameters: [],
       optionsJsonSchema: mergedSchema,
-      getPojoInput: argv => argv.options,
-    },
+      inputPlan: {kind: 'options_object'},
+    }),
   }
 }
 
@@ -208,7 +277,7 @@ function parsePrimitiveInput(schema: JSONSchema7): Result<ParsedProcedure> {
   const name = (schema.title || schema.description || /\W/.test(typeName) ? 'value' : typeName).replaceAll(/\s+/g, '_')
   return {
     success: true,
-    value: {
+    value: withPojoInputGetter({
       positionalParameters: [
         {
           name,
@@ -219,8 +288,8 @@ function parsePrimitiveInput(schema: JSONSchema7): Result<ParsedProcedure> {
         },
       ],
       optionsJsonSchema: {},
-      getPojoInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
-    },
+      inputPlan: {kind: 'primitive', schema},
+    }),
   }
 }
 
@@ -286,17 +355,17 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
   if (merged) {
     return {
       success: true,
-      value: {
+      value: withPojoInputGetter({
         positionalParameters: [],
         optionsJsonSchema: merged,
-        getPojoInput: argv => argv.options,
-      },
+        inputPlan: {kind: 'options_object'},
+      }),
     }
   }
 
   return {
     success: true,
-    value: {
+    value: withPojoInputGetter({
       positionalParameters: [],
       optionsJsonSchema: {
         allOf: parsedIndividually.map(p => {
@@ -309,8 +378,8 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
           return optionsSchema
         }),
       },
-      getPojoInput: argv => argv.options,
-    },
+      inputPlan: {kind: 'options_object'},
+    }),
   }
 }
 
@@ -342,7 +411,7 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
   }
   return {
     success: true,
-    value: {
+    value: withPojoInputGetter({
       positionalParameters: [
         {
           name: parameterName(array, 1),
@@ -353,9 +422,8 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
         },
       ],
       optionsJsonSchema: {},
-      getPojoInput: argv =>
-        (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.items as JSONSchema7, s)),
-    },
+      inputPlan: {kind: 'array', itemsSchema: array.items as JSONSchema7},
+    }),
   }
 }
 
@@ -394,7 +462,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
 
   return {
     success: true,
-    value: {
+    value: withPojoInputGetter({
       positionalParameters: positionalSchemas.map((schema, i) => ({
         name: parameterName(schema, i + 1),
         array: looksLikeArray(schema),
@@ -403,30 +471,12 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
         type: getSchemaTypes(toRoughJsonSchema7(schema)).join(' | '),
       })),
       optionsJsonSchema: flagsSchema && typeof flagsSchema === 'object' ? flagsSchema : {},
-      getPojoInput: commandArgs => {
-        const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
-          const correspondingSchema = positionalSchemas[i]
-          if (looksLikeArray(correspondingSchema)) {
-            if (!Array.isArray(v)) {
-              throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
-            }
-            return v.map(s => {
-              if (!correspondingSchema.items || Array.isArray(correspondingSchema.items)) return s
-              return convertPositional(correspondingSchema.items, s)
-            })
-          }
-          if (typeof v !== 'string' && v !== undefined) {
-            throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
-          }
-          return convertPositional(correspondingSchema, v)
-        })
-
-        if (flagsSchema) {
-          inputs.push(commandArgs.options)
-        }
-        return inputs
+      inputPlan: {
+        kind: 'tuple',
+        positionalSchemas,
+        hasFlagsSchema: Boolean(flagsSchema),
       },
-    },
+    }),
   }
 }
 

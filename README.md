@@ -1207,21 +1207,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L219)
-
-Run a trpc router as a CLI.
-
-##### Params
-
-|name      |description                                                                              |
-|----------|-----------------------------------------------------------------------------------------|
-|router    |A trpc router                                                                            |
-|context   |The context to use when calling the procedures - needed if your router requires a context|
-|trpcServer|The trpc server module to use. Only needed if using trpc v10.                            |
-
-##### Returns
-
-A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+#### [createCli](./src/index.ts#L239)
 <!-- codegen:end -->
 
 ### Features and Limitations
