@@ -78,7 +78,7 @@ export type inferRouterContext<R extends AnyRouter> = R extends Trpc10RouterLike
     : never
 
 export const isTrpc11Procedure = (procedure: AnyProcedure): procedure is Trpc11ProcedureLike => {
-  return !Array.isArray(procedure) && 'type' in procedure._def && typeof procedure._def.type === 'string'
+  return 'type' in procedure._def && typeof procedure._def.type === 'string'
 }
 
 export const isTrpc11Router = (router: AnyRouter): router is Trpc11RouterLike => {

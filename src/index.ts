@@ -173,7 +173,7 @@ const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
   }
 }
 
-export type ProcedureInfo = {
+type ProcedureInfo = {
   meta: TrpcCliMeta
   inputSchemas: Result<JSONSchema7[]>
   type: 'query' | 'mutation' | null
