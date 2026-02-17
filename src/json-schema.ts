@@ -1,4 +1,13 @@
 import {JSONSchema7} from 'json-schema'
+import {Dependencies, Result} from './types.js'
+import {zodToJsonSchema as zodV3ToJsonSchema} from './zod-to-json-schema/index.js'
+
+const [valibotOrError, valibotToJsonSchemaOrError, effectOrError, zod4CoreOrError] = await Promise.all([
+  import('valibot').catch(String),
+  import('@valibot/to-json-schema').catch(String),
+  import('effect').catch(String),
+  import('zod/v4/core').catch(String),
+])
 
 const capitaliseFromCamelCase = (camel: string) => {
   const parts = camel.split(/(?=[A-Z])/)
@@ -242,3 +251,126 @@ export const getEnumChoices = (propertyValue: JSONSchema7) => {
 
   return null
 }
+
+const getModule = <T>(moduleOrError: T | string): T => {
+  if (typeof moduleOrError === 'string') {
+    throw new Error(`${moduleOrError} - try installing it and re-running`)
+  }
+  return moduleOrError
+}
+
+/**
+ * Attempts to convert a trpc procedure input to JSON schema.
+ * Uses @see jsonSchemaConverters to convert the input to JSON schema.
+ */
+export function toJsonSchema(input: unknown, dependencies: Dependencies): Result<JSONSchema7> {
+  try {
+    const jsonSchemaConverters = getJsonSchemaConverters(dependencies)
+    const vendor = getVendor(input)
+    if (vendor && vendor in jsonSchemaConverters) {
+      const converter = jsonSchemaConverters[vendor as keyof typeof jsonSchemaConverters]
+      const converted = converter(input)
+      return {success: true, value: converted}
+    }
+
+    return {success: false, error: `Schema not convertible to JSON schema`}
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return {success: false, error: `Failed to convert input to JSON Schema: ${message}`}
+  }
+}
+
+// #region vendor specific stuff
+
+/** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
+const getJsonSchemaConverters = (dependencies: Dependencies) => {
+  return {
+    zod: (input: unknown) => {
+      // @ts-expect-error don't worry lots of ?.
+      if (input._zod?.version?.major == 4) {
+        const zod4 = getModule(zod4CoreOrError)
+        return zod4.toJSONSchema(input as never, {
+          io: 'input',
+          // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          unrepresentable: 'any',
+          // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
+          override: ctx => {
+            if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
+              ctx.jsonSchema.optional = true
+            }
+
+            // this is needed because trpc-cli (currently) has its own zod dependency, which is v3, and uses zod/v4 as a submodule. But the v3 zod/v4 module drops descriptions from the produced json schema.
+            // normally zod does this itself, but not when using v3's toJSONSchema function with a v4 schema.
+            const meta = (ctx.zodSchema as {} as Partial<import('zod/v4').ZodType>).meta?.()
+            if (meta) Object.assign(ctx.jsonSchema, meta)
+          },
+        }) as JSONSchema7
+      }
+      return zodV3ToJsonSchema(input as never) as JSONSchema7
+    },
+    arktype: (input: unknown) => {
+      const type = prepareArktypeType(input) as import('arktype').Type
+      return type.toJsonSchema({
+        fallback: ctx => {
+          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, optional: true}
+          return ctx.base
+        },
+      }) as JSONSchema7
+    },
+    valibot: (input: unknown) => {
+      const valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema'] || getModule(valibotToJsonSchemaOrError)
+
+      const valibotToJsonSchema = valibotToJsonSchemaLib?.toJsonSchema
+      if (!valibotToJsonSchema) {
+        throw new Error(
+          `no 'toJsonSchema' function found in @valibot/to-json-schema - check you are using a supported version`,
+        )
+      }
+      if (typeof valibotOrError === 'string') {
+        // couldn't load valibot, maybe it's aliased to something else? anyway bad luck, you won't know about optional positional parameters, but that's a rare-ish case so not a big deal
+        return valibotToJsonSchema(input as never)
+      }
+      const v = getModule(valibotOrError)
+      const parent = valibotToJsonSchema(v.object({child: input as import('valibot').StringSchema<undefined>}), {
+        errorMode: 'ignore',
+      })
+      const child = parent.properties!.child as JSONSchema7
+      return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
+    },
+    effect: (input: unknown) => {
+      const effect = dependencies.effect || getModule(effectOrError)
+      if (!effect) {
+        throw new Error(`effect dependency could not be found - try installing it and re-running`)
+      }
+      if (!effect.Schema.isSchema(input)) {
+        const message = `input was not an effect schema - please use effect version 3.14.2 or higher. See https://github.com/mmkal/trpc-cli/pull/63`
+        throw new Error(message)
+      }
+      return effect.JSONSchema.make(input as never) as JSONSchema7
+    },
+  } satisfies Record<string, (input: unknown) => JSONSchema7>
+}
+
+function getVendor(schema: unknown) {
+  // note: don't check for typeof schema === 'object' because arktype schemas are functions (you call them directly instead of `.parse(...)`)
+  return (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor ?? null
+}
+
+const jsonSchemaVendorNames = new Set(Object.keys(getJsonSchemaConverters({})))
+export function looksJsonSchemaable(value: unknown) {
+  const vendor = getVendor(value)
+  return !!vendor && jsonSchemaVendorNames.has(vendor)
+}
+
+function prepareArktypeType(type: unknown) {
+  let innerType = type as {in?: unknown; toJsonSchema: () => JSONSchema7}
+  while (innerType) {
+    if (innerType?.in && innerType.in !== innerType) {
+      innerType = innerType.in as typeof innerType
+    } else {
+      break
+    }
+  }
+  return innerType as {toJsonSchema: () => JSONSchema7}
+}
+// #endregion vendor specific stuff
