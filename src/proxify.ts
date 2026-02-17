@@ -10,6 +10,8 @@ import {AnyRouter} from './trpc-compat.js'
 /**
  * EXPERIMENTAL: Don't use unless you're willing to help figure out the API, and whether it should even exist.
  * See description in https://github.com/mmkal/trpc-cli/pull/153
+ *
+ * Note: for now, this can accept any valid router, but it will always give you back a trpc v11 router.
  */
 export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePath: string) => unknown) => {
   const parsed = parseRouter({router})
