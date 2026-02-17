@@ -15,7 +15,7 @@ import {
 } from './json-schema.js'
 import {commandToJSON} from './json.js'
 import {lineByLineConsoleLogger} from './logging.js'
-import {parseProcedureInputs} from './parse-procedure.js'
+import {getPojoInputDirectives, parseProcedureInputs} from './parse-procedure.js'
 import {promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
@@ -197,7 +197,7 @@ const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
         input: {description}, // omit `type` - this is json input, it could be anything
       },
     },
-    getPojoInput: parsedCliParams => parsedCliParams.options.input,
+    pojoInputDirective: ['inputOption'],
   }
 }
 
@@ -477,7 +477,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
         const positionalValues = args.slice(0, -2)
 
-        const input = parsedProcedure.getPojoInput({positionalValues, options})
+        const getPojoInput = getPojoInputDirectives[parsedProcedure.pojoInputDirective[0]]
+        const input = getPojoInput(
+          {positionalValues, options},
+          ...(parsedProcedure.pojoInputDirective.slice(1) as [never, never]),
+        )
 
         let caller: Record<string, (input: unknown) => unknown>
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined

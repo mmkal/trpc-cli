@@ -1,4 +1,4 @@
-import type {JSONSchema7} from 'json-schema'
+import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {CommandJSON} from './json.js'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat.js'
 
@@ -60,6 +60,25 @@ export interface TrpcCliMeta {
   negateBooleans?: boolean
 }
 
+export type SimpleGetPojoInputDirective =
+  | ['getOptions']
+  | ['convertFirstPositionalValue', JSONSchema7Definition]
+  | ['convertLastPositionalValueList', JSONSchema7Definition]
+  | ['crazyTupleImplementation', JSONSchema7Definition]
+  | ['empty']
+  | ['inputOption']
+
+export type GetPojoInputDirective =
+  | SimpleGetPojoInputDirective
+  | [
+      'optionalishPositionals',
+      {
+        key: string
+        schema: JSONSchema7 & Record<'positional', unknown>
+      }[],
+      SimpleGetPojoInputDirective,
+    ]
+
 export interface ParsedProcedure {
   positionalParameters: Array<{
     name: string
@@ -74,7 +93,8 @@ export interface ParsedProcedure {
    * Function for taking parsed argv output and transforming it so it can be passed into the procedure.
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
-  getPojoInput: (argv: {positionalValues: Array<string | string[]>; options: Record<string, unknown>}) => unknown
+  // getPojoInput: (argv: {positionalValues: Array<string | string[]>; options: Record<string, unknown>}) => unknown
+  pojoInputDirective: GetPojoInputDirective
 }
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}

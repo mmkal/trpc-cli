@@ -2,7 +2,13 @@ import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
 import {CliValidationError} from './errors.js'
 import {getSchemaTypes} from './json-schema.js'
-import type {Dependencies, ParsedProcedure, Result} from './types.js'
+import type {
+  Dependencies,
+  GetPojoInputDirective,
+  ParsedProcedure,
+  Result,
+  SimpleGetPojoInputDirective,
+} from './types.js'
 import {zodToJsonSchema} from './zod-to-json-schema/index.js'
 
 const [valibotOrError, valibotToJsonSchemaOrError, effectOrError, zod4CoreOrError] = await Promise.all([
@@ -11,6 +17,57 @@ const [valibotOrError, valibotToJsonSchemaOrError, effectOrError, zod4CoreOrErro
   import('effect').catch(String),
   import('zod/v4/core').catch(String),
 ])
+
+export const getPojoInputDirectives: {
+  [K in GetPojoInputDirective[0]]: (
+    argv: {positionalValues: Array<string | string[]>; options: Record<string, unknown>},
+    ...rest: Extract<GetPojoInputDirective, [K, ...unknown[]]> extends [K, ...infer Rest] ? Rest : never
+  ) => unknown
+} = {
+  getOptions: argv => argv.options,
+  convertFirstPositionalValue: (argv, schema) => convertPositional(schema, argv.positionalValues[0] as string),
+  crazyTupleImplementation: (commandArgs, schema) => {
+    const helperResult = tupleSchemaHelper(schema)
+    if (!helperResult.success) return {}
+    const {positionalSchemas, flagsSchema} = helperResult.value
+
+    const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
+      const correspondingSchema = positionalSchemas[i]
+      if (looksLikeArray(correspondingSchema)) {
+        if (!Array.isArray(v)) {
+          throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
+        }
+        return v.map(s => {
+          if (!correspondingSchema.items || Array.isArray(correspondingSchema.items)) return s
+          return convertPositional(correspondingSchema.items, s)
+        })
+      }
+      if (typeof v !== 'string' && v !== undefined) {
+        throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
+      }
+      return convertPositional(correspondingSchema, v)
+    })
+
+    if (flagsSchema) {
+      inputs.push(commandArgs.options)
+    }
+    return inputs
+  },
+  convertLastPositionalValueList: (argv, schema) => {
+    const lastPositionalValue = argv.positionalValues.at(-1) as string[]
+    return lastPositionalValue.map(s => convertPositional(schema, s))
+  },
+  empty: () => ({}),
+  inputOption: argv => argv.options.input,
+  optionalishPositionals: (params, optionishPositionals, inner) => {
+    const positionalValues = [...params.positionalValues]
+    const options = {...params.options}
+    for (const {key, schema} of optionishPositionals) {
+      options[key] = convertPositional(schema, positionalValues.shift() as string)
+    }
+    return getPojoInputDirectives[inner[0]]({options, positionalValues}, ...(inner.slice(1) as [never]))
+  },
+}
 
 const getModule = <T>(moduleOrError: T | string): T => {
   if (typeof moduleOrError === 'string') {
@@ -87,15 +144,12 @@ export function parseProcedureInputs(inputs: unknown[], dependencies: Dependenci
                 Object.entries(optionsProps).filter(([key]) => !optionishPositionals.some(x => x.key === key)),
               ),
             } as JSONSchema7,
-            getPojoInput: params => {
-              const positionalValues = [...params.positionalValues]
-              const options = {...params.options}
-              for (const {key, schema} of optionishPositionals) {
-                options[key] = convertPositional(schema, positionalValues.shift() as string)
-              }
-
-              return inner.value.getPojoInput({positionalValues, options})
-            },
+            // pojoInputDirective: 'getOptions',
+            pojoInputDirective: [
+              'optionalishPositionals',
+              optionishPositionals,
+              inner.value.pojoInputDirective as SimpleGetPojoInputDirective,
+            ],
           },
         }
       }
@@ -112,7 +166,7 @@ function parseProcedureInputsInner(inputs: unknown[], dependencies: Dependencies
       value: {
         positionalParameters: [],
         optionsJsonSchema: {},
-        getPojoInput: () => ({}),
+        pojoInputDirective: ['empty'],
       },
     }
   }
@@ -167,7 +221,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
         value: {
           positionalParameters: [],
           optionsJsonSchema: mergedSchema,
-          getPojoInput: argv => argv.options,
+          pojoInputDirective: ['getOptions'],
         },
       }
     }
@@ -188,7 +242,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
     value: {
       positionalParameters: [],
       optionsJsonSchema: mergedSchema,
-      getPojoInput: argv => argv.options,
+      pojoInputDirective: ['getOptions'],
     },
   }
 }
@@ -219,7 +273,7 @@ function parsePrimitiveInput(schema: JSONSchema7): Result<ParsedProcedure> {
         },
       ],
       optionsJsonSchema: {},
-      getPojoInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
+      pojoInputDirective: ['convertFirstPositionalValue', schema],
     },
   }
 }
@@ -289,7 +343,7 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
       value: {
         positionalParameters: [],
         optionsJsonSchema: merged,
-        getPojoInput: argv => argv.options,
+        pojoInputDirective: ['getOptions'],
       },
     }
   }
@@ -309,7 +363,7 @@ function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result
           return optionsSchema
         }),
       },
-      getPojoInput: argv => argv.options,
+      pojoInputDirective: ['getOptions'],
     },
   }
 }
@@ -353,13 +407,14 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
         },
       ],
       optionsJsonSchema: {},
-      getPojoInput: argv =>
-        (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.items as JSONSchema7, s)),
+      pojoInputDirective: ['convertLastPositionalValueList', array.items as JSONSchema7],
     },
   }
 }
 
-function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> {
+function tupleSchemaHelper(
+  tuple: JSONSchema7Definition,
+): Result<{positionalSchemas: JSONSchema7Definition[]; flagsSchema: JSONSchema7Definition | null}> {
   const items = tupleItemsSchemas(tuple)
   if (!Array.isArray(items)) throw new Error('.items is not an array, is this really a tuple?')
 
@@ -392,6 +447,13 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
 
   const positionalSchemas = flagsSchemaIndex === -1 ? items : items.slice(0, flagsSchemaIndex)
 
+  return {success: true, value: {positionalSchemas, flagsSchema}}
+}
+
+function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> {
+  const help = tupleSchemaHelper(tuple)
+  if (!help.success) return help
+  const {positionalSchemas, flagsSchema} = help.value
   return {
     success: true,
     value: {
@@ -403,29 +465,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
         type: getSchemaTypes(toRoughJsonSchema7(schema)).join(' | '),
       })),
       optionsJsonSchema: flagsSchema && typeof flagsSchema === 'object' ? flagsSchema : {},
-      getPojoInput: commandArgs => {
-        const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
-          const correspondingSchema = positionalSchemas[i]
-          if (looksLikeArray(correspondingSchema)) {
-            if (!Array.isArray(v)) {
-              throw new CliValidationError(`Expected array at position ${i}, got ${typeof v}`)
-            }
-            return v.map(s => {
-              if (!correspondingSchema.items || Array.isArray(correspondingSchema.items)) return s
-              return convertPositional(correspondingSchema.items, s)
-            })
-          }
-          if (typeof v !== 'string' && v !== undefined) {
-            throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
-          }
-          return convertPositional(correspondingSchema, v)
-        })
-
-        if (flagsSchema) {
-          inputs.push(commandArgs.options)
-        }
-        return inputs
-      },
+      pojoInputDirective: ['crazyTupleImplementation', tuple],
     },
   }
 }

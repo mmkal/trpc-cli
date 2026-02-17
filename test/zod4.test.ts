@@ -830,6 +830,24 @@ test('complex positionals', async () => {
   )
 })
 
+test('tuple flags can include positional meta', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        z.tuple([
+          z.object({
+            foo: z.number().meta({positional: true}),
+            bar: z.string().optional(),
+          }),
+        ]),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', '123'])).toMatchInlineSnapshot(`"[{"foo":123}]"`)
+  expect(await run(router, ['test', '123', '--bar', 'hello'])).toMatchInlineSnapshot(`"[{"foo":123,"bar":"hello"}]"`)
+})
+
 test('hidden option via zod meta', async () => {
   const router = t.router({
     test: t.procedure
