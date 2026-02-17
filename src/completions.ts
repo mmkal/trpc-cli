@@ -1,6 +1,6 @@
-import {OmeletteInstanceLike} from './index.js'
 import {Command} from 'commander'
 import type omelette from 'omelette'
+import type {OmeletteInstanceLike} from './types.js'
 
 /** uses omelette to add completions to a commander program */
 export function addCompletions(program: Command, completion: OmeletteInstanceLike) {
