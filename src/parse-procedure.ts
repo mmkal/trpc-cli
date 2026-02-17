@@ -15,7 +15,7 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
   )
 }
 
-export function procedureInputsJsonSchemas(inputs: unknown[], dependencies: Dependencies): Result<JSONSchema7[]> {
+export function getProcedureInputJsonSchemas(inputs: unknown[], dependencies: Dependencies): Result<JSONSchema7[]> {
   const allJsonSchemaable = inputs.every(input => looksJsonSchemaable(input))
   if (!allJsonSchemaable) {
     return {
@@ -32,10 +32,8 @@ export function procedureInputsJsonSchemas(inputs: unknown[], dependencies: Depe
     }
   }
 
-  return {
-    success: true,
-    value: converted.map(c => (c as Extract<typeof c, {success: true}>).value),
-  }
+  const schemas = converted.map(c => (c as Extract<typeof c, {success: true}>).value)
+  return {success: true, value: schemas}
 }
 
 export function parseJsonSchemaInputs(schemas: Result<JSONSchema7[]>): Result<ParsedProcedure> {

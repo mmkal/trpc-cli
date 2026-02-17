@@ -15,7 +15,7 @@ import {
 } from './json-schema.js'
 import {commandToJSON} from './json.js'
 import {lineByLineConsoleLogger} from './logging.js'
-import {parseJsonSchemaInputs, procedureInputsJsonSchemas} from './parse-procedure.js'
+import {parseJsonSchemaInputs, getProcedureInputJsonSchemas} from './parse-procedure.js'
 import {promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
@@ -124,7 +124,7 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
   const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
   return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
     const meta = getMeta(procedure)
-    const inputSchemas = procedureInputsJsonSchemas(procedure._def.inputs as unknown[], params)
+    const inputSchemas = getProcedureInputJsonSchemas(procedure._def.inputs as unknown[], params)
     return [procedurePath, {meta, inputSchemas}]
   })
 }
@@ -139,7 +139,7 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
     for (const p of path) procedure = procedure[p] as Record<string, unknown>
     if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
 
-    const inputSchemas = procedureInputsJsonSchemas([contract['~orpc'].inputSchema], params)
+    const inputSchemas = getProcedureInputJsonSchemas([contract['~orpc'].inputSchema], params)
     const procedurePath = path.join('.')
     const procedureish = {_def: {meta: contract['~orpc'].meta}} as AnyProcedure
     const meta = getMeta(procedureish)
