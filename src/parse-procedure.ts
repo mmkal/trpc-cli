@@ -1,44 +1,8 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
 import {CliValidationError} from './errors.js'
-import {getSchemaTypes} from './json-schema.js'
+import {getSchemaTypes, looksJsonSchemaable, toJsonSchema} from './json-schema.js'
 import type {Dependencies, ParsedProcedure, Result} from './types.js'
-import {zodToJsonSchema} from './zod-to-json-schema/index.js'
-
-const [valibotOrError, valibotToJsonSchemaOrError, effectOrError, zod4CoreOrError] = await Promise.all([
-  import('valibot').catch(String),
-  import('@valibot/to-json-schema').catch(String),
-  import('effect').catch(String),
-  import('zod/v4/core').catch(String),
-])
-
-const getModule = <T>(moduleOrError: T | string): T => {
-  if (typeof moduleOrError === 'string') {
-    throw new Error(`${moduleOrError} - try installing it and re-running`)
-  }
-  return moduleOrError
-}
-
-/**
- * Attempts to convert a trpc procedure input to JSON schema.
- * Uses @see jsonSchemaConverters to convert the input to JSON schema.
- */
-function toJsonSchema(input: unknown, dependencies: Dependencies): Result<JSONSchema7> {
-  try {
-    const jsonSchemaConverters = getJsonSchemaConverters(dependencies)
-    const vendor = getVendor(input)
-    if (vendor && vendor in jsonSchemaConverters) {
-      const converter = jsonSchemaConverters[vendor as keyof typeof jsonSchemaConverters]
-      const converted = converter(input)
-      return {success: true, value: converted}
-    }
-
-    return {success: false, error: `Schema not convertible to JSON schema`}
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    return {success: false, error: `Failed to convert input to JSON Schema: ${message}`}
-  }
-}
 
 function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: string} {
   return (
@@ -51,8 +15,31 @@ function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: stri
   )
 }
 
-export function parseProcedureInputs(inputs: unknown[], dependencies: Dependencies): Result<ParsedProcedure> {
-  const inner = parseProcedureInputsInner(inputs, dependencies)
+export function procedureInputsJsonSchemas(inputs: unknown[], dependencies: Dependencies): Result<JSONSchema7[]> {
+  const allJsonSchemaable = inputs.every(input => looksJsonSchemaable(input))
+  if (!allJsonSchemaable) {
+    return {
+      success: false,
+      error: `Invalid input type ${inputs.map(s => (s as {})?.constructor.name).join(', ')}, only inputs that can be converted to JSON Schema are supported`,
+    }
+  }
+
+  const converted = inputs.map(input => toJsonSchema(input, dependencies))
+  if (converted.some(c => !c.success)) {
+    return {
+      success: false,
+      error: converted.flatMap(c => (c.success ? [] : [c.error])).join('\n'),
+    }
+  }
+
+  return {
+    success: true,
+    value: converted.map(c => (c as Extract<typeof c, {success: true}>).value),
+  }
+}
+
+export function parseJsonSchemaInputs(schemas: Result<JSONSchema7[]>): Result<ParsedProcedure> {
+  const inner = parseProcedureInputsInner(schemas)
   if (inner.success && inner.value.positionalParameters.some((param, i, {length}) => param.array && i < length - 1)) {
     return {success: false, error: `Array positional parameters must be at the end of the input.`}
   }
@@ -105,8 +92,12 @@ export function parseProcedureInputs(inputs: unknown[], dependencies: Dependenci
   return inner
 }
 
-function parseProcedureInputsInner(inputs: unknown[], dependencies: Dependencies): Result<ParsedProcedure> {
-  if (inputs.length === 0) {
+function parseProcedureInputsInner(schemasResult: Result<JSONSchema7[]>): Result<ParsedProcedure> {
+  if (!schemasResult.success) return schemasResult
+
+  const schemas = schemasResult.value
+
+  if (schemas.length === 0) {
     return {
       success: true,
       value: {
@@ -117,28 +108,11 @@ function parseProcedureInputsInner(inputs: unknown[], dependencies: Dependencies
     }
   }
 
-  const allJsonSchemaable = inputs.every(input => looksJsonSchemaable(input))
-  if (!allJsonSchemaable) {
-    return {
-      success: false,
-      error: `Invalid input type ${inputs.map(s => (s as {})?.constructor.name).join(', ')}, only inputs that can be converted to JSON Schema are supported`,
-    }
+  if (schemas.length > 1) {
+    return parseMultiInputs(schemas)
   }
 
-  if (inputs.length > 1) {
-    return parseMultiInputs(inputs, dependencies)
-  }
-
-  const mergedSchemaResult = toJsonSchema(inputs[0], dependencies)
-
-  if (!mergedSchemaResult.success) {
-    return {
-      success: false,
-      error: mergedSchemaResult.error,
-    }
-  }
-
-  const mergedSchema = mergedSchemaResult.value
+  const mergedSchema = schemas[0]
   return handleMergedSchema(mergedSchema)
 }
 
@@ -266,8 +240,8 @@ function maybeMergeObjectSchemas(schemas: JSONSchema7[]): JSONSchema7 | null {
   return {type: 'object', required, properties}
 }
 
-function parseMultiInputs(inputs: unknown[], dependencies: Dependencies): Result<ParsedProcedure> {
-  const parsedIndividually = inputs.map(input => parseProcedureInputsInner([input], dependencies))
+function parseMultiInputs(schemas: JSONSchema7[]): Result<ParsedProcedure> {
+  const parsedIndividually = schemas.map(sch => parseProcedureInputsInner({success: true, value: [sch]}))
 
   const failures = parsedIndividually.flatMap(p => (p.success ? [] : [p.error]))
   if (failures.length > 0) {
@@ -508,98 +482,3 @@ const parameterName = (s: JSONSchema7Definition, position: number): string => {
 const acceptsObject = (schema: JSONSchema7): boolean => {
   return (schema.type === 'object' || schema.anyOf?.some(sub => acceptsObject(toRoughJsonSchema7(sub)))) ?? false
 }
-
-// #region vendor specific stuff
-
-/** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
-const getJsonSchemaConverters = (dependencies: Dependencies) => {
-  return {
-    zod: (input: unknown) => {
-      // @ts-expect-error don't worry lots of ?.
-      if (input._zod?.version?.major == 4) {
-        const zod4 = getModule(zod4CoreOrError)
-        return zod4.toJSONSchema(input as never, {
-          io: 'input',
-          // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
-          unrepresentable: 'any',
-          // todo[zod@>=4.1.0] remove the override if https://github.com/colinhacks/zod/issues/4164 is resolved, or this comment if it's closed
-          override: ctx => {
-            if (ctx.zodSchema?.constructor?.name === 'ZodOptional') {
-              ctx.jsonSchema.optional = true
-            }
-
-            // this is needed because trpc-cli (currently) has its own zod dependency, which is v3, and uses zod/v4 as a submodule. But the v3 zod/v4 module drops descriptions from the produced json schema.
-            // normally zod does this itself, but not when using v3's toJSONSchema function with a v4 schema.
-            const meta = (ctx.zodSchema as {} as Partial<import('zod/v4').ZodType>).meta?.()
-            if (meta) Object.assign(ctx.jsonSchema, meta)
-          },
-        }) as JSONSchema7
-      }
-      return zodToJsonSchema(input as never) as JSONSchema7
-    },
-    arktype: (input: unknown) => {
-      const type = prepareArktypeType(input) as import('arktype').Type
-      return type.toJsonSchema({
-        fallback: ctx => {
-          if (ctx.code === 'unit' && ctx.unit === undefined) return {...ctx.base, optional: true}
-          return ctx.base
-        },
-      }) as JSONSchema7
-    },
-    valibot: (input: unknown) => {
-      const valibotToJsonSchemaLib = dependencies['@valibot/to-json-schema'] || getModule(valibotToJsonSchemaOrError)
-
-      const valibotToJsonSchema = valibotToJsonSchemaLib?.toJsonSchema
-      if (!valibotToJsonSchema) {
-        throw new Error(
-          `no 'toJsonSchema' function found in @valibot/to-json-schema - check you are using a supported version`,
-        )
-      }
-      if (typeof valibotOrError === 'string') {
-        // couldn't load valibot, maybe it's aliased to something else? anyway bad luck, you won't know about optional positional parameters, but that's a rare-ish case so not a big deal
-        return valibotToJsonSchema(input as never)
-      }
-      const v = getModule(valibotOrError)
-      const parent = valibotToJsonSchema(v.object({child: input as import('valibot').StringSchema<undefined>}), {
-        errorMode: 'ignore',
-      })
-      const child = parent.properties!.child as JSONSchema7
-      return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
-    },
-    effect: (input: unknown) => {
-      const effect = dependencies.effect || getModule(effectOrError)
-      if (!effect) {
-        throw new Error(`effect dependency could not be found - try installing it and re-running`)
-      }
-      if (!effect.Schema.isSchema(input)) {
-        const message = `input was not an effect schema - please use effect version 3.14.2 or higher. See https://github.com/mmkal/trpc-cli/pull/63`
-        throw new Error(message)
-      }
-      return effect.JSONSchema.make(input as never) as JSONSchema7
-    },
-  } satisfies Record<string, (input: unknown) => JSONSchema7>
-}
-
-function getVendor(schema: unknown) {
-  // note: don't check for typeof schema === 'object' because arktype schemas are functions (you call them directly instead of `.parse(...)`)
-  return (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor ?? null
-}
-
-const jsonSchemaVendorNames = new Set(Object.keys(getJsonSchemaConverters({})))
-function looksJsonSchemaable(value: unknown) {
-  const vendor = getVendor(value)
-  return !!vendor && jsonSchemaVendorNames.has(vendor)
-}
-
-function prepareArktypeType(type: unknown) {
-  let innerType = type as {in?: unknown; toJsonSchema: () => JSONSchema7}
-  while (innerType) {
-    if (innerType?.in && innerType.in !== innerType) {
-      innerType = innerType.in as typeof innerType
-    } else {
-      break
-    }
-  }
-  return innerType as {toJsonSchema: () => JSONSchema7}
-}
-// #endregion vendor specific stuff
