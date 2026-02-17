@@ -24,10 +24,7 @@ import {
   type AnyRouter,
   type CreateCallerFactoryLike,
   isOrpcRouter,
-  isSerialisedRouter,
   type OrpcRouterLike,
-  SerialisedProcedure,
-  SerialisedRouter,
   type Trpc10RouterLike,
   type Trpc11RouterLike,
 } from './trpc-compat.js'
@@ -118,26 +115,18 @@ export {type AnyRouter, type AnyProcedure} from './trpc-compat.js'
  */
 // todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
 export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
-  if (isSerialisedRouter(router)) return parseSerialisedRouter({router, ...params})
   if (isOrpcRouter(router)) return parseOrpcRouter({router, ...params})
 
   return parseTrpcRouter({router, ...params})
 }
 
-const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({
-  router,
-  ...params
-}: TrpcCliParams<R>): SerialisedProcedure[] => {
+const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router, ...params}: TrpcCliParams<R>) => {
   const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
   return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
     const meta = getMeta(procedure)
     const inputSchemas = getProcedureInputJsonSchemas(procedure._def.inputs as unknown[], params)
     return [procedurePath, {meta, inputSchemas, type: procedure._def.type as 'query' | 'mutation'}]
   })
-}
-
-const parseSerialisedRouter = <R extends SerialisedRouter>({router}: TrpcCliParams<R>): SerialisedProcedure[] => {
-  return router.procedures
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -490,11 +479,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           // create an object which acts enough like a trpc caller to be used for this specific procedure
           const procedure = procedurePath.split('.').reduce((acc, part) => acc[part] as never, router)
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
-        } else if (isSerialisedRouter(router)) {
-          if (!router.callProcedure) {
-            throw new Error(`Serialised router must have a \`callProcedure\` function to be used as a CLI.`)
-          }
-          caller = {[procedurePath]: data => router.callProcedure!(procedurePath, data)}
         } else {
           const resolvedTrpcServer = await (params.trpcServer ||
             (await import('@trpc/server').catch(e => {
