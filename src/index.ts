@@ -24,7 +24,10 @@ import {
   type AnyRouter,
   type CreateCallerFactoryLike,
   isOrpcRouter,
+  isSerialisedRouter,
   type OrpcRouterLike,
+  SerialisedProcedure,
+  SerialisedRouter,
   type Trpc10RouterLike,
   type Trpc11RouterLike,
 } from './trpc-compat.js'
@@ -115,18 +118,26 @@ export {type AnyRouter, type AnyProcedure} from './trpc-compat.js'
  */
 // todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
 export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
+  if (isSerialisedRouter(router)) return parseSerialisedRouter({router, ...params})
   if (isOrpcRouter(router)) return parseOrpcRouter({router, ...params})
 
   return parseTrpcRouter({router, ...params})
 }
 
-const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router, ...params}: TrpcCliParams<R>) => {
+const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({
+  router,
+  ...params
+}: TrpcCliParams<R>): SerialisedProcedure[] => {
   const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
   return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
     const meta = getMeta(procedure)
     const inputSchemas = getProcedureInputJsonSchemas(procedure._def.inputs as unknown[], params)
     return [procedurePath, {meta, inputSchemas}]
   })
+}
+
+const parseSerialisedRouter = <R extends SerialisedRouter>({router}: TrpcCliParams<R>): SerialisedProcedure[] => {
+  return router.procedures
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -173,7 +184,7 @@ const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
   }
 }
 
-type ProcedureInfo = {
+export type ProcedureInfo = {
   meta: TrpcCliMeta
   inputSchemas: Result<JSONSchema7[]>
 }

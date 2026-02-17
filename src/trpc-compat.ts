@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+import {type ProcedureInfo} from './index.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 
 /**
@@ -63,11 +64,18 @@ export type OrpcRouterLike<Ctx> = {
   [key: string]: OrpcProcedureLike<Ctx> | OrpcRouterLike<Ctx>
 }
 
+export type SerialisedProcedure = [procedurePath: string, procedureInfo: ProcedureInfo]
+
+export type SerialisedRouter = {
+  type: 'trpc-cli-serialised-router'
+  procedures: Array<SerialisedProcedure>
+}
+
 export type CreateCallerFactoryLike<Procedures = Record<string, (input: unknown) => unknown>> = (
   router: any,
 ) => (context: any) => Procedures
 
-export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any>
+export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any> | SerialisedRouter
 
 export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike
 
@@ -78,11 +86,12 @@ export type inferRouterContext<R extends AnyRouter> = R extends Trpc10RouterLike
     : never
 
 export const isTrpc11Procedure = (procedure: AnyProcedure): procedure is Trpc11ProcedureLike => {
-  return 'type' in procedure._def && typeof procedure._def.type === 'string'
+  return !Array.isArray(procedure) && 'type' in procedure._def && typeof procedure._def.type === 'string'
 }
 
 export const isTrpc11Router = (router: AnyRouter): router is Trpc11RouterLike => {
   if (isOrpcRouter(router)) return false
+  if (isSerialisedRouter(router)) return false
   const procedure = Object.values(router._def.procedures)[0] as AnyProcedure | undefined
   return Boolean(procedure && isTrpc11Procedure(procedure))
 }
@@ -100,4 +109,8 @@ export const isOrpcRouter = (router: AnyRouter): router is OrpcRouterLike<any> =
 
 export const isOrpcProcedure = (procedure: {}): procedure is OrpcProcedureLike<any> => {
   return typeof procedure === 'object' && '~orpc' in procedure && typeof procedure['~orpc'] === 'object'
+}
+
+export const isSerialisedRouter = (router: AnyRouter): router is SerialisedRouter => {
+  return router && 'type' in router && router.type === 'trpc-cli-serialised-router'
 }
