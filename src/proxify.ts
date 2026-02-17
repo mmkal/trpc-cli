@@ -12,19 +12,19 @@ import {AnyProcedure, AnyRouter, SerialisedRouter} from './trpc-compat.js'
  * See description in https://github.com/mmkal/trpc-cli/pull/153
  */
 export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePath: string) => unknown) => {
-  if (false) {
-    const parsed = parseRouter({router})
-    return {
-      type: 'trpc-cli-serialised-router',
-      procedures: parsed,
-      callProcedure: async (procedurePath: string, input: unknown) => {
-        const client = await getClient(procedurePath)
-        const procedure = parsed.find(([path]) => path === procedurePath)
-        const method = procedure?.[1].type === 'query' ? 'query' : 'mutate'
-        return (client as Record<string, any>)[procedurePath][method](input)
-      },
-    }
-  }
+  // if (false) {
+  //   const parsed = parseRouter({router})
+  //   return {
+  //     type: 'trpc-cli-serialised-router',
+  //     procedures: parsed,
+  //     callProcedure: async (procedurePath: string, input: unknown) => {
+  //       const client = await getClient(procedurePath)
+  //       const procedure = parsed.find(([path]) => path === procedurePath)
+  //       const method = procedure?.[1].type === 'query' ? 'query' : 'mutate'
+  //       return (client as Record<string, any>)[procedurePath][method](input)
+  //     },
+  //   }
+  // }
 
   // const entries = Object.entries<AnyProcedure>((router as any)._def.procedures)
   const parsed = parseRouter({router})
