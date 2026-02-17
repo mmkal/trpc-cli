@@ -41,6 +41,8 @@ export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePat
         const client: any = await getClient(procedurePath)
         return client[procedurePath].mutate(input)
       })
+    } else {
+      continue
     }
     currentRouter[parts[parts.length - 1]] = newProc
   }
