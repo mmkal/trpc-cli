@@ -69,6 +69,7 @@ export type SerialisedProcedure = [procedurePath: string, procedureInfo: Procedu
 export type SerialisedRouter = {
   type: 'trpc-cli-serialised-router'
   procedures: Array<SerialisedProcedure>
+  callProcedure?: (procedurePath: string, input: unknown) => Promise<unknown>
 }
 
 export type CreateCallerFactoryLike<Procedures = Record<string, (input: unknown) => unknown>> = (
