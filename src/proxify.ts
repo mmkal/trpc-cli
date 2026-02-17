@@ -62,5 +62,5 @@ export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePat
     }
     currentRouter[parts[parts.length - 1]] = newProc
   }
-  return trpc.router(outputRouterRecord) as unknown as R
+  return trpc.router(outputRouterRecord)
 }
