@@ -1207,7 +1207,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L219)
+#### [createCli](./src/index.ts#L208)
 
 Run a trpc router as a CLI.
 
