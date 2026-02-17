@@ -1,46 +1,50 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
+import {parseRouter} from './index.js'
 import {initTRPC} from '@trpc/server'
+import {JSONSchema7} from 'json-schema'
 import {StandardSchemaV1} from './standard-schema/contract.js'
-import {AnyProcedure, AnyRouter} from './trpc-compat.js'
+import {AnyRouter} from './trpc-compat.js'
 
 /**
  * EXPERIMENTAL: Don't use unless you're willing to help figure out the API, and whether it should even exist.
  * See description in https://github.com/mmkal/trpc-cli/pull/153
+ *
+ * Note: for now, this can accept any valid router, but it will always give you back a trpc v11 router.
  */
 export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePath: string) => unknown) => {
+  const parsed = parseRouter({router})
   const trpc = initTRPC.create()
   const outputRouterRecord = {}
-  const entries = Object.entries<AnyProcedure>((router as any)._def.procedures)
-  for (const [procedurePath, oldProc] of entries) {
+  for (const [procedurePath, info] of parsed) {
     const parts = procedurePath.split('.')
     let currentRouter: any = outputRouterRecord
     for (const part of parts.slice(0, -1)) {
       currentRouter = currentRouter[part] ||= {}
     }
     let newProc: any = trpc.procedure
-
-    const inputs = oldProc._def.inputs as StandardSchemaV1[]
-
-    inputs?.forEach(input => {
-      newProc = newProc.input(input)
-    })
-    if (oldProc._def.type === 'query') {
+    for (const inputSchema of info.inputSchemas.success ? info.inputSchemas.value : []) {
+      const standardSchema: StandardSchemaV1 & {toJsonSchema: () => JSONSchema7} = {
+        '~standard': {vendor: 'trpc-cli', version: 1, validate: (value: unknown) => ({value})},
+        toJsonSchema: () => inputSchema,
+      }
+      newProc = newProc.input(standardSchema)
+    }
+    if (info.type === 'query') {
       newProc = newProc.query(async ({input}: any) => {
         const client: any = await getClient(procedurePath)
         return client[procedurePath].query(input)
       })
-    } else if (oldProc._def.type === 'mutation') {
+    } else if (info.type === 'mutation') {
       newProc = newProc.mutation(async ({input}: any) => {
         const client: any = await getClient(procedurePath)
         return client[procedurePath].mutate(input)
       })
+    } else {
+      continue
     }
-
     currentRouter[parts[parts.length - 1]] = newProc
   }
-
-  return trpc.router(outputRouterRecord) as unknown as R
+  return trpc.router(outputRouterRecord)
 }

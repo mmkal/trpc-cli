@@ -125,7 +125,7 @@ const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router,
   return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
     const meta = getMeta(procedure)
     const inputSchemas = getProcedureInputJsonSchemas(procedure._def.inputs as unknown[], params)
-    return [procedurePath, {meta, inputSchemas}]
+    return [procedurePath, {meta, inputSchemas, type: procedure._def.type as 'query' | 'mutation'}]
   })
 }
 
@@ -147,7 +147,7 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
     const procedurePath = path.join('.')
     const procedureish = {_def: {meta: contract['~orpc'].meta}} as AnyProcedure
     const meta = getMeta(procedureish)
-    entries.push([procedurePath, {meta, inputSchemas}])
+    entries.push([procedurePath, {meta, inputSchemas, type: null}])
   })
   if (lazyRoutes.length) {
     const suggestion = `Please use \`import {unlazyRouter} from '@orpc/server'\` to unlazy the router before passing it to trpc-cli`
@@ -176,6 +176,7 @@ const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
 type ProcedureInfo = {
   meta: TrpcCliMeta
   inputSchemas: Result<JSONSchema7[]>
+  type: 'query' | 'mutation' | null
 }
 
 const getParsedProcedure = (procedureInfo: ProcedureInfo): ParsedProcedure => {
@@ -235,8 +236,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     > = {}
 
     const _process = runParams?.process || process
-    const configureCommand = (command: Command, procedurePath: string, {meta, inputSchemas}: ProcedureInfo) => {
-      const parsedProcedure = getParsedProcedure({meta, inputSchemas})
+    const configureCommand = (command: Command, procedurePath: string, info: ProcedureInfo) => {
+      const {meta} = info
+      const parsedProcedure = getParsedProcedure(info)
       const incompatiblePairs = incompatiblePropertyPairs(parsedProcedure.optionsJsonSchema)
       // add meta to the commander command so we can access it in prompt.ts
       Object.assign(command, {__trpcCli: {path: procedurePath, meta}})
