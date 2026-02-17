@@ -140,6 +140,10 @@ const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>
     if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
 
     const inputSchemas = getProcedureInputJsonSchemas([contract['~orpc'].inputSchema], params)
+    if (path.some(p => p.includes('.'))) {
+      throw new Error(`ORPC procedure path segments cannot contain \`.'. Got: ${JSON.stringify(path)}`)
+    }
+
     const procedurePath = path.join('.')
     const procedureish = {_def: {meta: contract['~orpc'].meta}} as AnyProcedure
     const meta = getMeta(procedureish)
