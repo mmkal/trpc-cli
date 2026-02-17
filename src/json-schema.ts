@@ -285,6 +285,9 @@ export function toJsonSchema(input: unknown, dependencies: Dependencies): Result
 /** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
 const getJsonSchemaConverters = (dependencies: Dependencies) => {
   return {
+    'trpc-cli': (input: unknown) => {
+      return (input as {toJsonSchema: () => JSONSchema7}).toJsonSchema()
+    },
     zod: (input: unknown) => {
       // @ts-expect-error don't worry lots of ?.
       if (input._zod?.version?.major == 4) {
