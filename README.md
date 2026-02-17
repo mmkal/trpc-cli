@@ -706,12 +706,12 @@ const appRouter = trpc.router({
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:aa4cd72750b41b9734014c462e0a4d8d -->
+<!-- hash:92ebb075b9458d9dbd888b4b643cc6dc -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {z} from 'zod/v4'
 import {createCli, type TrpcCliMeta} from '../../src/index.js'
-import * as trpcCompat from '../../src/trpc-compat.js'
+import * as parseRouter from '../../src/parse-router.js'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -815,7 +815,7 @@ export const router = trpc.router({
         )
       }),
   }),
-}) satisfies trpcCompat.Trpc11RouterLike
+}) satisfies parseRouter.Trpc11RouterLike
 
 const cli = createCli({
   router,
@@ -1207,7 +1207,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L209)
+#### [createCli](./src/index.ts#L119)
 
 Run a trpc router as a CLI.
 

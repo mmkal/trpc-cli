@@ -3,7 +3,7 @@ import {initTRPC as initTRPC_v11} from 'trpcserver11'
 import {expect, expectTypeOf, test} from 'vitest'
 import {z} from 'zod/v3'
 import {createCli, TrpcCliMeta, TrpcServerModuleLike} from '../src/index.js'
-import {isOrpcRouter, Trpc10RouterLike, Trpc11RouterLike} from '../src/trpc-compat.js'
+import {isOrpcRouter, Trpc10RouterLike, Trpc11RouterLike} from '../src/parse-router.js'
 
 expect.addSnapshotSerializer({
   test: val => val?.cause && val.message,
@@ -47,7 +47,7 @@ test('trpc v10 shape check', async () => {
   expect((router._def.procedures.add._def as any)._type).toBeUndefined()
 
   if (Math.random() > 10) {
-    // just some satisfies statements to help build type types in src/trpc-compat.ts
+    // just some satisfies statements to help build the types in src/parse-router.ts
     router._def._config.$types satisfies {ctx: {customContext: true}; meta: TrpcCliMeta}
     router._def.procedures.add._type satisfies 'mutation'
     router._def.procedures.add._def.inputs satisfies unknown[]
@@ -98,7 +98,7 @@ test('trpc v11 shape check', async () => {
   // at some point maybe _type was defined? It was in this codebase, just test that it's undefined explicitly
   expect((router._def.procedures.add._def as any)._type).toBeUndefined()
   if (Math.random() > 10) {
-    // just some satisfies statements to help build type types in src/trpc-compat.ts
+    // just some satisfies statements to help build the types in src/parse-router.ts
     router._def.procedures.add._def.type satisfies 'mutation'
     router._def._config.$types satisfies {ctx: {customContext: true}; meta: TrpcCliMeta}
     router._def.procedures.add._def.$types.input satisfies [number, number]
@@ -182,7 +182,10 @@ test('trpc v10 has helpful error when not passing in trpcServer', async () => {
 
 test('isOrpcRouter', async () => {
   const {os} = await import('@orpc/server')
-  // expect(isOrpcRouter(os.router({}))).toBe(true) // fails, because we only now how to look for procedures really
+  expect(isOrpcRouter({})).toBe(false)
+  expect(isOrpcRouter({hello: {}})).toBe(false)
+  // no reliable way to tell this apart from a plain object
+  expect(isOrpcRouter(os.router({}))).toBe(false)
   expect(isOrpcRouter(os.router({hello: os.handler(() => 'ok')}))).toBe(true)
   expect(isOrpcRouter(os.router({hello: os.router({nested: os.handler(() => 'ok')})}))).toBe(true)
   expect(isOrpcRouter({hello: {nested: os.handler(() => 'ok')}})).toBe(true)

@@ -15,20 +15,18 @@ import {
 } from './json-schema.js'
 import {commandToJSON} from './json.js'
 import {lineByLineConsoleLogger} from './logging.js'
-import {parseJsonSchemaInputs, getProcedureInputJsonSchemas} from './parse-procedure.js'
+import {
+  type AnyRouter,
+  type CreateCallerFactoryLike,
+  getParsedProcedure,
+  isTrpcRouter,
+  parseRouter,
+  type ProcedureInfo,
+} from './parse-router.js'
 import {promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
-import {
-  type AnyProcedure,
-  type AnyRouter,
-  type CreateCallerFactoryLike,
-  isOrpcRouter,
-  type OrpcRouterLike,
-  type Trpc10RouterLike,
-  type Trpc11RouterLike,
-} from './trpc-compat.js'
-import {ParsedProcedure, Result, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types.js'
+import {TrpcCli, TrpcCliParams, TrpcCliRunParams} from './types.js'
 import {looksLikeInstanceof} from './util.js'
 
 const orpcServerOrError = await import('@orpc/server').catch(String)
@@ -107,96 +105,8 @@ export class Command extends BaseCommand {
 
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
 
-export {type AnyRouter, type AnyProcedure} from './trpc-compat.js'
-
-/**
- * @internal takes a trpc router and returns an object that you **could** use to build a CLI, or UI, or a bunch of other things with.
- * Officially, just internal for building a CLI. GLHF.
- */
-// todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
-export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
-  if (isOrpcRouter(router)) return parseOrpcRouter({router, ...params})
-
-  return parseTrpcRouter({router, ...params})
-}
-
-const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router, ...params}: TrpcCliParams<R>) => {
-  const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
-  return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
-    const meta = getMeta(procedure)
-    const inputSchemas = getProcedureInputJsonSchemas(procedure._def.inputs as unknown[], params)
-    return [procedurePath, {meta, inputSchemas, type: procedure._def.type as 'query' | 'mutation'}]
-  })
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
-  const entries: [string, ProcedureInfo][] = []
-  const {traverseContractProcedures, isProcedure} = getOrpcServerModule()
-  const router = params.router as import('@orpc/server').AnyRouter
-  const lazyRoutes = traverseContractProcedures({path: [], router}, ({contract, path}) => {
-    let procedure: Record<string, unknown> = params.router
-    for (const p of path) procedure = procedure[p] as Record<string, unknown>
-    if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
-
-    const inputSchemas = getProcedureInputJsonSchemas([contract['~orpc'].inputSchema], params)
-    if (path.some(p => p.includes('.'))) {
-      throw new Error(`ORPC procedure path segments cannot contain \`.'. Got: ${JSON.stringify(path)}`)
-    }
-
-    const procedurePath = path.join('.')
-    const procedureish = {_def: {meta: contract['~orpc'].meta}} as AnyProcedure
-    const meta = getMeta(procedureish)
-    entries.push([procedurePath, {meta, inputSchemas, type: null}])
-  })
-  if (lazyRoutes.length) {
-    const suggestion = `Please use \`import {unlazyRouter} from '@orpc/server'\` to unlazy the router before passing it to trpc-cli`
-    const routes = lazyRoutes.map(({path}) => path.join('.')).join(', ')
-    throw new Error(`Lazy routers are not supported. ${suggestion}. Lazy routes detected: ${routes}`)
-  }
-  return entries
-}
-
-/** helper to create a "ParsedProcedure" that just accepts a JSON string - for when we failed to parse the input schema or the use set jsonInput: true */
-const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
-  let description = `Input formatted as JSON`
-  if (reason) description += ` (${reason})`
-  return {
-    positionalParameters: [],
-    optionsJsonSchema: {
-      type: 'object',
-      properties: {
-        input: {description}, // omit `type` - this is json input, it could be anything
-      },
-    },
-    getPojoInput: parsedCliParams => parsedCliParams.options.input,
-  }
-}
-
-type ProcedureInfo = {
-  meta: TrpcCliMeta
-  inputSchemas: Result<JSONSchema7[]>
-  type: 'query' | 'mutation' | null
-}
-
-const getParsedProcedure = (procedureInfo: ProcedureInfo): ParsedProcedure => {
-  if (procedureInfo.meta.jsonInput) {
-    return jsonProcedureInputs()
-  }
-
-  if (!procedureInfo.inputSchemas.success) {
-    return jsonProcedureInputs(
-      `procedure's schema couldn't be converted to CLI arguments: ${procedureInfo.inputSchemas.error}`,
-    )
-  }
-
-  const parsedInputs = parseJsonSchemaInputs(procedureInfo.inputSchemas)
-  if (!parsedInputs.success) {
-    return jsonProcedureInputs(`procedure's schema couldn't be converted to CLI arguments: ${parsedInputs.error}`)
-  }
-
-  return parsedInputs.value
-}
+export {type AnyRouter, type AnyProcedure} from './parse-router.js'
+export {parseRouter} from './parse-router.js'
 
 /**
  * Run a trpc router as a CLI.
@@ -474,18 +384,20 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           const message = `Using deprecated \`createCallerFactory\` option. Use \`trpcServer\` instead. e.g. \`createCli({router: myRouter, trpcServer: import('@trpc/server')})\``
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
-        } else if (isOrpcRouter(router)) {
-          const {call} = getOrpcServerModule()
-          // create an object which acts enough like a trpc caller to be used for this specific procedure
-          const procedure = procedurePath.split('.').reduce((acc, part) => acc[part] as never, router)
-          caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
-        } else {
+        } else if (isTrpcRouter(router)) {
           const resolvedTrpcServer = await (params.trpcServer ||
             (await import('@trpc/server').catch(e => {
               throw new Error(`@trpc/server must be installed when using tRPC-style routers. Error loading: ${e}`)
             })))
           const createCallerFactor = resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike
           caller = createCallerFactor(router)(params.context)
+        } else {
+          const {call} = getOrpcServerModule()
+          // create an object which acts enough like a trpc caller to be used for this specific procedure
+          const procedure = procedurePath
+            .split('.')
+            .reduce((acc, part) => acc[part] as Record<string, unknown>, router as Record<string, unknown>)
+          caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         }
 
         const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
@@ -633,11 +545,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
   }
 
   return {run, buildProgram, toJSON: (program = buildProgram()) => commandToJSON(program as Command)}
-}
-
-function getMeta(procedure: {_def: {meta?: {}}}): Omit<TrpcCliMeta, 'cliMeta'> {
-  const meta: Partial<TrpcCliMeta> | undefined = procedure._def.meta
-  return meta?.cliMeta || meta || {}
 }
 
 export const kebabCase = (str: string) =>
