@@ -16,6 +16,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ oRPC support
+- ✅ Standalone mode - build CLIs without `@trpc/server` or `@orpc/server`
 - ✅ No configuration required. Run on an existing router with `npx trpc-cli src/your-router.ts`
 
 ---
@@ -42,6 +43,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - [Other Features](#other-features)
    - [tRPC v10 vs v11](#trpc-v10-vs-v11)
    - [oRPC](#orpc)
+   - [Standalone Mode (No tRPC/oRPC Required)](#standalone-mode-no-trpcorpc-required)
    - [Output and Lifecycle](#output-and-lifecycle)
    - [Testing your CLI](#testing-your-cli)
    - [Programmatic Usage](#programmatic-usage)
@@ -938,6 +940,78 @@ const cli = createCli({router: await unlazyRouter(router)})
 cli.run()
 ```
 
+### Standalone Mode (No tRPC/oRPC Required)
+
+If you just want to build a CLI without depending on `@trpc/server` or `@orpc/server`, you can use the built-in `t` helper:
+
+```ts
+import {t, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const router = t.router({
+  greet: t.procedure
+    .input(z.object({name: z.string()}))
+    .handler(({input}) => `Hello, ${input.name}!`),
+})
+
+createCli({router}).run()
+```
+
+This works with any standard-schema compatible validator (zod, valibot, arktype, etc.).
+
+If you prefer oRPC's API style, you can use the `os` export instead:
+
+```ts
+import {os, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const router = os.router({
+  greet: os
+    .input(z.object({name: z.string()}))
+    .handler(({input}) => `Hello, ${input.name}!`),
+})
+
+createCli({router}).run()
+```
+
+#### Middleware and Context
+
+The standalone helpers support middleware via `.use()` for context injection, similar to tRPC and oRPC:
+
+```ts
+import {t, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+// Create a reusable procedure with middleware
+const withUser = t.procedure.use(async ({next}) => {
+  return next({
+    ctx: {user: {id: 1, name: 'Alice'}}, // tRPC style uses `ctx`
+    // context: {...}  // oRPC style uses `context` - both work!
+  })
+})
+
+const router = t.router({
+  whoami: withUser.query(({ctx}) => `I am ${ctx.user.name}`),
+  greet: withUser
+    .input(z.object({greeting: z.string()}))
+    .mutation(({input, ctx}) => `${input.greeting}, ${ctx.user.name}!`),
+})
+
+createCli({router}).run()
+```
+
+You can chain multiple middleware to build up context:
+
+```ts
+const withPermissions = withUser.use(async ({ctx, next}) => {
+  return next({
+    ctx: {permissions: ctx.user.id === 1 ? ['admin'] : ['guest']},
+  })
+})
+```
+
+> Note: The standalone middleware is simpler than full tRPC/oRPC middleware. It doesn't support features like `path`, `procedure` params, or cleanup logic. If you need advanced middleware features, use `@trpc/server` or `@orpc/server` directly.
+
 ### Output and Lifecycle
 
 The output of the command will be logged if it is truthy. The log algorithm aims to be friendly for bash-piping, usage with jq etc.:
@@ -1207,7 +1281,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L208)
+#### [createCli](./src/index.ts#L233)
 
 Run a trpc router as a CLI.
 
