@@ -4,7 +4,7 @@ import {expect, test} from 'vitest'
 import {z} from 'zod/v3'
 import {type TrpcCliMeta} from '../src/index.js'
 import {createCli} from '../src/index.js'
-import * as trpcCompat from '../src/trpc-compat.js'
+import * as trpcCompat from '../src/parse-router.js'
 
 expect.addSnapshotSerializer({
   test: () => true,

@@ -1,11 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {parseRouter} from './index.js'
 import {initTRPC} from '@trpc/server'
 import {JSONSchema7} from 'json-schema'
+import {AnyRouter, parseRouter} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
-import {AnyRouter} from './trpc-compat.js'
 
 /**
  * EXPERIMENTAL: Don't use unless you're willing to help figure out the API, and whether it should even exist.
