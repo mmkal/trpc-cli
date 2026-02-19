@@ -12,8 +12,11 @@ import {StandardSchemaV1} from './standard-schema/contract.js'
  *
  * Note: for now, this can accept any valid router, but it will always give you back a trpc v11 router.
  */
-export const proxify = <R extends AnyRouter>(router: R, getClient: (procedurePath: string) => unknown) => {
-  const parsed = parseRouter({router})
+export const proxify = <R extends AnyRouter>(
+  router: R | ReturnType<typeof parseRouter>,
+  getClient: (procedurePath: string) => unknown,
+) => {
+  const parsed = Array.isArray(router) ? router : parseRouter({router})
   const trpc = initTRPC.create()
   const outputRouterRecord = {}
   for (const [procedurePath, info] of parsed) {
