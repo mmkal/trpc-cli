@@ -1,6 +1,6 @@
 {
   "name": "trpc-cli",
-  "version": "0.12.3",
+  "version": "0.12.4",
   "description": "Turn a tRPC router into a type-safe, fully-functional, documented CLI",
   "type": "module",
   "main": "dist/index.js",
