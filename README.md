@@ -44,6 +44,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [oRPC](#orpc)
    - [Output and Lifecycle](#output-and-lifecycle)
    - [Testing your CLI](#testing-your-cli)
+   - [CLI Context](#cli-context)
    - [Programmatic Usage](#programmatic-usage)
    - [Input Prompts](#input-prompts)
    - [Completions](#completions)
@@ -1062,6 +1063,49 @@ This will give you strong types for inputs and outputs, and is essentially what 
 
 In general, you should rely on `trpc-cli` to correctly handle the lifecycle and output etc. when it's invoked as a CLI by end-users. If there are any problems there, they should be fixed on this repo - please raise an issue.
 
+### CLI Context
+
+You can access low-level CLI information from within your procedure handlers using `getCliContext()`. This uses `AsyncLocalStorage` under the hood, so it works from anywhere in the async call chain - procedures, middleware, nested helper functions, etc.
+
+```ts
+import {getCliContext} from 'trpc-cli'
+
+const router = t.router({
+  deploy: t.procedure
+    .input(z.object({env: z.enum(['staging', 'production'])}))
+    .mutation(({input}) => {
+      const ctx = getCliContext()
+      if (ctx) {
+        // Running as a CLI
+        console.log('Program argv:', ctx.program.__argv) // e.g. ['deploy', '--env', 'production']
+        console.log('Command argv:', ctx.command.__argv) // e.g. ['--env', 'production']
+        console.log('Command name:', ctx.command.name()) // 'deploy'
+        console.log('Help text:', ctx.command.helpInformation())
+      }
+      // ... deploy logic
+    }),
+})
+```
+
+`getCliContext()` returns `undefined` when called outside of a CLI invocation, so it's safe to use in routers that also serve as HTTP tRPC servers:
+
+```ts
+const myMiddleware = t.middleware(async ({next}) => {
+  const cliCtx = getCliContext()
+  if (cliCtx) {
+    // CLI-specific logic
+  }
+  return next()
+})
+```
+
+The context exposes two properties, both of which are commander `Command` instances (typed as the slim `CliCommand` interface to avoid coupling to commander's types - cast to `import('commander').Command` if you need full access):
+
+| Property | Description |
+|----------|-------------|
+| `program` | The root program. `program.__argv` has the full argv that was parsed (equivalent to what you'd pass to `run({argv})`). |
+| `command` | The leaf command being invoked. `command.__argv` has the args specific to that command, excluding parent routing segments. Also exposes `command.name()`, `command.helpInformation()`, `command.opts()`, etc. |
+
 ### Programmatic Usage
 
 This library should probably _not_ be used programmatically - the functionality all comes from a trpc router, which has [many other ways to be invoked](https://trpc.io/docs/community/awesome-trpc) (including the built-in `createCaller` helper bundled with `@trpc/server`).
@@ -1207,7 +1251,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L119)
+#### [createCli](./src/index.ts#L122)
 
 Run a trpc router as a CLI.
 
