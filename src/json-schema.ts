@@ -273,6 +273,11 @@ export function toJsonSchema(input: unknown, dependencies: Dependencies): Result
       return {success: true, value: converted}
     }
 
+    // fallback - no vendor-specific converter, but there may be a toJsonSchema method on the input
+    if (typeof (input as Record<string, unknown>)?.toJsonSchema === 'function') {
+      return {success: true, value: (input as {toJsonSchema: () => JSONSchema7}).toJsonSchema()}
+    }
+
     return {success: false, error: `Schema not convertible to JSON schema`}
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
@@ -358,6 +363,7 @@ function getVendor(schema: unknown) {
 
 const jsonSchemaVendorNames = new Set(Object.keys(getJsonSchemaConverters({})))
 export function looksJsonSchemaable(value: unknown) {
+  if (typeof (value as Record<string, unknown>)?.toJsonSchema === 'function') return true
   const vendor = getVendor(value)
   return !!vendor && jsonSchemaVendorNames.has(vendor)
 }

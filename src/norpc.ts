@@ -1,6 +1,6 @@
 import {StandardSchemaV1} from './standard-schema/contract.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
-import {CLIProcedureLike, CLIRouterLike} from './trpc-compat.js'
+import {CLIProcedureLike, CLIRouterLike} from './parse-router.js'
 import {TrpcCliMeta} from './types.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

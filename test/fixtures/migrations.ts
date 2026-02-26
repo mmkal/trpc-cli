@@ -1,7 +1,7 @@
 import * as trpcServer from '@trpc/server'
 import {z} from 'zod/v4'
 import {createCli, type TrpcCliMeta} from '../../src/index.js'
-import * as trpcCompat from '../../src/trpc-compat.js'
+import * as parseRouter from '../../src/parse-router.js'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -84,7 +84,7 @@ export const router = trpc.router({
         return ctx.filter(migrations.filter(m => m.content.includes(input.searchTerm)))
       }),
   }),
-}) satisfies trpcCompat.Trpc11RouterLike
+}) satisfies parseRouter.Trpc11RouterLike
 
 const cli = createCli({
   router,

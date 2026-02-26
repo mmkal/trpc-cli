@@ -2,7 +2,7 @@
 import {createCli} from './index.js'
 import {Command} from 'commander'
 import * as path from 'path'
-import {isOrpcRouter, Trpc11RouterLike} from './trpc-compat.js'
+import {type AnyRouter, isOrpcRouter, isTrpcRouter} from './parse-router.js'
 
 const program = new Command('trpc-cli')
 
@@ -64,11 +64,10 @@ program.action(async () => {
     // depending on how it's loaded we can end up with weird stuff like `{default: {default: {myRouter: ...}}}`
     importedModule = importedModule?.default as never
   }
-  let router: Trpc11RouterLike
-  const looksLikeARouter = (value: unknown): value is Trpc11RouterLike =>
-    Boolean((value as Trpc11RouterLike)?._def?.procedures) || isOrpcRouter(value as never)
+  let router: AnyRouter
+  const looksLikeARouter = (value: unknown): value is AnyRouter => isTrpcRouter(value) || isOrpcRouter(value)
   if (options.export) {
-    router = (importedModule as {[key: string]: Trpc11RouterLike})[options.export]
+    router = (importedModule as {[key: string]: AnyRouter})[options.export]
     if (!looksLikeARouter(router)) {
       throw new Error(`Expected a trpc router in ${filepath}.${options.export}, got ${typeof router}`)
     }
