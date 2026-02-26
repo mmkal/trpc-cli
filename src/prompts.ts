@@ -1,6 +1,6 @@
 import {Argument, Command, Option} from 'commander'
 import {getEnumChoices} from './json-schema.js'
-import {toJsonSchema} from './parse-procedure.js'
+import {toJsonSchema} from './json-schema.js'
 import {isProgressiveObjectSchema} from './progressive-object.js'
 import {
   CommanderProgramLike,

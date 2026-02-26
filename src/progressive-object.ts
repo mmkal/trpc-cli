@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {JSONSchema7} from 'json-schema'
-import {isOptional, toJsonSchema} from './parse-procedure.js'
+import {toJsonSchema} from './json-schema.js'
+import {isOptional} from './parse-procedure.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 
 export type ProgressiveProp = {

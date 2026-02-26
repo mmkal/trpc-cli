@@ -16,6 +16,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ oRPC support
+- ✅ Standalone mode (experimental) - build CLIs without `@trpc/server` or `@orpc/server`
 - ✅ No configuration required. Run on an existing router with `npx trpc-cli src/your-router.ts`
 
 ---
@@ -42,8 +43,10 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - [Other Features](#other-features)
    - [tRPC v10 vs v11](#trpc-v10-vs-v11)
    - [oRPC](#orpc)
+   - [Standalone Mode (No tRPC/oRPC Required) — Experimental](#standalone-mode-no-trpcorpc-required--experimental)
    - [Output and Lifecycle](#output-and-lifecycle)
    - [Testing your CLI](#testing-your-cli)
+   - [CLI Context](#cli-context)
    - [Programmatic Usage](#programmatic-usage)
    - [Input Prompts](#input-prompts)
    - [Completions](#completions)
@@ -706,12 +709,12 @@ const appRouter = trpc.router({
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:aa4cd72750b41b9734014c462e0a4d8d -->
+<!-- hash:92ebb075b9458d9dbd888b4b643cc6dc -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {z} from 'zod/v4'
 import {createCli, type TrpcCliMeta} from '../../src/index.js'
-import * as trpcCompat from '../../src/trpc-compat.js'
+import * as parseRouter from '../../src/parse-router.js'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -815,7 +818,7 @@ export const router = trpc.router({
         )
       }),
   }),
-}) satisfies trpcCompat.Trpc11RouterLike
+}) satisfies parseRouter.Trpc11RouterLike
 
 const cli = createCli({
   router,
@@ -937,6 +940,80 @@ export const router = os.router({
 const cli = createCli({router: await unlazyRouter(router)})
 cli.run()
 ```
+
+### Standalone Mode (No tRPC/oRPC Required) — Experimental
+
+> **Note:** This API is experimental and may change in a future release.
+
+If you just want to build a CLI without depending on `@trpc/server` or `@orpc/server`, you can use the built-in `t` helper:
+
+```ts
+import {t, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const router = t.router({
+  greet: t.procedure
+    .input(z.object({name: z.string()}))
+    .handler(({input}) => `Hello, ${input.name}!`),
+})
+
+createCli({router}).run()
+```
+
+This works with any standard-schema compatible validator (zod, valibot, arktype, etc.).
+
+If you prefer oRPC's API style, you can use the `os` export instead:
+
+```ts
+import {os, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const router = os.router({
+  greet: os
+    .input(z.object({name: z.string()}))
+    .handler(({input}) => `Hello, ${input.name}!`),
+})
+
+createCli({router}).run()
+```
+
+#### Middleware and Context
+
+The standalone helpers support middleware via `.use()` for context injection, similar to tRPC and oRPC:
+
+```ts
+import {t, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+// Create a reusable procedure with middleware
+const withUser = t.procedure.use(async ({next}) => {
+  return next({
+    ctx: {user: {id: 1, name: 'Alice'}}, // tRPC style uses `ctx`
+    // context: {...}  // oRPC style uses `context` - both work!
+  })
+})
+
+const router = t.router({
+  whoami: withUser.query(({ctx}) => `I am ${ctx.user.name}`),
+  greet: withUser
+    .input(z.object({greeting: z.string()}))
+    .mutation(({input, ctx}) => `${input.greeting}, ${ctx.user.name}!`),
+})
+
+createCli({router}).run()
+```
+
+You can chain multiple middleware to build up context:
+
+```ts
+const withPermissions = withUser.use(async ({ctx, next}) => {
+  return next({
+    ctx: {permissions: ctx.user.id === 1 ? ['admin'] : ['guest']},
+  })
+})
+```
+
+> Note: The standalone middleware is simpler than full tRPC/oRPC middleware. It doesn't support features like `path`, `procedure` params, or cleanup logic. If you need advanced middleware features, use `@trpc/server` or `@orpc/server` directly.
 
 ### Output and Lifecycle
 
@@ -1061,6 +1138,49 @@ test('make sure parsing works correctly', async () => {
 This will give you strong types for inputs and outputs, and is essentially what `trpc-cli` does under the hood after parsing and validating command-line input.
 
 In general, you should rely on `trpc-cli` to correctly handle the lifecycle and output etc. when it's invoked as a CLI by end-users. If there are any problems there, they should be fixed on this repo - please raise an issue.
+
+### CLI Context
+
+You can access low-level CLI information from within your procedure handlers using `getCliContext()`. This uses `AsyncLocalStorage` under the hood, so it works from anywhere in the async call chain - procedures, middleware, nested helper functions, etc.
+
+```ts
+import {getCliContext} from 'trpc-cli'
+
+const router = t.router({
+  deploy: t.procedure
+    .input(z.object({env: z.enum(['staging', 'production'])}))
+    .mutation(({input}) => {
+      const ctx = getCliContext()
+      if (ctx) {
+        // Running as a CLI
+        console.log('Program argv:', ctx.program.__argv) // e.g. ['deploy', '--env', 'production']
+        console.log('Command argv:', ctx.command.__argv) // e.g. ['--env', 'production']
+        console.log('Command name:', ctx.command.name()) // 'deploy'
+        console.log('Help text:', ctx.command.helpInformation())
+      }
+      // ... deploy logic
+    }),
+})
+```
+
+`getCliContext()` returns `undefined` when called outside of a CLI invocation, so it's safe to use in routers that also serve as HTTP tRPC servers:
+
+```ts
+const myMiddleware = t.middleware(async ({next}) => {
+  const cliCtx = getCliContext()
+  if (cliCtx) {
+    // CLI-specific logic
+  }
+  return next()
+})
+```
+
+The context exposes two properties, both of which are commander `Command` instances (typed as the slim `CliCommand` interface to avoid coupling to commander's types - cast to `import('commander').Command` if you need full access):
+
+| Property | Description |
+|----------|-------------|
+| `program` | The root program. `program.__argv` has the full argv that was parsed (equivalent to what you'd pass to `run({argv})`). |
+| `command` | The leaf command being invoked. `command.__argv` has the args specific to that command, excluding parent routing segments. Also exposes `command.name()`, `command.helpInformation()`, `command.opts()`, etc. |
 
 ### Programmatic Usage
 
@@ -1207,7 +1327,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L211)
+#### [createCli](./src/index.ts#L123)
 
 Run a trpc router as a CLI.
 

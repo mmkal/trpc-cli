@@ -1,6 +1,6 @@
 import type {JSONSchema7} from 'json-schema'
 import {CommandJSON} from './json.js'
-import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat.js'
+import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './parse-router.js'
 
 export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** A tRPC router. Procedures will become CLI commands. */
