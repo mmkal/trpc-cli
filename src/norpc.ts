@@ -170,13 +170,20 @@ const router = <Procedures extends Record<string, NorpcProcedureLike | NorpcRout
 
 const procedure: ProcedureBuilder<{}> = createProcedureBuilder<{}>([], {})
 
-/** Use trpc-cli without depending on @trpc/server or @orpc/server. Use like tRPC's `t` */
+/**
+ * @experimental This API is experimental and may change in a future release.
+ *
+ * Use trpc-cli without depending on @trpc/server or @orpc/server. Use like tRPC's `t`.
+ */
 export const t: {
   router: typeof router
 
   procedure: ProcedureBuilder<{}>
 } = {router, procedure}
 
-/** Use trpc-cli without depending on @trpc/server or @orpc/server. Use like oRPC's `os` */
-
+/**
+ * @experimental This API is experimental and may change in a future release.
+ *
+ * Use trpc-cli without depending on @trpc/server or @orpc/server. Use like oRPC's `os`.
+ */
 export const os: ProcedureBuilder<{}> & {router: typeof router} = {router, ...procedure}

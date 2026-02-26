@@ -16,7 +16,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ oRPC support
-- ✅ Standalone mode - build CLIs without `@trpc/server` or `@orpc/server`
+- ✅ Standalone mode (experimental) - build CLIs without `@trpc/server` or `@orpc/server`
 - ✅ No configuration required. Run on an existing router with `npx trpc-cli src/your-router.ts`
 
 ---
@@ -43,7 +43,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - [Other Features](#other-features)
    - [tRPC v10 vs v11](#trpc-v10-vs-v11)
    - [oRPC](#orpc)
-   - [Standalone Mode (No tRPC/oRPC Required)](#standalone-mode-no-trpcorpc-required)
+   - [Standalone Mode (No tRPC/oRPC Required) — Experimental](#standalone-mode-no-trpcorpc-required--experimental)
    - [Output and Lifecycle](#output-and-lifecycle)
    - [Testing your CLI](#testing-your-cli)
    - [CLI Context](#cli-context)
@@ -941,7 +941,9 @@ const cli = createCli({router: await unlazyRouter(router)})
 cli.run()
 ```
 
-### Standalone Mode (No tRPC/oRPC Required)
+### Standalone Mode (No tRPC/oRPC Required) — Experimental
+
+> **Note:** This API is experimental and may change in a future release.
 
 If you just want to build a CLI without depending on `@trpc/server` or `@orpc/server`, you can use the built-in `t` helper:
 
