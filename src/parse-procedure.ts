@@ -480,4 +480,3 @@ const parameterName = (s: JSONSchema7Definition, position: number): string => {
 const acceptsObject = (schema: JSONSchema7): boolean => {
   return (schema.type === 'object' || schema.anyOf?.some(sub => acceptsObject(toRoughJsonSchema7(sub)))) ?? false
 }
-

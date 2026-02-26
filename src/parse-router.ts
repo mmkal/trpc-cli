@@ -207,7 +207,10 @@ const parseTrpcRouter = ({router, ...dependencies}: {router: Trpc10RouterLike | 
     const meta = getMeta(procedure)
     const inputs = procedure._def.inputs as unknown[]
     const inputSchemas = getProcedureInputJsonSchemas(inputs, dependencies)
-    return [procedurePath, {meta, inputSchemas, type: procedure._def.type as 'query' | 'mutation', originalInputSchema: inputs[0]}]
+    return [
+      procedurePath,
+      {meta, inputSchemas, type: procedure._def.type as 'query' | 'mutation', originalInputSchema: inputs[0]},
+    ]
   })
 }
 
@@ -220,7 +223,12 @@ const parseNorpcRouter = ({router, ...dependencies}: {router: NorpcRouterLike} &
         const meta = value.meta || {}
         entries.push([
           childPath,
-          {meta, inputSchemas: getProcedureInputJsonSchemas([value.input], dependencies), type: null, originalInputSchema: value.input},
+          {
+            meta,
+            inputSchemas: getProcedureInputJsonSchemas([value.input], dependencies),
+            type: null,
+            originalInputSchema: value.input,
+          },
         ])
         return
       }
