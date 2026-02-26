@@ -67,13 +67,25 @@ export type OrpcRouterLike<Ctx> = {
   [key: string]: OrpcProcedureLike<Ctx> | OrpcRouterLike<Ctx>
 }
 
+export type NorpcProcedureLike = {
+  type: 'norpc'
+  input: StandardSchemaV1
+  meta: TrpcCliMeta
+  fn: (params: {input: any; ctx?: any; context?: any}) => any
+  call: (input: unknown, context?: unknown) => unknown
+}
+
+export type NorpcRouterLike = {
+  [key: string]: NorpcProcedureLike | NorpcRouterLike
+}
+
 export type CreateCallerFactoryLike<Procedures = Record<string, (input: unknown) => unknown>> = (
   router: any,
 ) => (context: any) => Procedures
 
-export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any>
+export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any> | NorpcRouterLike
 
-export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike
+export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike | NorpcProcedureLike
 
 export type inferRouterContext<R extends AnyRouter> = R extends Trpc10RouterLike | Trpc11RouterLike
   ? R['_def']['_config']['$types']['ctx']
@@ -85,6 +97,15 @@ export type inferRouterContext<R extends AnyRouter> = R extends Trpc10RouterLike
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null
+}
+
+export const isNorpcProcedure = (procedure: unknown): procedure is NorpcProcedureLike => {
+  return isRecord(procedure) && 'type' in procedure && procedure.type === 'norpc'
+}
+
+export const isNorpcRouter = (router: unknown): router is NorpcRouterLike => {
+  if (!router || typeof router !== 'object' || Array.isArray(router)) return false
+  return Object.values(router).every(v => isNorpcProcedure(v) || isNorpcRouter(v))
 }
 
 export const isTrpcRouter = (router: unknown): router is Trpc10RouterLike | Trpc11RouterLike => {
@@ -166,6 +187,9 @@ export type ProcedureInfo = {
  */
 // todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
 export const parseRouter = <R extends AnyRouter>({router, ...dependencies}: TrpcCliParams<R>) => {
+  if (isNorpcRouter(router)) {
+    return parseNorpcRouter({router, ...dependencies})
+  }
   if (isTrpcRouter(router)) {
     return parseTrpcRouter({router, ...dependencies})
   }
@@ -173,13 +197,37 @@ export const parseRouter = <R extends AnyRouter>({router, ...dependencies}: Trpc
   return parseOrpcRouter({router: router as OrpcRouterLike<unknown>, ...dependencies})
 }
 
+type TrpcProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike
+
 const parseTrpcRouter = ({router, ...dependencies}: {router: Trpc10RouterLike | Trpc11RouterLike} & Dependencies) => {
-  const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
+  const defEntries = Object.entries<TrpcProcedure>(router._def.procedures as {})
   return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
     const meta = getMeta(procedure)
     const inputSchemas = getProcedureInputJsonSchemas(procedure._def.inputs as unknown[], dependencies)
     return [procedurePath, {meta, inputSchemas, type: procedure._def.type as 'query' | 'mutation'}]
   })
+}
+
+const parseNorpcRouter = ({router, ...dependencies}: {router: NorpcRouterLike} & Dependencies) => {
+  const entries: [string, ProcedureInfo][] = []
+  const addEntries = (r: NorpcRouterLike, parentPath: string) => {
+    Object.entries(r).forEach(([prop, value]) => {
+      const childPath = parentPath ? `${parentPath}.${prop}` : prop
+      if (isNorpcProcedure(value)) {
+        const meta = value.meta || {}
+        entries.push([
+          childPath,
+          {meta, inputSchemas: getProcedureInputJsonSchemas([value.input], dependencies), type: null},
+        ])
+        return
+      }
+      if (isNorpcRouter(value)) {
+        addEntries(value, childPath)
+      }
+    })
+  }
+  addEntries(router, '')
+  return entries
 }
 
 const parseOrpcRouter = ({router, ...dependencies}: {router: OrpcRouterLike<any>} & Dependencies) => {

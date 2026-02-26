@@ -20,6 +20,7 @@ import {
   type AnyRouter,
   type CreateCallerFactoryLike,
   getParsedProcedure,
+  isNorpcRouter,
   isTrpcRouter,
   parseRouter,
   type ProcedureInfo,
@@ -108,7 +109,7 @@ export class Command extends BaseCommand {
 
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
 
-export {type AnyRouter, type AnyProcedure} from './parse-router.js'
+export {type AnyRouter, type AnyProcedure, type NorpcProcedureLike, type NorpcRouterLike} from './parse-router.js'
 export {parseRouter} from './parse-router.js'
 
 /**
@@ -387,6 +388,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           const message = `Using deprecated \`createCallerFactory\` option. Use \`trpcServer\` instead. e.g. \`createCli({router: myRouter, trpcServer: import('@trpc/server')})\``
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
+        } else if (isNorpcRouter(router)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let proc = router as any
+          for (const part of procedurePath.split('.')) proc = proc[part]
+          caller = {[procedurePath]: (_input: unknown) => proc.call(_input, params.context) as unknown}
         } else if (isTrpcRouter(router)) {
           const resolvedTrpcServer = await (params.trpcServer ||
             (await import('@trpc/server').catch(e => {
@@ -670,3 +676,5 @@ const parseJson = (
     throw new ErrorClass(hint)
   }
 }
+
+export {t, os} from './norpc.js'
