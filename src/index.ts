@@ -4,6 +4,7 @@ import {Option as BaseOption} from 'commander'
 import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
 import {addCompletions} from './completions.js'
+import {runWithCliContext} from './context.js'
 import {FailedToExitError, CliValidationError} from './errors.js'
 import {
   flattenedProperties,
@@ -101,6 +102,8 @@ export class Command extends BaseCommand {
   __input?: unknown
   /** @internal stash the return value of the underlying procedure on the command so to pass to `FailedToExitError` for use in a pinch */
   __result?: unknown
+  /** @internal stash the argv so it's accessible from action handlers via cli context */
+  __argv?: string[]
 }
 
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
@@ -400,9 +403,19 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         }
 
-        const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-          throw transformError(err, command)
-        })
+        // Derive leaf command's argv from the program's argv by stripping the routing segments.
+        // e.g. for procedurePath 'math.add' and program.__argv ['math', 'add', '--a', '2'],
+        // the leaf command gets ['--a', '2'].
+        const leafSegmentCount = procedurePath.split('.').length
+        command.__argv = (program.__argv ?? []).slice(leafSegmentCount)
+
+        const cliContext = {program, command}
+
+        const result = await runWithCliContext(cliContext, () =>
+          (caller[procedurePath](input) as Promise<unknown>).catch(err => {
+            throw transformError(err, command)
+          }),
+        )
         command.__result = result
         if (result != null) logger.info?.(result)
       })
@@ -528,6 +541,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       program = promptify(program, runParams.prompts) as Command
     }
 
+    // Store the argv that commander will parse in "user" mode.
+    // When argv is provided via run({argv}), it's used as-is (already "user" args).
+    // When falling back to process.argv, strip the `node script.js` prefix.
+    ;(program as Command).__argv = runParams?.argv ? argv : argv.slice(2)
+
     await program.parseAsync(argv, opts).catch(err => {
       if (err instanceof FailedToExitError) throw err
       const logMessage = looksLikeInstanceof(err, Error)
@@ -586,6 +604,7 @@ function transformError(err: unknown, command: Command) {
 }
 
 export {FailedToExitError, CliValidationError} from './errors.js'
+export {getCliContext, type CliContextValue, type CliCommand} from './context.js'
 
 const numberParser = (val: string, {fallback = val as unknown} = {}) => {
   const number = Number(val)
