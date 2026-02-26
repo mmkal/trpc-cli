@@ -1,6 +1,6 @@
+import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
-import {CLIProcedureLike, CLIRouterLike} from './parse-router.js'
 import {TrpcCliMeta} from './types.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,9 +18,9 @@ const createProcedureInternal = <Ctx, Input>(params: {
   input: StandardSchemaV1<Input>
   fn: (params: {input: Input; ctx: Ctx; context: Ctx}) => unknown
   meta?: TrpcCliMeta
-}): CLIProcedureLike => {
+}): NorpcProcedureLike => {
   return {
-    type: 'trpc-cli-command',
+    type: 'norpc',
     input: params.input,
     meta: params.meta || {},
     fn: params.fn as AnyFn,
@@ -98,9 +98,9 @@ interface ProcedureBuilder<Ctx extends object> {
   input: <Input>(schema: StandardSchemaV1<Input>) => ProcedureBuilderWithInput<Ctx, Input>
   meta: (meta: TrpcCliMeta) => ProcedureBuilder<Ctx>
   use: <TCtxOut extends object>(middlewareFn: MiddlewareFn<Ctx, TCtxOut>) => ProcedureBuilder<Ctx & TCtxOut>
-  handler: (fn: (params: HandlerParams<Ctx, void>) => unknown) => CLIProcedureLike
-  query: (fn: (params: HandlerParams<Ctx, void>) => unknown) => CLIProcedureLike
-  mutation: (fn: (params: HandlerParams<Ctx, void>) => unknown) => CLIProcedureLike
+  handler: (fn: (params: HandlerParams<Ctx, void>) => unknown) => NorpcProcedureLike
+  query: (fn: (params: HandlerParams<Ctx, void>) => unknown) => NorpcProcedureLike
+  mutation: (fn: (params: HandlerParams<Ctx, void>) => unknown) => NorpcProcedureLike
 }
 
 /**
@@ -111,9 +111,9 @@ interface ProcedureBuilderWithInput<Ctx extends object, Input> {
   use: <TCtxOut extends object>(
     middlewareFn: MiddlewareFn<Ctx, TCtxOut>,
   ) => ProcedureBuilderWithInput<Ctx & TCtxOut, Input>
-  handler: (fn: (params: HandlerParams<Ctx, Input>) => unknown) => CLIProcedureLike
-  query: (fn: (params: HandlerParams<Ctx, Input>) => unknown) => CLIProcedureLike
-  mutation: (fn: (params: HandlerParams<Ctx, Input>) => unknown) => CLIProcedureLike
+  handler: (fn: (params: HandlerParams<Ctx, Input>) => unknown) => NorpcProcedureLike
+  query: (fn: (params: HandlerParams<Ctx, Input>) => unknown) => NorpcProcedureLike
+  mutation: (fn: (params: HandlerParams<Ctx, Input>) => unknown) => NorpcProcedureLike
 }
 
 /**
@@ -163,7 +163,7 @@ const createProcedureBuilder = <Ctx extends object>(
   }
 }
 
-const router = <Procedures extends Record<string, CLIProcedureLike | CLIRouterLike>>(procedures: Procedures) =>
+const router = <Procedures extends Record<string, NorpcProcedureLike | NorpcRouterLike>>(procedures: Procedures) =>
   procedures
 
 // Base procedure builder with no middleware and empty context

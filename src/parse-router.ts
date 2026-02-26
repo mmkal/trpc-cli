@@ -67,25 +67,25 @@ export type OrpcRouterLike<Ctx> = {
   [key: string]: OrpcProcedureLike<Ctx> | OrpcRouterLike<Ctx>
 }
 
-export type CLIProcedureLike = {
-  type: 'trpc-cli-command'
+export type NorpcProcedureLike = {
+  type: 'norpc'
   input: StandardSchemaV1
   meta: TrpcCliMeta
   fn: (params: {input: any; ctx?: any; context?: any}) => any
   call: (input: unknown, context?: unknown) => unknown
 }
 
-export type CLIRouterLike = {
-  [key: string]: CLIProcedureLike | CLIRouterLike
+export type NorpcRouterLike = {
+  [key: string]: NorpcProcedureLike | NorpcRouterLike
 }
 
 export type CreateCallerFactoryLike<Procedures = Record<string, (input: unknown) => unknown>> = (
   router: any,
 ) => (context: any) => Procedures
 
-export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any> | CLIRouterLike
+export type AnyRouter = Trpc10RouterLike | Trpc11RouterLike | OrpcRouterLike<any> | NorpcRouterLike
 
-export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike | CLIProcedureLike
+export type AnyProcedure = Trpc10ProcedureLike | Trpc11ProcedureLike | NorpcProcedureLike
 
 export type inferRouterContext<R extends AnyRouter> = R extends Trpc10RouterLike | Trpc11RouterLike
   ? R['_def']['_config']['$types']['ctx']
@@ -99,13 +99,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null
 }
 
-export const isCliProcedure = (procedure: unknown): procedure is CLIProcedureLike => {
-  return isRecord(procedure) && 'type' in procedure && procedure.type === 'trpc-cli-command'
+export const isNorpcProcedure = (procedure: unknown): procedure is NorpcProcedureLike => {
+  return isRecord(procedure) && 'type' in procedure && procedure.type === 'norpc'
 }
 
-export const isCliRouter = (router: unknown): router is CLIRouterLike => {
+export const isNorpcRouter = (router: unknown): router is NorpcRouterLike => {
   if (!router || typeof router !== 'object' || Array.isArray(router)) return false
-  return Object.values(router).every(v => isCliProcedure(v) || isCliRouter(v))
+  return Object.values(router).every(v => isNorpcProcedure(v) || isNorpcRouter(v))
 }
 
 export const isTrpcRouter = (router: unknown): router is Trpc10RouterLike | Trpc11RouterLike => {
@@ -187,8 +187,8 @@ export type ProcedureInfo = {
  */
 // todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
 export const parseRouter = <R extends AnyRouter>({router, ...dependencies}: TrpcCliParams<R>) => {
-  if (isCliRouter(router)) {
-    return parseCliRouter({router, ...dependencies})
+  if (isNorpcRouter(router)) {
+    return parseNorpcRouter({router, ...dependencies})
   }
   if (isTrpcRouter(router)) {
     return parseTrpcRouter({router, ...dependencies})
@@ -208,17 +208,20 @@ const parseTrpcRouter = ({router, ...dependencies}: {router: Trpc10RouterLike | 
   })
 }
 
-const parseCliRouter = ({router, ...dependencies}: {router: CLIRouterLike} & Dependencies) => {
+const parseNorpcRouter = ({router, ...dependencies}: {router: NorpcRouterLike} & Dependencies) => {
   const entries: [string, ProcedureInfo][] = []
-  const addEntries = (r: CLIRouterLike, parentPath: string) => {
+  const addEntries = (r: NorpcRouterLike, parentPath: string) => {
     Object.entries(r).forEach(([prop, value]) => {
       const childPath = parentPath ? `${parentPath}.${prop}` : prop
-      if (isCliProcedure(value)) {
-        const meta = (value.meta || {}) as TrpcCliMeta
-        entries.push([childPath, {meta, inputSchemas: getProcedureInputJsonSchemas([value.input], dependencies), type: null}])
+      if (isNorpcProcedure(value)) {
+        const meta = value.meta || {}
+        entries.push([
+          childPath,
+          {meta, inputSchemas: getProcedureInputJsonSchemas([value.input], dependencies), type: null},
+        ])
         return
       }
-      if (isCliRouter(value)) {
+      if (isNorpcRouter(value)) {
         addEntries(value, childPath)
       }
     })
