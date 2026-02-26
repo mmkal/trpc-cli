@@ -392,7 +392,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let proc = router as any
           for (const part of procedurePath.split('.')) proc = proc[part]
-          caller = {[procedurePath]: (_input: unknown) => proc.call(_input, params.context)}
+          caller = {[procedurePath]: (_input: unknown) => proc.call(_input, params.context) as unknown}
         } else if (isTrpcRouter(router)) {
           const resolvedTrpcServer = await (params.trpcServer ||
             (await import('@trpc/server').catch(e => {
