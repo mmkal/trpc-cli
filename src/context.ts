@@ -14,8 +14,6 @@ export interface CliCommand {
   opts: () => Record<string, unknown>
   /** The parent command, if this is a subcommand. */
   parent: CliCommand | null
-  /** The raw positional args passed to this command by commander. */
-  args: string[]
   /**
    * The argv for this command. On the root program, this is the full argv that was parsed
    * (equivalent to what you'd pass to `run({argv})`). On a leaf command, this is the

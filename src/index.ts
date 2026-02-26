@@ -403,10 +403,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         }
 
-        // Set __argv on the leaf command from its parent's args (which contains [commandName, ...rest])
-        const parentArgs: string[] = command.parent?.args || []
-        const commandNameIndex = parentArgs.indexOf(command.name())
-        command.__argv = commandNameIndex >= 0 ? parentArgs.slice(commandNameIndex + 1) : [...parentArgs]
+        // Derive leaf command's argv from the program's argv by stripping the routing segments.
+        // e.g. for procedurePath 'math.add' and program.__argv ['math', 'add', '--a', '2'],
+        // the leaf command gets ['--a', '2'].
+        const leafSegmentCount = procedurePath.split('.').length
+        command.__argv = (program.__argv ?? []).slice(leafSegmentCount)
 
         const cliContext = {program, command}
 
@@ -540,8 +541,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       program = promptify(program, runParams.prompts) as Command
     }
 
-    // Store the "user" args on the program - i.e. the args the program actually parses,
-    // without the `node script.js` prefix that process.argv includes.
+    // Store the argv that commander will parse in "user" mode.
+    // When argv is provided via run({argv}), it's used as-is (already "user" args).
+    // When falling back to process.argv, strip the `node script.js` prefix.
     ;(program as Command).__argv = runParams?.argv ? argv : argv.slice(2)
 
     await program.parseAsync(argv, opts).catch(err => {

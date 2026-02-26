@@ -8,7 +8,7 @@ const t = initTRPC.meta<TrpcCliMeta>().create()
 
 expect.addSnapshotSerializer({
   test: (val): val is {name: () => string; __argv?: string[]} =>
-    looksLikeInstanceof(val, 'Command') && typeof (val as any).name === 'function',
+    looksLikeInstanceof(val, 'Command') && typeof (val as {name?: unknown}).name === 'function',
   serialize(val, config, indentation, depth, refs, printer) {
     return printer({name: val.name(), __argv: val.__argv}, config, indentation, depth, refs)
   },
