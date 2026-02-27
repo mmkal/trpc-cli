@@ -522,7 +522,7 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
 
           if (isBoolean) {
             // For booleans, use progressive default if available
-            const defaultValue = progressiveInfo?.default ?? option.original.defaultValue
+            const defaultValue = progressiveInfo?.default ?? (option.original.defaultValue as unknown)
             const promptedValue = await prompter.confirm(
               {
                 message: getMessage(option.original),
@@ -552,7 +552,7 @@ export const promptify = (program: CommanderProgramLike, prompts: Promptable) =>
           } else if (option.original.argChoices || progressiveInfo?.choices) {
             // Use progressive choices if available, otherwise fall back to static choices
             const choices = progressiveInfo?.choices ?? option.original.argChoices?.slice() ?? []
-            const defaultValue = progressiveInfo?.default ?? option.original.defaultValue
+            const defaultValue = progressiveInfo?.default ?? (option.original.defaultValue as unknown)
             const set = new Set(choices)
             const promptedValue = await prompter.select(
               {

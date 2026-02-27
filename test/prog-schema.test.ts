@@ -1,5 +1,5 @@
 import * as trpcServer from '@trpc/server'
-import {expect, expectTypeOf, test, vi} from 'vitest'
+import {expect, expectTypeOf, test} from 'vitest'
 import {createCli, type TrpcCliMeta} from '../src/index.js'
 import {obj} from '../src/progressive-object.js'
 import {prettifyStandardSchemaError} from '../src/standard-schema/errors.js'

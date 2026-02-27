@@ -61,8 +61,8 @@ const progressiveObjectSchema = <Shape extends Record<string, StandardSchemaV1<a
         }
         return [propName, propSchema.value]
       })
-      const required = propertyEntries.flatMap(([name, schema]) => {
-        if (isOptional(schema as {})) return []
+      const required = propertyEntries.flatMap(([name, sch]) => {
+        if (isOptional(sch as {})) return []
         return [name as string]
       })
       return {

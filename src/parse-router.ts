@@ -207,7 +207,10 @@ const parseTrpcRouter = ({router, ...dependencies}: {router: Trpc10RouterLike | 
     const meta = getMeta(procedure)
     const inputs = procedure._def.inputs as unknown[]
     const inputSchemas = getProcedureInputJsonSchemas(inputs, dependencies)
-    return [procedurePath, {meta, inputSchemas, type: procedure._def.type as 'query' | 'mutation', originalInputSchema: inputs[0]}]
+    return [
+      procedurePath,
+      {meta, inputSchemas, type: procedure._def.type as 'query' | 'mutation', originalInputSchema: inputs[0]},
+    ]
   })
 }
 
@@ -220,7 +223,12 @@ const parseNorpcRouter = ({router, ...dependencies}: {router: NorpcRouterLike} &
         const meta = value.meta || {}
         entries.push([
           childPath,
-          {meta, inputSchemas: getProcedureInputJsonSchemas([value.input], dependencies), type: null, originalInputSchema: value.input},
+          {
+            meta,
+            inputSchemas: getProcedureInputJsonSchemas([value.input], dependencies),
+            type: null,
+            originalInputSchema: value.input,
+          },
         ])
         return
       }
@@ -243,7 +251,7 @@ const parseOrpcRouter = ({router, ...dependencies}: {router: OrpcRouterLike<any>
       for (const p of path) procedure = procedure[p] as Record<string, unknown>
       if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
 
-      const originalInputSchema = contract['~orpc'].inputSchema
+      const originalInputSchema = contract['~orpc'].inputSchema as unknown
       const inputSchemas = getProcedureInputJsonSchemas([originalInputSchema], dependencies)
       if (path.some(p => p.includes('.'))) {
         throw new Error(`ORPC procedure path segments cannot contain \`.'. Got: ${JSON.stringify(path)}`)
