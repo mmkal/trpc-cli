@@ -61,28 +61,12 @@ afterAll(async () => {
   server.close()
 })
 
-/** Returns a trpc client — has `client[dotPath].query(input)` shape natively */
-const makeTrpcClient = () =>
-  createTRPCClient<typeof router>({
+test('proxy with trpc server module', async () => {
+  const client = createTRPCClient<typeof router>({
     links: [httpLink({url: 'http://localhost:7500'})],
   })
-
-/** Returns an oRPC-style client — nested object where the leaf is a callable function */
-const makeOrpcStyleClient = () => {
-  const trpcClient = makeTrpcClient()
-  return {
-    greeting: (input: {name: string}) => trpcClient.greeting.query(input),
-    deeply: {
-      nested: {
-        farewell: (input: {name: string}) => trpcClient.deeply.nested.farewell.query(input),
-      },
-    },
-  }
-}
-
-test('proxy with trpc server module', async () => {
   const proxiedRouter = await proxify(router, {
-    client: () => makeTrpcClient(),
+    call: ({path, info, input}) => (client as any)[path][info.type!](input),
     server: import('@trpc/server'),
   })
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
@@ -92,9 +76,12 @@ test('proxy with trpc server module', async () => {
 })
 
 test('proxy with pre-parsed router and trpc server', async () => {
+  const client = createTRPCClient<typeof router>({
+    links: [httpLink({url: 'http://localhost:7500'})],
+  })
   const parsed = parseRouter({router})
   const proxiedRouter = await proxify(parsed, {
-    client: () => makeTrpcClient(),
+    call: ({path, info, input}) => (client as any)[path][info.type!](input),
     server: import('@trpc/server'),
   })
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
@@ -104,8 +91,16 @@ test('proxy with pre-parsed router and trpc server', async () => {
 })
 
 test('proxy with orpc server module', async () => {
+  const trpcClient = createTRPCClient<typeof router>({
+    links: [httpLink({url: 'http://localhost:7500'})],
+  })
+  // simulate an oRPC-style client: nested object where the leaf is a callable function
+  const orpcClient = {
+    greeting: (input: {name: string}) => trpcClient.greeting.query(input),
+    deeply: {nested: {farewell: (input: {name: string}) => trpcClient.deeply.nested.farewell.query(input)}},
+  }
   const proxiedRouter = await proxify(router, {
-    client: () => makeOrpcStyleClient(),
+    call: ({path, input}) => path.split('.').reduce((c: any, k) => c[k], orpcClient)(input),
     server: import('@orpc/server'),
   })
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
@@ -115,8 +110,15 @@ test('proxy with orpc server module', async () => {
 })
 
 test('proxy with norpc (default, no server module)', async () => {
+  const trpcClient = createTRPCClient<typeof router>({
+    links: [httpLink({url: 'http://localhost:7500'})],
+  })
+  const orpcClient = {
+    greeting: (input: {name: string}) => trpcClient.greeting.query(input),
+    deeply: {nested: {farewell: (input: {name: string}) => trpcClient.deeply.nested.farewell.query(input)}},
+  }
   const proxiedRouter = await proxify(router, {
-    client: () => makeOrpcStyleClient(),
+    call: ({path, input}) => path.split('.').reduce((c: any, k) => c[k], orpcClient)(input),
   })
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
   expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(

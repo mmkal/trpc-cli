@@ -3,22 +3,30 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {JSONSchema7} from 'json-schema'
 import {os as norpcOs} from './norpc.js'
-import {AnyRouter, parseRouter} from './parse-router.js'
+import {AnyRouter, ProcedureInfo, parseRouter} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 
-type OrpcLikeServerModule = {os: {input: (schema: any) => {handler: (fn: any) => any}}}
-type TrpcLikeServerModule = {initTRPC: {create: () => {procedure: any; router: (input: any) => any}}}
-type ServerModule = TrpcLikeServerModule | OrpcLikeServerModule
+type ProxifyCallParams = {
+  path: string
+  info: ProcedureInfo
+  input: unknown
+}
 
 type ProxifyOptions = {
   /**
-   * A function that returns a client for calling remote procedures.
+   * Called to execute a procedure. You are responsible for routing to the right client method.
    *
-   * For trpc: return a trpc client (e.g. `createTRPCClient(...)`) — procedures are called via `client[dotPath].query(input)`.
-   * For oRPC: return a raw oRPC client (e.g. `createORPCClient(...)`) — procedures are called by walking the nested object and calling the leaf.
-   * For norpc (no `server`): same as oRPC — walk the nested object and call the leaf.
+   * @example
+   * // trpc client
+   * const client = createTRPCClient(...)
+   * call: ({path, info, input}) => client[path][info.type!](input)
+   *
+   * @example
+   * // oRPC client
+   * const client = createORPCClient(...)
+   * call: ({path, input}) => path.split('.').reduce((c, k) => c[k], client)(input)
    */
-  client: (procedurePath: string) => unknown
+  call: (params: ProxifyCallParams) => unknown
   /**
    * The RPC server module to use for building the proxified router.
    *
@@ -29,6 +37,10 @@ type ProxifyOptions = {
   server?: ServerModule | Promise<ServerModule>
 }
 
+type OrpcLikeServerModule = {os: {input: (schema: any) => {handler: (fn: any) => any}}}
+type TrpcLikeServerModule = {initTRPC: {create: () => {procedure: any; router: (input: any) => any}}}
+type ServerModule = TrpcLikeServerModule | OrpcLikeServerModule
+
 const makeStandardSchema = (inputSchemas: JSONSchema7[]): StandardSchemaV1 & {toJsonSchema: () => JSONSchema7} => ({
   '~standard': {vendor: 'trpc-cli', version: 1, validate: (value: unknown) => ({value})},
   toJsonSchema: () => {
@@ -38,18 +50,10 @@ const makeStandardSchema = (inputSchemas: JSONSchema7[]): StandardSchemaV1 & {to
   },
 })
 
-/** Walk an oRPC-style nested client by dot-separated path and call the leaf */
-const callOrpcClient = async (client: any, procedurePath: string, input: unknown) => {
-  const parts = procedurePath.split('.')
-  let current: any = client
-  for (const part of parts) current = current[part]
-  return current(input)
-}
-
 const buildWithTrpc = (
   trpcModule: TrpcLikeServerModule,
   parsed: ReturnType<typeof parseRouter>,
-  getClient: (procedurePath: string) => unknown,
+  call: ProxifyOptions['call'],
 ) => {
   const trpc = trpcModule.initTRPC.create()
   const outputRouterRecord: Record<string, any> = {}
@@ -67,16 +71,11 @@ const buildWithTrpc = (
       }
       newProc = newProc.input(standardSchema)
     }
+    const handler = async ({input}: any) => call({path: procedurePath, info, input})
     if (info.type === 'query') {
-      newProc = newProc.query(async ({input}: any) => {
-        const client: any = await getClient(procedurePath)
-        return client[procedurePath].query(input)
-      })
+      newProc = newProc.query(handler)
     } else if (info.type === 'mutation') {
-      newProc = newProc.mutation(async ({input}: any) => {
-        const client: any = await getClient(procedurePath)
-        return client[procedurePath].mutate(input)
-      })
+      newProc = newProc.mutation(handler)
     } else {
       continue
     }
@@ -88,7 +87,7 @@ const buildWithTrpc = (
 const buildWithOs = (
   os: {input: (schema: any) => {handler: (fn: any) => any}},
   parsed: ReturnType<typeof parseRouter>,
-  getClient: (procedurePath: string) => unknown,
+  call: ProxifyOptions['call'],
 ) => {
   const outputRouterRecord: Record<string, any> = {}
   for (const [procedurePath, info] of parsed) {
@@ -100,8 +99,7 @@ const buildWithOs = (
     const schemas = info.inputSchemas.success ? info.inputSchemas.value : []
     const standardSchema = makeStandardSchema(schemas)
     currentRouter[parts[parts.length - 1]] = os.input(standardSchema).handler(async ({input}: any) => {
-      const client: any = await getClient(procedurePath)
-      return callOrpcClient(client, procedurePath, input)
+      return call({path: procedurePath, info, input})
     })
   }
   return outputRouterRecord
@@ -111,26 +109,28 @@ const buildWithOs = (
  * EXPERIMENTAL: Don't use unless you're willing to help figure out the API, and whether it should even exist.
  * See description in https://github.com/mmkal/trpc-cli/pull/153
  *
- * Creates a proxified router that delegates procedure calls to a remote client.
+ * Creates a proxified router that delegates procedure calls via a user-supplied `call` function.
  *
  * @example
- * // With trpc — returns a trpc v11 router
+ * // With trpc
+ * const client = createTRPCClient({links: [httpLink({url: '...'})]})
  * const proxied = await proxify(router, {
- *   client: () => createTRPCClient({links: [httpLink({url: '...'})]}),
+ *   call: ({path, info, input}) => client[path][info.type!](input),
  *   server: import('@trpc/server'),
  * })
  *
  * @example
- * // With oRPC — returns an oRPC router
+ * // With oRPC
+ * const client = createORPCClient(new RPCLink({url: '...'}))
  * const proxied = await proxify(router, {
- *   client: () => createORPCClient(new RPCLink({url: '...'})),
+ *   call: ({path, input}) => path.split('.').reduce((c, k) => c[k], client)(input),
  *   server: import('@orpc/server'),
  * })
  *
  * @example
- * // With norpc (default, zero deps) — returns a norpc router
+ * // With norpc (default, zero deps)
  * const proxied = await proxify(router, {
- *   client: () => myClient,
+ *   call: ({path, input}) => myClient.call(path, input),
  * })
  */
 export const proxify = async <R extends AnyRouter>(
@@ -141,13 +141,13 @@ export const proxify = async <R extends AnyRouter>(
   const serverModule = await options.server
 
   if (serverModule && 'initTRPC' in serverModule) {
-    return buildWithTrpc(serverModule, parsed, options.client)
+    return buildWithTrpc(serverModule, parsed, options.call)
   }
 
   if (serverModule && 'os' in serverModule) {
-    return buildWithOs(serverModule.os, parsed, options.client)
+    return buildWithOs(serverModule.os, parsed, options.call)
   }
 
   // Default: use built-in norpc builder (zero external dependencies)
-  return buildWithOs(norpcOs, parsed, options.client)
+  return buildWithOs(norpcOs, parsed, options.call)
 }
