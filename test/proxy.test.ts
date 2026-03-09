@@ -61,11 +61,29 @@ afterAll(async () => {
   server.close()
 })
 
-test('proxy with plain router', async () => {
-  const proxiedRouter = proxify(router, async () => {
-    return createTRPCClient<typeof router>({
-      links: [httpLink({url: 'http://localhost:7500'})],
-    })
+/** Returns a trpc client — has `client[dotPath].query(input)` shape natively */
+const makeTrpcClient = () =>
+  createTRPCClient<typeof router>({
+    links: [httpLink({url: 'http://localhost:7500'})],
+  })
+
+/** Returns an oRPC-style client — nested object where the leaf is a callable function */
+const makeOrpcStyleClient = () => {
+  const trpcClient = makeTrpcClient()
+  return {
+    greeting: (input: {name: string}) => trpcClient.greeting.query(input),
+    deeply: {
+      nested: {
+        farewell: (input: {name: string}) => trpcClient.deeply.nested.farewell.query(input),
+      },
+    },
+  }
+}
+
+test('proxy with trpc server module', async () => {
+  const proxiedRouter = await proxify(router, {
+    client: () => makeTrpcClient(),
+    server: import('@trpc/server'),
   })
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
   expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
@@ -73,12 +91,32 @@ test('proxy with plain router', async () => {
   )
 })
 
-test('proxy with pre-parsed router', async () => {
+test('proxy with pre-parsed router and trpc server', async () => {
   const parsed = parseRouter({router})
-  const proxiedRouter = proxify(parsed, async () => {
-    return createTRPCClient<typeof router>({
-      links: [httpLink({url: 'http://localhost:7500'})],
-    })
+  const proxiedRouter = await proxify(parsed, {
+    client: () => makeTrpcClient(),
+    server: import('@trpc/server'),
+  })
+  expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
+  expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
+    `"Goodbye Bob"`,
+  )
+})
+
+test('proxy with orpc server module', async () => {
+  const proxiedRouter = await proxify(router, {
+    client: () => makeOrpcStyleClient(),
+    server: import('@orpc/server'),
+  })
+  expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
+  expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
+    `"Goodbye Bob"`,
+  )
+})
+
+test('proxy with norpc (default, no server module)', async () => {
+  const proxiedRouter = await proxify(router, {
+    client: () => makeOrpcStyleClient(),
   })
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
   expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
