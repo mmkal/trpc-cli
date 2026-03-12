@@ -617,6 +617,8 @@ export {
   lineByLineConsoleLogger,
   lineByLineLogger,
   yamlConsoleLogger,
+  yamlTableConsoleLogger,
+  yamlTableLogger,
   yamlLogger,
 } from './logging.js'
 export {toYaml} from './yaml.js'

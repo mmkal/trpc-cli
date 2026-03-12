@@ -1,7 +1,10 @@
 type YamlScalar = string | number | boolean | null
 type YamlValue = YamlScalar | YamlValue[] | {[key: string]: YamlValue}
 
-export const toYaml = (value: unknown) => renderNode(normalizeForYaml(value, 'root', new WeakSet<object>()), 0)
+export const toYaml = (value: unknown, {maxLines}: {maxLines?: number} = {}) => {
+  const yaml = renderNode(normalizeForYaml(value, 'root', new WeakSet<object>()), 0)
+  return clampLines(yaml, maxLines)
+}
 
 function renderNode(value: YamlValue, indent: number): string {
   if (isBlockString(value)) return `${getBlockHeader(value)}\n${indentBlock(value, indent + 2)}`
@@ -145,4 +148,11 @@ function normalizeForYaml(value: unknown, position: 'root' | 'object' | 'array',
   }
 
   return null
+}
+
+function clampLines(value: string, maxLines: number | undefined) {
+  if (!maxLines) return value
+  const lines = value.split('\n')
+  if (lines.length <= maxLines) return value
+  return [...lines.slice(0, maxLines), '...'].join('\n')
 }
