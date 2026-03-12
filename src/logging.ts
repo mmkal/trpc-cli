@@ -1,5 +1,6 @@
 import {CliTable} from './cli-table.js'
 import {Log, Logger} from './types.js'
+import {toYaml} from './yaml.js'
 
 export const lineByLineLogger = getLoggerTransformer(log => {
   /**
@@ -33,6 +34,15 @@ export const autoTableLogger = getLoggerTransformer(log => (...args) => {
   log(formatLogArgs(args))
 })
 
+export const yamlLogger = getLoggerTransformer(log => (...args) => {
+  if (args.length > 1 && args.every(isDisplayPrimitive)) {
+    log(...args)
+    return
+  }
+
+  log(formatYamlArgs(args))
+})
+
 const isPrimitive = (value: unknown): value is string | number | boolean => {
   const type = typeof value
   return type === 'string' || type === 'number' || type === 'boolean'
@@ -44,6 +54,11 @@ const isDisplayPrimitive = (value: unknown): value is Primitive =>
 const formatLogArgs = (args: unknown[]) => {
   if (args.length !== 1) return safeJsonStringify(args)
   return renderValue(args[0], undefined, new WeakSet<object>())
+}
+
+const formatYamlArgs = (args: unknown[]) => {
+  if (args.length !== 1) return toYaml(args)
+  return toYaml(args[0])
 }
 
 const renderValue = (value: unknown, heading: string | undefined, seen: WeakSet<object>): string => {
@@ -148,3 +163,4 @@ function getLoggerTransformer(transform: (log: Log) => Log) {
  */
 export const lineByLineConsoleLogger = lineByLineLogger(console)
 export const autoTableConsoleLogger = autoTableLogger(console)
+export const yamlConsoleLogger = yamlLogger(console)

@@ -15,7 +15,7 @@ import {
   getAllowedSchemas,
 } from './json-schema.js'
 import {commandToJSON} from './json.js'
-import {lineByLineConsoleLogger} from './logging.js'
+import {autoTableConsoleLogger, lineByLineConsoleLogger, yamlConsoleLogger} from './logging.js'
 import {
   type AnyRouter,
   type CreateCallerFactoryLike,
@@ -124,7 +124,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
   const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {
-    const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
+    const logger = {...getDefaultLogger(runParams?.outputFormat), ...runParams?.logger}
     const program = new Command(params.name)
 
     if (params.version) program.version(params.version)
@@ -611,11 +611,25 @@ function transformError(err: unknown, command: Command) {
 
 export {FailedToExitError, CliValidationError} from './errors.js'
 export {getCliContext, type CliContextValue, type CliCommand} from './context.js'
-export {autoTableConsoleLogger, autoTableLogger, lineByLineConsoleLogger, lineByLineLogger} from './logging.js'
+export {
+  autoTableConsoleLogger,
+  autoTableLogger,
+  lineByLineConsoleLogger,
+  lineByLineLogger,
+  yamlConsoleLogger,
+  yamlLogger,
+} from './logging.js'
+export {toYaml} from './yaml.js'
 
 const numberParser = (val: string, {fallback = val as unknown} = {}) => {
   const number = Number(val)
   return Number.isNaN(number) ? fallback : number
+}
+
+function getDefaultLogger(outputFormat: TrpcCliRunParams['outputFormat']) {
+  if (outputFormat === 'table') return autoTableConsoleLogger
+  if (outputFormat === 'yaml') return yamlConsoleLogger
+  return lineByLineConsoleLogger
 }
 
 const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
