@@ -180,7 +180,6 @@ export type Promptable =
 export type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
-  outputFormat?: 'json' | 'table' | 'yaml'
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
   prompts?: Promptable
   /** Format an error thrown by the root procedure before logging to `logger.error` */
