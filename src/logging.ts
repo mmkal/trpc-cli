@@ -25,7 +25,7 @@ type Primitive = string | number | boolean | bigint | null | undefined
 type FlatRecord = Record<string, Primitive>
 
 export const autoTableLogger = getLoggerTransformer(log => (...args) => {
-  if (args.length > 1 && args.every(isPrimitive)) {
+  if (args.length > 1 && args.every(isDisplayPrimitive)) {
     log(...args)
     return
   }
@@ -42,11 +42,11 @@ const isDisplayPrimitive = (value: unknown): value is Primitive =>
   value == null || isPrimitive(value) || typeof value === 'bigint'
 
 const formatLogArgs = (args: unknown[]) => {
-  if (args.length !== 1) return JSON.stringify(args, null, 2)
-  return renderValue(args[0])
+  if (args.length !== 1) return safeJsonStringify(args)
+  return renderValue(args[0], undefined, new WeakSet<object>())
 }
 
-const renderValue = (value: unknown, heading?: string): string => {
+const renderValue = (value: unknown, heading: string | undefined, seen: WeakSet<object>): string => {
   if (Array.isArray(value) && value.every(isFlatRecord)) {
     const body = value.length ? renderRowsTable(value) : '[]'
     return withHeading(heading, body)
@@ -65,17 +65,23 @@ const renderValue = (value: unknown, heading?: string): string => {
   }
 
   if (isRecord(value)) {
+    if (seen.has(value)) return withHeading(heading, '[Circular]')
+    seen.add(value)
     const sections = Object.entries(value)
-      .map(([key, nested]) => renderValue(nested, key))
+      .map(([key, nested]) => renderValue(nested, key, seen))
       .filter(Boolean)
     if (sections.length) return sections.join('\n\n')
   }
 
-  return withHeading(heading, JSON.stringify(value, null, 2))
+  return withHeading(heading, safeJsonStringify(value))
 }
 
 const renderRowsTable = (rows: FlatRecord[]) => {
-  const columns = Array.from(new Set(rows.flatMap(row => Object.keys(row))))
+  const firstRowColumns = rows[0] ? Object.keys(rows[0]) : []
+  const extraColumns = Array.from(new Set(rows.flatMap(row => Object.keys(row))))
+    .filter(column => !firstRowColumns.includes(column))
+    .sort()
+  const columns = [...firstRowColumns, ...extraColumns]
   const table = new CliTable({head: columns})
 
   for (const row of rows) {
@@ -106,6 +112,22 @@ const isFlatRecord = (value: unknown): value is FlatRecord => {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
+
+const safeJsonStringify = (value: unknown) => {
+  const seen = new WeakSet<object>()
+  return JSON.stringify(
+    value,
+    (_key, currentValue: unknown) => {
+      if (typeof currentValue === 'bigint') return String(currentValue)
+      if (!currentValue || typeof currentValue !== 'object') return currentValue
+      const objectValue: object = currentValue
+      if (seen.has(objectValue)) return '[Circular]'
+      seen.add(objectValue)
+      return objectValue
+    },
+    2,
+  )
+}
 
 /** Takes a function that wraps an individual log function, and returns a function that wraps the `info` and `error` functions for a logger */
 function getLoggerTransformer(transform: (log: Log) => Log) {

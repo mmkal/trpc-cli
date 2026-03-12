@@ -6,7 +6,7 @@
 
 type Cell = {text: string; width?: number} | string | number | boolean | bigint | null | undefined
 type Row = Cell[]
-type ObjectRow = Record<string, Cell | Cell[]>
+type ObjectRow = {[key: string]: Cell | Cell[]}
 type TableRow = Row | ObjectRow
 
 export interface CliTableOptions {
@@ -172,7 +172,7 @@ export class CliTable extends Array<TableRow> {
         return
       }
 
-      const [headerCell, valueCell] = Object.entries(row)[0] ?? []
+      const [headerCell, valueCell] = getSingleObjectEntry(row)
       if (headerCell == null) return
       colWidths[offset] = Math.max(colWidths[offset] ?? 0, getWidth(headerCell))
       if (Array.isArray(valueCell)) {
@@ -194,9 +194,17 @@ export class CliTable extends Array<TableRow> {
 
     function normalizeRow(row: TableRow): Row {
       if (Array.isArray(row)) return row
-      const [key, value] = Object.entries(row)[0] ?? []
+      const [key, value] = getSingleObjectEntry(row)
       if (key == null) return []
       return Array.isArray(value) ? [key, ...value] : [key, value]
+    }
+
+    function getSingleObjectEntry(row: ObjectRow) {
+      const entries = Object.entries(row)
+      if (entries.length > 1) {
+        throw new Error(`CliTable object rows must contain exactly one entry. Got ${entries.length}.`)
+      }
+      return entries[0] ?? []
     }
 
     function hasLength(row: TableRow): row is {length: number} {

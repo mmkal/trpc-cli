@@ -234,3 +234,11 @@ test('newlines in cross table header and body', () => {
     ].join('\n'),
   )
 })
+
+test('object rows must contain exactly one entry', () => {
+  const table = new CliTable()
+
+  table.push({a: 1, b: 2})
+
+  expect(() => table.toString()).toThrowError('CliTable object rows must contain exactly one entry. Got 2.')
+})

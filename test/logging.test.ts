@@ -145,3 +145,41 @@ test('auto table for nested values', async () => {
     abc
   `)
 })
+
+test('auto table passes through display primitives', async () => {
+  tables.info!(1, 2n, null, undefined, false)
+
+  expect(info).toHaveBeenCalledWith(1, 2n, null, undefined, false)
+})
+
+test('auto table handles circular objects', async () => {
+  const value = {name: 'Ada'} as {name: string; self?: unknown}
+  value.self = value
+
+  tables.info!(value)
+
+  expect(info).toMatchInlineSnapshot(`
+    name:
+    Ada
+
+    self:
+    [Circular]
+  `)
+})
+
+test('auto table uses deterministic extra column ordering', async () => {
+  tables.info!([
+    {b: 'one', a: 'two'},
+    {c: 'three', b: 'four'},
+  ])
+
+  expect(info).toMatchInlineSnapshot(`
+    ┌──────┬─────┬───────┐
+    │ b    │ a   │ c     │
+    ├──────┼─────┼───────┤
+    │ one  │ two │       │
+    ├──────┼─────┼───────┤
+    │ four │     │ three │
+    └──────┴─────┴───────┘
+  `)
+})
