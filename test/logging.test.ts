@@ -1,10 +1,11 @@
 import {beforeEach, expect, test, vi} from 'vitest'
-import {lineByLineLogger} from '../src/logging.js'
+import {autoTableLogger, lineByLineLogger} from '../src/logging.js'
 
 const info = vi.fn()
 const error = vi.fn()
 const mocks = {info, error}
 const jsonish = lineByLineLogger(mocks)
+const tables = autoTableLogger(mocks)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -101,5 +102,46 @@ test('object array', async () => {
     {
       "name": "m3"
     }
+  `)
+})
+
+test('auto table for flat object arrays', async () => {
+  tables.info!([
+    {name: 'Ada', role: 'admin'},
+    {name: 'Linus', role: 'maintainer'},
+  ])
+
+  expect(info).toMatchInlineSnapshot(`
+    ┌───────┬────────────┐
+    │ name  │ role       │
+    ├───────┼────────────┤
+    │ Ada   │ admin      │
+    ├───────┼────────────┤
+    │ Linus │ maintainer │
+    └───────┴────────────┘
+  `)
+})
+
+test('auto table for nested values', async () => {
+  tables.info!({
+    foo: [
+      {job: 'typecheck', status: 'pass'},
+      {job: 'test', status: 'fail'},
+    ],
+    bar: 'abc',
+  })
+
+  expect(info).toMatchInlineSnapshot(`
+    foo:
+    ┌───────────┬────────┐
+    │ job       │ status │
+    ├───────────┼────────┤
+    │ typecheck │ pass   │
+    ├───────────┼────────┤
+    │ test      │ fail   │
+    └───────────┴────────┘
+
+    bar:
+    abc
   `)
 })
