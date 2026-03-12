@@ -611,7 +611,17 @@ function transformError(err: unknown, command: Command) {
 
 export {FailedToExitError, CliValidationError} from './errors.js'
 export {getCliContext, type CliContextValue, type CliCommand} from './context.js'
-export {autoTableConsoleLogger, autoTableLogger, lineByLineConsoleLogger, lineByLineLogger} from './logging.js'
+export {
+  autoTableConsoleLogger,
+  autoTableLogger,
+  lineByLineConsoleLogger,
+  lineByLineLogger,
+  yamlConsoleLogger,
+  yamlTableConsoleLogger,
+  yamlTableLogger,
+  yamlLogger,
+} from './logging.js'
+export {toYaml} from './yaml.js'
 
 const numberParser = (val: string, {fallback = val as unknown} = {}) => {
   const number = Number(val)

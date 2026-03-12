@@ -1,5 +1,6 @@
 import {CliTable} from './cli-table.js'
 import {Log, Logger} from './types.js'
+import {toYaml} from './yaml.js'
 
 export const lineByLineLogger = getLoggerTransformer(log => {
   /**
@@ -33,6 +34,24 @@ export const autoTableLogger = getLoggerTransformer(log => (...args) => {
   log(formatLogArgs(args))
 })
 
+export const yamlLogger = getLoggerTransformer(log => (...args) => {
+  if (args.length > 1 && args.every(isDisplayPrimitive)) {
+    log(...args)
+    return
+  }
+
+  log(formatYamlArgs(args))
+})
+
+export const yamlTableLogger = getLoggerTransformer(log => (...args) => {
+  if (args.length > 1 && args.every(isDisplayPrimitive)) {
+    log(...args)
+    return
+  }
+
+  log(formatYamlTableArgs(args))
+})
+
 const isPrimitive = (value: unknown): value is string | number | boolean => {
   const type = typeof value
   return type === 'string' || type === 'number' || type === 'boolean'
@@ -44,6 +63,16 @@ const isDisplayPrimitive = (value: unknown): value is Primitive =>
 const formatLogArgs = (args: unknown[]) => {
   if (args.length !== 1) return safeJsonStringify(args)
   return renderValue(args[0], undefined, new WeakSet<object>())
+}
+
+const formatYamlArgs = (args: unknown[]) => {
+  if (args.length !== 1) return toYaml(args)
+  return toYaml(args[0])
+}
+
+const formatYamlTableArgs = (args: unknown[]) => {
+  if (args.length !== 1) return toYaml(args, {maxLines: 12})
+  return renderYamlTableValue(args[0], undefined, new WeakSet<object>())
 }
 
 const renderValue = (value: unknown, heading: string | undefined, seen: WeakSet<object>): string => {
@@ -91,6 +120,58 @@ const renderRowsTable = (rows: FlatRecord[]) => {
   return table.toString()
 }
 
+const renderYamlTableValue = (value: unknown, heading: string | undefined, seen: WeakSet<object>): string => {
+  if (isDisplayPrimitive(value)) return withHeading(heading, value == null ? 'null' : String(value))
+
+  if (Array.isArray(value) && value.every(isRecord)) {
+    return withHeading(heading, renderYamlRowsTable(value))
+  }
+
+  if (Array.isArray(value)) {
+    return withHeading(heading, toYaml(value, {maxLines: 12}))
+  }
+
+  if (isRecord(value)) {
+    if (seen.has(value)) return withHeading(heading, '[Circular]')
+    seen.add(value)
+
+    const tableSections = Object.entries(value)
+      .filter(([, nested]) => Array.isArray(nested) && nested.every(isRecord))
+      .map(([key, nested]) => renderYamlTableValue(nested, key, seen))
+
+    const otherEntries = Object.fromEntries(
+      Object.entries(value).filter(([, nested]) => !(Array.isArray(nested) && nested.every(isRecord))),
+    )
+
+    const yamlSection = Object.keys(otherEntries).length
+      ? withHeading(
+          tableSections.length ? (heading ? `${heading} (details)` : 'details') : heading,
+          toYaml(otherEntries, {maxLines: 12}),
+        )
+      : ''
+
+    const sections = [...tableSections, yamlSection].filter(Boolean)
+    if (sections.length) return sections.join('\n\n')
+  }
+
+  return withHeading(heading, toYaml(value, {maxLines: 12}))
+}
+
+const renderYamlRowsTable = (rows: Record<string, unknown>[]) => {
+  const firstRowColumns = rows[0] ? Object.keys(rows[0]) : []
+  const extraColumns = Array.from(new Set(rows.flatMap(row => Object.keys(row))))
+    .filter(column => !firstRowColumns.includes(column))
+    .sort()
+  const columns = [...firstRowColumns, ...extraColumns]
+  const table = new CliTable({head: columns})
+
+  for (const row of rows) {
+    table.push(columns.map(column => formatYamlTableCell(row[column])))
+  }
+
+  return table.toString()
+}
+
 const renderKeyValueTable = (row: FlatRecord) => {
   const table = new CliTable({head: ['field', 'value']})
 
@@ -99,6 +180,11 @@ const renderKeyValueTable = (row: FlatRecord) => {
   }
 
   return table.toString()
+}
+
+const formatYamlTableCell = (value: unknown) => {
+  if (isDisplayPrimitive(value)) return value == null ? 'null' : String(value)
+  return toYaml(value, {maxLines: 6})
 }
 
 const formatCell = (value: Primitive) => (value == null ? '' : String(value))
@@ -148,3 +234,5 @@ function getLoggerTransformer(transform: (log: Log) => Log) {
  */
 export const lineByLineConsoleLogger = lineByLineLogger(console)
 export const autoTableConsoleLogger = autoTableLogger(console)
+export const yamlConsoleLogger = yamlLogger(console)
+export const yamlTableConsoleLogger = yamlTableLogger(console)
