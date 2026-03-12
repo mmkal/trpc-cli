@@ -588,7 +588,7 @@ function transformError(err: unknown, command: Command) {
   }
 
   type TRPCErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
-  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError')) {
+  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError') || looksLikeInstanceof<TRPCErrorLike>(err, 'ORPCError')) {
     const cause = err.cause
     if (looksLikeStandardSchemaFailure(cause)) {
       const prettyMessage = prettifyStandardSchemaError(cause)
