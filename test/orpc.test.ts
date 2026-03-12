@@ -54,6 +54,23 @@ test('orpc-cli', async () => {
   expect(await run(router, ['deeply', 'nested', 'greeting', 'hi'])).toMatchInlineSnapshot(`"hello hi"`)
 })
 
+test('orpc validation errors are prettified', async () => {
+  const router = o.router({
+    test: o
+      .input(
+        z.object({
+          foo: z.array(z.enum(['abc', 'def'])),
+        }),
+      )
+      .handler(({input}) => JSON.stringify(input)),
+  })
+
+  await expect(run(router, ['test', '--foo', 'wrong'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Invalid option: expected one of "abc"|"def" → at foo[0]
+  `)
+})
+
 test('lazy router', async () => {
   const lazyRouter = os.router({
     greeting: {
