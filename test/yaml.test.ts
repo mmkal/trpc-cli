@@ -100,3 +100,24 @@ test('weird values', () => {
     circular: "[Circular]""
   `)
 })
+
+test('array of objects', () => {
+  const obj = {
+    array: [
+      {file: 'greeting.txt', content: 'hello world'},
+      {file: 'README.md', content: 'this is a README'},
+    ],
+    artifacts: ['dist/index.js', 'dist/bin.js'],
+  }
+
+  expect(toYaml(obj)).toMatchInlineSnapshot(`
+    "array:
+      - file: greeting.txt
+        content: hello world
+      - file: README.md
+        content: this is a README
+    artifacts:
+      - dist/index.js
+      - dist/bin.js"
+  `)
+})

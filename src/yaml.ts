@@ -16,6 +16,7 @@ function renderArray(value: YamlValue[], indent: number): string {
   return value
     .map(item => {
       const prefix = `${' '.repeat(indent)}-`
+      if (isRecord(item)) return renderObjectEntries(Object.entries(item), indent + 2, `${prefix} `, '{}')
       if (isBlockString(item)) return `${prefix} ${getBlockHeader(item)}\n${indentBlock(item, indent + 2)}`
       if (isInlineValue(item)) return `${prefix} ${renderNode(item, indent + 2)}`
       return `${prefix}\n${renderNode(item, indent + 2)}`
@@ -24,17 +25,7 @@ function renderArray(value: YamlValue[], indent: number): string {
 }
 
 function renderObject(value: {[key: string]: YamlValue}, indent: number): string {
-  const entries = Object.entries(value)
-  if (entries.length === 0) return '{}'
-
-  return entries
-    .map(([key, item]) => {
-      const prefix = `${' '.repeat(indent)}${renderKey(key)}:`
-      if (isBlockString(item)) return `${prefix} ${getBlockHeader(item)}\n${indentBlock(item, indent + 2)}`
-      if (isInlineValue(item)) return `${prefix} ${renderNode(item, indent + 2)}`
-      return `${prefix}\n${renderNode(item, indent + 2)}`
-    })
-    .join('\n')
+  return renderObjectEntries(Object.entries(value), indent)
 }
 
 function renderScalar(value: YamlScalar): string {
@@ -92,6 +83,33 @@ function isPlainString(value: string): boolean {
   if (value.startsWith('[') || value.startsWith('{') || value.endsWith(']') || value.endsWith('}')) return false
   if (/[:#,!&*?|>@'"%`]/.test(value)) return false
   return !/[\r\n\t]/.test(value)
+}
+
+function renderObjectEntries(
+  entries: [string, YamlValue][],
+  indent: number,
+  firstPrefix?: string,
+  emptyValue = '{}',
+): string {
+  if (entries.length === 0) return emptyValue
+
+  return entries
+    .map(([key, item], index) =>
+      renderObjectEntry(
+        key,
+        item,
+        index === 0 && firstPrefix ? firstPrefix : `${' '.repeat(indent)}${renderKey(key)}:`,
+        indent,
+      ),
+    )
+    .join('\n')
+}
+
+function renderObjectEntry(key: string, item: YamlValue, prefix: string, indent: number): string {
+  const linePrefix = prefix.endsWith(':') ? prefix : `${prefix}${renderKey(key)}:`
+  if (isBlockString(item)) return `${linePrefix} ${getBlockHeader(item)}\n${indentBlock(item, indent + 2)}`
+  if (isInlineValue(item)) return `${linePrefix} ${renderNode(item, indent + 2)}`
+  return `${linePrefix}\n${renderNode(item, indent + 2)}`
 }
 
 function normalizeForYaml(value: unknown, position: 'root' | 'object' | 'array', seen: WeakSet<object>): YamlValue {
