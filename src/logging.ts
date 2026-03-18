@@ -233,6 +233,9 @@ function getLoggerTransformer(transform: (log: Log) => Log) {
  * This is useful for logging structured data in a human-readable way, and for piping logs to other tools.
  */
 export const lineByLineConsoleLogger = lineByLineLogger(console)
+/** @experimental prints outputs as a cli-table. note: this is a home-grown cli-table implementation and might be buggy. don't use unless you want to help me debug it */
 export const autoTableConsoleLogger = autoTableLogger(console)
+/** @experimental prints outputs as yaml. note: yaml stringify is home-grown and might be buggy. don't use unless you want to help me debug it */
 export const yamlConsoleLogger = yamlLogger(console)
+/** @experimental pretty logger - "smartly" chooses between yaml and a cli-table rendering. don't use unless you want to help me debug it */
 export const yamlTableConsoleLogger = yamlTableLogger(console)
