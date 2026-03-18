@@ -588,7 +588,7 @@ function transformError(err: unknown, command: Command) {
   }
 
   type TRPCErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
-  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError')) {
+  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError') || looksLikeInstanceof<TRPCErrorLike>(err, 'ORPCError')) {
     const cause = err.cause
     if (looksLikeStandardSchemaFailure(cause)) {
       const prettyMessage = prettifyStandardSchemaError(cause)
@@ -611,6 +611,17 @@ function transformError(err: unknown, command: Command) {
 
 export {FailedToExitError, CliValidationError} from './errors.js'
 export {getCliContext, type CliContextValue, type CliCommand} from './context.js'
+export {
+  autoTableConsoleLogger,
+  autoTableLogger,
+  lineByLineConsoleLogger,
+  lineByLineLogger,
+  yamlConsoleLogger,
+  yamlTableConsoleLogger,
+  yamlTableLogger,
+  yamlLogger,
+} from './logging.js'
+export {toYaml} from './yaml.js'
 
 const numberParser = (val: string, {fallback = val as unknown} = {}) => {
   const number = Number(val)
