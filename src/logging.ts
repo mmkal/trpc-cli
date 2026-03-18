@@ -71,7 +71,7 @@ const formatYamlArgs = (args: unknown[]) => {
 }
 
 const formatYamlTableArgs = (args: unknown[]) => {
-  if (args.length !== 1) return toYaml(args, {maxLines: 12})
+  if (args.length !== 1) return toYaml(args)
   return renderYamlTableValue(args[0], undefined, new WeakSet<object>())
 }
 
@@ -128,7 +128,7 @@ const renderYamlTableValue = (value: unknown, heading: string | undefined, seen:
   }
 
   if (Array.isArray(value)) {
-    return withHeading(heading, toYaml(value, {maxLines: 12}))
+    return withHeading(heading, toYaml(value))
   }
 
   if (isRecord(value)) {
@@ -146,7 +146,7 @@ const renderYamlTableValue = (value: unknown, heading: string | undefined, seen:
     const yamlSection = Object.keys(otherEntries).length
       ? withHeading(
           tableSections.length ? (heading ? `${heading} (details)` : 'details') : heading,
-          toYaml(otherEntries, {maxLines: 12}),
+          toYaml(otherEntries),
         )
       : ''
 
@@ -154,7 +154,7 @@ const renderYamlTableValue = (value: unknown, heading: string | undefined, seen:
     if (sections.length) return sections.join('\n\n')
   }
 
-  return withHeading(heading, toYaml(value, {maxLines: 12}))
+  return withHeading(heading, toYaml(value))
 }
 
 const renderYamlRowsTable = (rows: Record<string, unknown>[]) => {
