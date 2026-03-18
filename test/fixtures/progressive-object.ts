@@ -11,14 +11,16 @@ const router = trpc.router({
     .input(
       obj
         .prop('framework', z.enum(['react', 'vue']))
-        .prop('rpcLibrary', inputs => z.enum(['trpc', 'orpc']).default(inputs.framework === 'react' ? 'trpc' : 'orpc'))
-        .prop('clientLibrary', inputs =>
-          z
-            .enum(['react-query', 'tanstack-query', 'react-query-v5', 'tanstack-query-v5'])
-            .default(inputs.rpcLibrary === 'trpc' ? 'react-query' : 'tanstack-query'),
+        .prop('rpcLibrary', z.enum(['trpc', 'orpc']), (e, inputs) =>
+          e.default(inputs.framework === 'react' ? 'trpc' : 'orpc'),
         )
-        .prop('typescript', inputs =>
-          z.boolean().default(inputs.framework === 'react' && inputs.clientLibrary !== 'react-query-v5'),
+        .prop(
+          'clientLibrary',
+          z.enum(['react-query', 'tanstack-query', 'react-query-v5', 'tanstack-query-v5']),
+          (e, inputs) => e.default(inputs.rpcLibrary === 'trpc' ? 'react-query' : 'tanstack-query'),
+        )
+        .prop('typescript', z.boolean(), (b, inputs) =>
+          b.default(inputs.framework === 'react' && inputs.clientLibrary !== 'react-query-v5'),
         ),
     )
     .query(({input}) => JSON.stringify(input)),

@@ -652,7 +652,7 @@ const getProgressivePropertyInfo = (
   if (!prop) return null
 
   // Get the actual schema by evaluating the function with collected values
-  const propType = typeof prop.propType === 'function' ? prop.propType(collectedValues) : prop.propType
+  const propType = typeof prop.modifier === 'function' ? prop.modifier(prop.propType, collectedValues) : prop.propType
 
   // Convert to JSON schema to extract choices and default
   const jsonSchemaResult = toJsonSchema(propType, {})

@@ -1,18 +1,18 @@
 import * as trpcServer from '@trpc/server'
 import {expect, expectTypeOf, test} from 'vitest'
+import {z} from 'zod'
 import {createCli, type TrpcCliMeta} from '../src/index.js'
 import {obj} from '../src/progressive-object.js'
 import {prettifyStandardSchemaError} from '../src/standard-schema/errors.js'
 
 test('progSchema', async () => {
-  const {z} = await import('zod')
   const Person = obj
     .prop('name', z.string()) //
     .prop('age', z.number())
 
   const Config = obj
     .prop('framework', z.enum(['react', 'vue'])) //
-    .prop('typescript', props => z.boolean().default(props.framework === 'react'))
+    .prop('typescript', z.boolean(), (b, props) => b.default(props.framework === 'react'))
 
   expect(await Person['~standard'].validate({name: 'John', age: 30})).toEqual({
     value: {name: 'John', age: 30},
@@ -42,13 +42,13 @@ test('progSchema', async () => {
 })
 
 test('progSchema with mixded libraries', async () => {
-  const {z} = await import('zod')
   const v = await import('valibot')
   const Person = obj
     .prop('name', z.string()) //
     .prop('age', v.number())
 
-  const Config = obj.prop('framework', z.enum(['react', 'vue'])).prop('typescript', props => {
+  const Config = obj.prop('framework', z.enum(['react', 'vue'])).prop('typescript', z.boolean(), (b, props) => {
+    expectTypeOf(b).toEqualTypeOf<z.ZodBoolean>()
     expectTypeOf(props).toEqualTypeOf<Record<string, never> | {framework: 'react' | 'vue'}>()
     return z.boolean().default(props.framework === 'react')
   })
@@ -83,14 +83,13 @@ test('progSchema with mixded libraries', async () => {
 })
 
 test('json schema', async () => {
-  const {z} = await import('zod')
   const Person = obj
     .prop('name', z.string()) //
     .prop('age', z.number())
 
   const Config = obj
     .prop('framework', z.enum(['react', 'vue'])) //
-    .prop('typescript', props => z.boolean().default(props.framework === 'react'))
+    .prop('typescript', z.boolean(), (b, props) => b.default(props.framework === 'react'))
 
   expect(Person.toJsonSchema()).toMatchInlineSnapshot(`
     {
@@ -139,8 +138,6 @@ test('json schema', async () => {
 })
 
 test('progressive prompting with dynamic defaults', async () => {
-  const {z} = await import('zod/v4')
-
   const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
   const router = trpc.router({
@@ -148,10 +145,10 @@ test('progressive prompting with dynamic defaults', async () => {
       .input(
         obj
           .prop('framework', z.enum(['react', 'vue']))
-          .prop('rpcLibrary', inputs =>
-            z.enum(['trpc', 'orpc']).default(inputs.framework === 'react' ? 'trpc' : 'orpc'),
+          .prop('rpcLibrary', z.enum(['trpc', 'orpc']), (e, inputs) =>
+            e.default(inputs.framework === 'react' ? 'trpc' : 'orpc'),
           )
-          .prop('typescript', inputs => z.boolean().default(inputs.framework === 'react')),
+          .prop('typescript', z.boolean(), (b, inputs) => b.default(inputs.framework === 'react')),
       )
       .query(({input}) => JSON.stringify(input)),
   })
@@ -206,8 +203,6 @@ test('progressive prompting with dynamic defaults', async () => {
 })
 
 test('progressive prompting when user selects react', async () => {
-  const {z} = await import('zod/v4')
-
   const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
   const router = trpc.router({
@@ -215,10 +210,10 @@ test('progressive prompting when user selects react', async () => {
       .input(
         obj
           .prop('framework', z.enum(['react', 'vue']))
-          .prop('rpcLibrary', inputs =>
-            z.enum(['trpc', 'orpc']).default(inputs.framework === 'react' ? 'trpc' : 'orpc'),
+          .prop('rpcLibrary', z.enum(['trpc', 'orpc']), (e, inputs) =>
+            e.default(inputs.framework === 'react' ? 'trpc' : 'orpc'),
           )
-          .prop('typescript', inputs => z.boolean().default(inputs.framework === 'react')),
+          .prop('typescript', z.boolean(), (b, inputs) => b.default(inputs.framework === 'react')),
       )
       .query(({input}) => JSON.stringify(input)),
   })
