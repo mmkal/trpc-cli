@@ -87,6 +87,7 @@ const progressiveObjectSchema = <Shape extends Record<string, StandardSchemaV1<a
   }
 }
 
+/** @experimental very experimental way of building an object "progressively" so you can set defaults based on prior values https://github.com/mmkal/trpc-cli/pull/179 */
 export const obj = progressiveObjectSchema<{}>([])
 
 export type ProgressiveObjectSchema<T extends Record<string, StandardSchemaV1<any>>> = StandardSchemaV1<T> & {
