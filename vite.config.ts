@@ -2,7 +2,7 @@ import {defineConfig} from 'vitest/config'
 
 export default defineConfig({
   test: {
-    exclude: ['*ignoreme*', 'node_modules'],
+    exclude: ['*ignoreme*', 'node_modules', '.opencode'],
     setupFiles: ['./test/setup.ts'],
     typecheck: {
       enabled: true,
