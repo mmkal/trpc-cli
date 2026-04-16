@@ -241,7 +241,11 @@ const parseNorpcRouter = ({router, ...dependencies}: {router: NorpcRouterLike} &
   return entries
 }
 
-const parseOrpcRouter = ({router, ...dependencies}: {router: OrpcRouterLike<any>} & Dependencies) => {
+export const parseOrpcRouter = ({
+  router,
+  includeContractOnly = false,
+  ...dependencies
+}: {router: OrpcRouterLike<any>; includeContractOnly?: boolean} & Dependencies) => {
   const entries: [string, ProcedureInfo][] = []
   const {traverseContractProcedures, isProcedure} = getOrpcServerModule()
   const lazyRoutes = traverseContractProcedures(
@@ -249,7 +253,7 @@ const parseOrpcRouter = ({router, ...dependencies}: {router: OrpcRouterLike<any>
     ({contract, path}) => {
       let procedure: Record<string, unknown> = router
       for (const p of path) procedure = procedure[p] as Record<string, unknown>
-      if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
+      if (!includeContractOnly && !isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
 
       const originalInputSchema = contract['~orpc'].inputSchema as unknown
       const inputSchemas = getProcedureInputJsonSchemas([originalInputSchema], dependencies)

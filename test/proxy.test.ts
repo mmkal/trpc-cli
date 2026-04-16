@@ -1,3 +1,4 @@
+import {oc} from '@orpc/contract'
 import {createTRPCClient, httpLink} from '@trpc/client'
 import {initTRPC} from '@trpc/server'
 import {createHTTPServer} from '@trpc/server/adapters/standalone'
@@ -80,6 +81,33 @@ test('proxy with pre-parsed router', async () => {
       links: [httpLink({url: 'http://localhost:7500'})],
     })
   })
+  expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
+  expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
+    `"Goodbye Bob"`,
+  )
+})
+
+test('proxy with orpc contract router', async () => {
+  const contract = oc.router({
+    greeting: oc.input(z.object({name: z.string()})).output(z.string()),
+    deeply: {
+      nested: {
+        farewell: oc.input(z.object({name: z.string()})).output(z.string()),
+      },
+    },
+  })
+
+  const proxiedRouter = proxify(contract, async () => {
+    return {
+      greeting: async ({name}: {name: string}) => `Hello ${name}`,
+      deeply: {
+        nested: {
+          farewell: async ({name}: {name: string}) => `Goodbye ${name}`,
+        },
+      },
+    }
+  })
+
   expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
   expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
     `"Goodbye Bob"`,

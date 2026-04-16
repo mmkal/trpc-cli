@@ -3,8 +3,35 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {initTRPC} from '@trpc/server'
 import {JSONSchema7} from 'json-schema'
-import {AnyRouter, parseRouter} from './parse-router.js'
+import {AnyRouter, parseOrpcRouter, parseRouter, ProcedureInfo} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
+
+interface OrpcContractRouterLike {
+  [key: string]: OrpcContractRouterLike | {'~orpc': {inputSchema?: StandardSchemaV1; meta?: Record<string, unknown>}}
+}
+
+const getNestedClientProcedure = (client: unknown, procedurePath: string) => {
+  let current = client as Record<string, unknown>
+  for (const part of procedurePath.split('.')) {
+    current = current?.[part] as Record<string, unknown>
+  }
+  return current
+}
+
+const callClientProcedure = async (client: unknown, procedurePath: string, input: unknown, type: ProcedureInfo['type']) => {
+  if (type === 'query') return (client as any)[procedurePath].query(input)
+  if (type === 'mutation') return (client as any)[procedurePath].mutate(input)
+
+  const procedure = getNestedClientProcedure(client, procedurePath) as
+    | ((input: unknown) => unknown)
+    | {query?: (input: unknown) => unknown; mutate?: (input: unknown) => unknown}
+    | undefined
+
+  if (typeof procedure === 'function') return procedure(input)
+  if (procedure?.query) return procedure.query(input)
+  if (procedure?.mutate) return procedure.mutate(input)
+  throw new Error(`Could not find a callable client procedure for \`${procedurePath}\``)
+}
 
 /**
  * EXPERIMENTAL: Don't use unless you're willing to help figure out the API, and whether it should even exist.
@@ -13,10 +40,17 @@ import {StandardSchemaV1} from './standard-schema/contract.js'
  * Note: for now, this can accept any valid router, but it will always give you back a trpc v11 router.
  */
 export const proxify = <R extends AnyRouter>(
-  router: R | ReturnType<typeof parseRouter>,
+  router: R | OrpcContractRouterLike | ReturnType<typeof parseRouter>,
   getClient: (procedurePath: string) => unknown,
 ) => {
-  const parsed = Array.isArray(router) ? router : parseRouter({router})
+  const parsed = Array.isArray(router)
+    ? router
+    : (() => {
+        const parsedRouter = parseRouter({router: router as AnyRouter})
+        return parsedRouter.length
+          ? parsedRouter
+          : parseOrpcRouter({router: router as OrpcContractRouterLike, includeContractOnly: true})
+      })()
   const trpc = initTRPC.create()
   const outputRouterRecord = {}
   for (const [procedurePath, info] of parsed) {
@@ -36,15 +70,18 @@ export const proxify = <R extends AnyRouter>(
     if (info.type === 'query') {
       newProc = newProc.query(async ({input}: any) => {
         const client: any = await getClient(procedurePath)
-        return client[procedurePath].query(input)
+        return callClientProcedure(client, procedurePath, input, info.type)
       })
     } else if (info.type === 'mutation') {
       newProc = newProc.mutation(async ({input}: any) => {
         const client: any = await getClient(procedurePath)
-        return client[procedurePath].mutate(input)
+        return callClientProcedure(client, procedurePath, input, info.type)
       })
     } else {
-      continue
+      newProc = newProc.query(async ({input}: any) => {
+        const client: any = await getClient(procedurePath)
+        return callClientProcedure(client, procedurePath, input, info.type)
+      })
     }
     currentRouter[parts[parts.length - 1]] = newProc
   }
