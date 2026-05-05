@@ -531,20 +531,20 @@ cli.run() // e.g. `mycli add 1 2`
 
 ### typebox
 
-TypeBox works through its Standard Schema adapter shape. The TypeBox repository currently documents this as a [reference adapter](https://github.com/sinclairzx81/typebox/tree/main/example/standard) rather than a stable package export, so wrap the TypeBox schema before passing it into `.input(...)`.
+TypeBox does not add Standard Schema directly to its schema objects. trpc-cli provides a small adapter at `trpc-cli/typebox` based on TypeBox's [reference adapter](https://github.com/sinclairzx81/typebox/tree/main/example/standard), so wrap the TypeBox schema before passing it into `.input(...)`.
 
 trpc-cli reads the JSON Schema from `~standard.jsonSchema.input({target: 'draft-07'})`, so TypeBox schemas do not need a separate conversion dependency once they are wrapped.
 
 ```ts
 import {type TrpcCliMeta} from 'trpc-cli'
+import {standardSchema} from 'trpc-cli/typebox'
 import Type from 'typebox'
-import StandardSchemaV1 from './standard-schema-adapter'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
 const router = t.router({
   add: t.procedure
-    .input(StandardSchemaV1(Type.Tuple([Type.Number(), Type.Number()])))
+    .input(standardSchema(Type.Tuple([Type.Number(), Type.Number()])))
     .query(({input}) => input[0] + input[1]),
 })
 

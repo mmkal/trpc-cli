@@ -5,6 +5,19 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./typebox": {
+      "types": "./dist/typebox.d.ts",
+      "import": "./dist/typebox.js",
+      "default": "./dist/typebox.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": "dist/bin.js",
   "files": [
     "dist"
@@ -44,6 +57,7 @@
     "@trpc/server": "^10.45.2 || ^11.0.1",
     "@valibot/to-json-schema": "^1.1.0",
     "effect": "^3.14.2 || ^4.0.0",
+    "typebox": "^1.1.37",
     "valibot": "^1.1.0",
     "zod": "^3.24.0 || ^4.0.0"
   },
@@ -58,6 +72,9 @@
       "optional": true
     },
     "effect": {
+      "optional": true
+    },
+    "typebox": {
       "optional": true
     },
     "valibot": {

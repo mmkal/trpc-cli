@@ -1,10 +1,8 @@
 import {initTRPC} from 'trpcserver11'
-import Type, {type Static, type TSchema} from 'typebox'
-import {type TLocalizedValidationError} from 'typebox/error'
-import {Validator} from 'typebox/schema'
+import Type from 'typebox'
 import {expect, test} from 'vitest'
 import {TrpcCliMeta} from '../src/index.js'
-import {type StandardSchemaV1} from '../src/standard-schema/contract.js'
+import {StandardSchemaV1, standardSchema} from '../src/typebox.js'
 import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
@@ -28,7 +26,7 @@ test('merging input types', async () => {
 test('string input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.String())) //
+      .input(StandardSchemaV1(Type.String())) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -204,44 +202,3 @@ test('object options', async () => {
       Caused by: CommanderError: error: required option '--name <string>' not specified
   `)
 })
-
-type TypeBoxStandardSchema<Type extends TSchema> = StandardSchemaV1<Static<Type>> & {
-  '~standard': StandardSchemaV1.Props<Static<Type>> & {
-    jsonSchema: {
-      input: () => Record<string, unknown>
-      output: () => Record<string, unknown>
-    }
-  }
-}
-
-function standardSchema<Type extends TSchema>(schema: Type): TypeBoxStandardSchema<Type> {
-  const validator = new Validator({}, schema)
-  return {
-    '~standard': {
-      version: 1,
-      vendor: 'typebox',
-      validate(value) {
-        if (validator.Check(value)) return {value}
-        const [_result, errors] = validator.Errors(value)
-        return {
-          issues: errors.map(error => ({
-            path: pathSegments(error),
-            message: error.message,
-          })),
-        }
-      },
-      jsonSchema: {
-        input: () => validator.Schema(),
-        output: () => validator.Schema(),
-      },
-    },
-  } as TypeBoxStandardSchema<Type>
-}
-
-function pathSegments(error: TLocalizedValidationError) {
-  if (!error.instancePath) return []
-  return error.instancePath
-    .slice(1)
-    .split('/')
-    .map(segment => segment.replaceAll('~1', '/').replaceAll('~0', '~'))
-}
