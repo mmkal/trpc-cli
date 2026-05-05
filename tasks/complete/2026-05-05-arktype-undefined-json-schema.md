@@ -1,18 +1,19 @@
 ---
-status: implemented
+status: complete
 size: small
 branch: arktype-undefined-json-schema
+pr: 195
 ---
 
 # Preserve Arktype object flags when input allows undefined
 
 ## Status Summary
 
-Implementation is complete locally and awaiting push/PR.
-The red test reproduced the Arktype optional-object wrapper issue through public
-CLI behavior. The parser now unwraps `anyOf` unions that contain one concrete
-schema plus optional markers, so object options are discovered while unsupported
-record-style schemas still fall back to JSON input with a clearer reason.
+Implementation is complete and published in PR #195. The red test reproduced
+the Arktype optional-object wrapper issue through public CLI behavior. The
+parser now unwraps `anyOf` unions that contain one concrete schema plus optional
+markers, so object options are discovered while unsupported record-style schemas
+still fall back to JSON input with a clearer reason.
 
 ## Summary Ask
 
@@ -46,7 +47,8 @@ and `serve --help` should show `--port` rather than falling back to the generic
 - [x] Run the focused Arktype test and the package test suite. _Focused
   red/green test passes; Arktype/Zod4/Valibot suites, compile, lint, and the
   full Vitest suite pass._
-- [ ] Push the branch and open a pull request if code or tests change.
+- [x] Push the branch and open a pull request if code or tests change. _Opened
+  https://github.com/mmkal/trpc-cli/pull/195._
 
 ## Implementation Notes
 
