@@ -83,9 +83,34 @@ test('global json input works through default command forwarding', async () => {
   expect(await runWith({router, jsonInput: true}, ['--json', '{"foo":"bar"}'])).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
 })
 
-test('global json input fails clearly when a procedure already defines --json', async () => {
+test('global json input supports procedure properties named json through the complete input object', async () => {
   const router = t.router({
-    conflict: t.procedure.input(z.object({json: z.string()})).query(({input}) => JSON.stringify(input)),
+    withJsonProperty: t.procedure
+      .input(z.object({json: z.string(), other: z.string().optional()}))
+      .query(({input}) => JSON.stringify(input)),
+    withOptionalJsonProperty: t.procedure
+      .input(z.object({json: z.string().optional(), name: z.string()}))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(
+    await runWith({router, jsonInput: true}, ['with-json-property', '--json', '{"json":"123"}']),
+  ).toMatchInlineSnapshot(`"{"json":"123"}"`)
+  expect(
+    await runWith({router, jsonInput: true}, ['with-optional-json-property', '--name', 'Ada']),
+  ).toMatchInlineSnapshot(`"{"name":"Ada"}"`)
+
+  const help = await runWith({router, jsonInput: true}, ['with-json-property', '--help'])
+  expect(help).toContain('--json <json>')
+  expect(help).not.toContain('--json <string>')
+})
+
+test('global json input fails clearly when an option alias already defines --json', async () => {
+  const router = t.router({
+    conflict: t.procedure
+      .meta({aliases: {options: {value: 'json'}}})
+      .input(z.object({value: z.string()}))
+      .query(({input}) => JSON.stringify(input)),
   })
 
   await expect(runWith({router, jsonInput: true}, ['conflict', '--help'])).rejects.toThrowErrorMatchingInlineSnapshot(

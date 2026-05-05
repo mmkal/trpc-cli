@@ -420,7 +420,7 @@ const cli = createCli({
 // mycli greet --json '"Ada"'
 ```
 
-This adds `--json <json>` to every procedure command. The value is parsed as the complete procedure input, so it is an alternative to schema-derived flags and positional arguments. It is not an output formatting mode. Existing per-procedure `meta.jsonInput` behavior is unchanged and still exposes `--input [json]`; if a procedure already has an input option that maps to `--json`, enabling global JSON input fails clearly so the command shape is not ambiguous.
+This adds `--json <json>` to every procedure command. The value is parsed as the complete procedure input, so it is an alternative to schema-derived flags and positional arguments. It is not an output formatting mode. Existing per-procedure `meta.jsonInput` behavior is unchanged and still exposes `--input [json]`. If a procedure input has a property named `json`, pass it through the complete input object, like `mycli run --json '{"json":"123"}'`; the schema-derived `--json` property flag is reserved for complete input while global JSON input is enabled.
 
 #### Advanced Meta Configuration
 

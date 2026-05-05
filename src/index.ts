@@ -239,6 +239,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const description = getDescription(propertyValue)
 
         const longOption = `--${kebabCase(propertyKey)}`
+        if (params.jsonInput && longOption === '--json') {
+          // In global JSON input mode, `--json` is reserved for the complete input object.
+          // A schema property named `json` is still accepted through `--json '{"json": ...}'`.
+          delete unusedOptionAliases[propertyKey]
+          return
+        }
         let flags = longOption
         const alias =
           propertyValue && 'alias' in propertyValue && typeof propertyValue.alias === 'string'
@@ -388,7 +394,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
 
       if (params.jsonInput) {
-        const existingJsonOption = command.options.find(option => option.long === '--json' || option.short === '--json')
+        const existingJsonOption = command.options.find(option => option.flags.split(/[,\s]+/).includes('--json'))
         if (existingJsonOption) {
           throw new Error(
             `Global JSON input uses --json for complete procedure input, but procedure "${procedurePath}" already defines an option with that flag. Rename that input option or do not enable createCli({jsonInput: true}).`,
