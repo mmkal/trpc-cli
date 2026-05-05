@@ -1214,18 +1214,22 @@ const runCli = async (argv: string[]) => {
 
 ### Input Prompts
 
-You can enable prompts for positional arguments and options simply by installing `enquirer`, `prompts` or `@inquirer/prompts`:
+You can enable built-in prompts for positional arguments and options with `prompts: true`:
 
 ![](./docs/prompts-demo.gif)
 
-```bash
-npm install @inquirer/prompts
+```ts
+import {createCli} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+cli.run({prompts: true})
 ```
 
-The pass it in when running your CLI:
+The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation. The built-in prompts intentionally use plain line input: selects are numbered and checkboxes accept comma-separated numbers. If you want a richer terminal UI, install and pass `enquirer`, `prompts`, `@clack/prompts`, or `@inquirer/prompts` instead:
 
 ```ts
-import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer', or import * as prompts from 'prompts'
+import * as prompts from '@inquirer/prompts'
 import {createCli} from 'trpc-cli'
 
 const cli = createCli({router: myRouter})
@@ -1233,7 +1237,20 @@ const cli = createCli({router: myRouter})
 cli.run({prompts})
 ```
 
-The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation.
+For tests or custom runtimes, use `createBuiltInPrompts` to inject streams:
+
+```ts
+import {createBuiltInPrompts, createCli} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+cli.run({
+  prompts: createBuiltInPrompts({
+    input: myInputStream,
+    output: myOutputStream,
+  }),
+})
+```
 
 You can also pass in a custom "Prompter". This in theory enables you to prompt in *any way* you'd like. You will be passed a `Command` instance, and then must define `input`, `select`, `confirm` and `checkbox` prompts. You can also define `setup` and `teardown` functions which run before and after the individual prompts for arguments and options. This could be used to render an all-in-one form filling in inputs. See [the tests for an example](./test/prompts.test.ts).
 
@@ -1327,7 +1344,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L123)
+#### [createCli](./src/index.ts#L124)
 
 Run a trpc router as a CLI.
 

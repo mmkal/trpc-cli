@@ -1,4 +1,5 @@
 import type {JSONSchema7} from 'json-schema'
+import type {Readable, Writable} from 'node:stream'
 import {CommandJSON} from './json.js'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './parse-router.js'
 
@@ -181,7 +182,7 @@ export type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
-  prompts?: Promptable
+  prompts?: Promptable | true
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
   process?: {
@@ -227,10 +228,8 @@ export type Dependencies = {
 }
 
 export type PromptContext = {
-  // eslint-disable-next-line no-undef
-  input?: NodeJS.ReadableStream
-  // eslint-disable-next-line no-undef
-  output?: NodeJS.WritableStream
+  input?: Readable
+  output?: Writable
   clearPromptOnDone?: boolean
   signal?: AbortSignal
   /** The command that is being prompted for. Cast this to a `commander.Command` to access the command's name, description, options etc. */
