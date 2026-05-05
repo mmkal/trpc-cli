@@ -430,10 +430,8 @@ test('record input', async () => {
 
     Options:
       --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type { '$schema':
-                      'https://json-schema.org/draft/2020-12/schema', anyOf: [ {
-                      type: 'object', additionalProperties: [Object] }, { optional:
-                      true } ] }, expected object or tuple.)
+                      converted to CLI arguments: Inputs with additional properties
+                      are not currently supported)
       -h, --help      display help for command
     "
   `)
@@ -584,6 +582,22 @@ test('defaults and negations', async () => {
   )
 })
 // codegen:end
+
+test('optional object input exposes options when unioned with undefined', async () => {
+  const router = t.router({
+    serve: t.procedure
+      .input(
+        type({
+          'port?': 'number.integer > 0',
+          'ui?': 'boolean',
+        }).or('undefined'),
+      )
+      .query(({input}) => JSON.stringify(input || null)),
+  })
+
+  expect(await run(router, ['serve', '--port', '56081'])).toMatchInlineSnapshot(`"{"port":56081}"`)
+  expect(await run(router, ['serve', '--help'])).toContain('--port [number]')
+})
 
 test('arktype issues', () => {
   const toJsonSchema = (schema: type.Any) => {
