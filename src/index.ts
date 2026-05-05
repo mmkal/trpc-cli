@@ -39,6 +39,8 @@ const getOrpcServerModule = () => {
   return orpcServerOrError
 }
 
+const globalJsonInputOptionKey = '__trpcCliJsonInput'
+
 // @ts-ignore zod is an optional peer dependency so might not be installed. oh well, you still get this one interface
 declare module 'zod/v4' {
   export interface GlobalMeta {
@@ -105,6 +107,34 @@ export class Command extends BaseCommand {
   __result?: unknown
   /** @internal stash the argv so it's accessible from action handlers via cli context */
   __argv?: string[]
+
+  _checkForMissingMandatoryOptions() {
+    if (this.__hasGlobalJsonInput()) return
+    callBaseCommandMethod(this, '_checkForMissingMandatoryOptions')
+  }
+
+  _checkNumberOfArguments() {
+    if (this.__hasGlobalJsonInput()) return
+    callBaseCommandMethod(this, '_checkNumberOfArguments')
+  }
+
+  private __hasGlobalJsonInput() {
+    return this.getOptionValue(globalJsonInputOptionKey) !== undefined
+  }
+}
+
+class GlobalJsonInputOption extends BaseOption {
+  attributeName() {
+    return globalJsonInputOptionKey
+  }
+}
+
+function callBaseCommandMethod(
+  command: Command,
+  methodName: '_checkForMissingMandatoryOptions' | '_checkNumberOfArguments',
+) {
+  const method = (BaseCommand.prototype as unknown as Record<typeof methodName, (this: Command) => void>)[methodName]
+  method.call(command)
 }
 
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
@@ -357,6 +387,23 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
 
+      if (params.jsonInput) {
+        const existingJsonOption = command.options.find(option => option.long === '--json' || option.short === '--json')
+        if (existingJsonOption) {
+          throw new Error(
+            `Global JSON input uses --json for complete procedure input, but procedure "${procedurePath}" already defines an option with that flag. Rename that input option or do not enable createCli({jsonInput: true}).`,
+          )
+        }
+
+        const jsonOption = new GlobalJsonInputOption(
+          '--json <json>',
+          'Complete procedure input formatted as JSON',
+        ).argParser(value => parseJson(value, InvalidOptionArgumentError))
+        const conflictingOptions = [...new Set(command.options.map(option => option.attributeName()))]
+        if (conflictingOptions.length) jsonOption.conflicts(conflictingOptions)
+        command.addOption(jsonOption)
+      }
+
       const invalidOptionAliases = Object.entries(unusedOptionAliases).map(([option, alias]) => `${option}: ${alias}`)
       if (invalidOptionAliases.length) {
         throw new Error(`Invalid option aliases: ${invalidOptionAliases.join(', ')}`)
@@ -380,7 +427,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
         const positionalValues = args.slice(0, -2)
 
-        const input = parsedProcedure.getPojoInput({positionalValues, options})
+        const globalJsonInput = options[globalJsonInputOptionKey]
+        const input =
+          globalJsonInput === undefined ? parsedProcedure.getPojoInput({positionalValues, options}) : globalJsonInput
 
         let caller: Record<string, (input: unknown) => unknown>
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
