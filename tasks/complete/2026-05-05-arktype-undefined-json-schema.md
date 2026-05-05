@@ -53,7 +53,8 @@ and `serve --help` should show `--port` rather than falling back to the generic
   https://github.com/mmkal/trpc-cli/pull/195._
 - [x] Fix the tarball workflow failure exposed by CI. _Moved
   `dist/devDependencies.json` creation before `npm pack` and packed with
-  `--ignore-scripts`, so the already-built dist is preserved in the tarball._
+  `--ignore-scripts`; CI's npm still ran `prepare`, so the workflow now deletes
+  `scripts.prepare` before packing the already-built dist._
 
 ## Implementation Notes
 

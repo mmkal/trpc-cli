@@ -22,6 +22,7 @@ jobs:
       - run: pnpm build
       - name: write devDependencies to dist # we're only going to install some devDependencies, this helps ensure we get the right ones
         run: cat package.json | jq .devDependencies > dist/devDependencies.json
+      - run: npm pkg delete scripts.prepare
       - run: npm pack --ignore-scripts
       - name: rename tgz
         run: mv $(ls | grep .tgz) pkg.tgz
