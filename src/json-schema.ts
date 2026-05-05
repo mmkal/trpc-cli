@@ -259,6 +259,13 @@ const getModule = <T>(moduleOrError: T | string): T => {
   return moduleOrError
 }
 
+type StandardJsonSchemaOptions = {
+  target: 'draft-2020-12' | 'draft-07' | 'openapi-3.0' | (string & {})
+  libraryOptions?: Record<string, unknown>
+}
+
+type StandardJsonSchemaConverter = (options: StandardJsonSchemaOptions) => Record<string, unknown>
+
 /**
  * Attempts to convert a trpc procedure input to JSON schema.
  * Uses @see jsonSchemaConverters to convert the input to JSON schema.
@@ -276,6 +283,11 @@ export function toJsonSchema(input: unknown, dependencies: Dependencies): Result
     // fallback - no vendor-specific converter, but there may be a toJsonSchema method on the input
     if (typeof (input as Record<string, unknown>)?.toJsonSchema === 'function') {
       return {success: true, value: (input as {toJsonSchema: () => JSONSchema7}).toJsonSchema()}
+    }
+
+    const standardJsonSchemaConverter = getStandardJsonSchemaConverter(input)
+    if (standardJsonSchemaConverter) {
+      return {success: true, value: standardJsonSchemaConverter({target: 'draft-07'}) as JSONSchema7}
     }
 
     return {success: false, error: `Schema not convertible to JSON schema`}
@@ -361,9 +373,18 @@ function getVendor(schema: unknown) {
   return (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor ?? null
 }
 
+function getStandardJsonSchemaConverter(schema: unknown): StandardJsonSchemaConverter | null {
+  const jsonSchema = (schema as {['~standard']?: {jsonSchema?: Record<string, unknown>}})?.['~standard']?.jsonSchema
+  if (!jsonSchema) return null
+  if (typeof jsonSchema.input === 'function') return jsonSchema.input as StandardJsonSchemaConverter
+  if (typeof jsonSchema.output === 'function') return jsonSchema.output as StandardJsonSchemaConverter
+  return null
+}
+
 const jsonSchemaVendorNames = new Set(Object.keys(getJsonSchemaConverters({})))
 export function looksJsonSchemaable(value: unknown) {
   if (typeof (value as Record<string, unknown>)?.toJsonSchema === 'function') return true
+  if (getStandardJsonSchemaConverter(value)) return true
   const vendor = getVendor(value)
   return !!vendor && jsonSchemaVendorNames.has(vendor)
 }
