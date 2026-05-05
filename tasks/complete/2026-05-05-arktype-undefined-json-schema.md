@@ -13,7 +13,9 @@ Implementation is complete and published in PR #195. The red test reproduced
 the Arktype optional-object wrapper issue through public CLI behavior. The
 parser now unwraps `anyOf` unions that contain one concrete schema plus optional
 markers, so object options are discovered while unsupported record-style schemas
-still fall back to JSON input with a clearer reason.
+still fall back to JSON input with a clearer reason. A small tarball-CI fix was
+also included after the PR run exposed that `dist/devDependencies.json` was
+written after `npm pack`.
 
 ## Summary Ask
 
@@ -49,6 +51,9 @@ and `serve --help` should show `--port` rather than falling back to the generic
   full Vitest suite pass._
 - [x] Push the branch and open a pull request if code or tests change. _Opened
   https://github.com/mmkal/trpc-cli/pull/195._
+- [x] Fix the tarball workflow failure exposed by CI. _Moved
+  `dist/devDependencies.json` creation before `npm pack` and packed with
+  `--ignore-scripts`, so the already-built dist is preserved in the tarball._
 
 ## Implementation Notes
 
@@ -57,3 +62,6 @@ and `serve --help` should show `--port` rather than falling back to the generic
 - The missing piece was downstream parsing: object-shaped `anyOf` unions with an
   optional marker were not reduced to their object branch, so the CLI could not
   discover flags.
+- The tarball matrix was installing `typescript@` because
+  `dist/devDependencies.json` was not inside `pkg.tgz`; npm resolved that to the
+  latest TypeScript 6 prerelease and then failed to install `tsdown`.
