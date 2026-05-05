@@ -1,5 +1,5 @@
 ---
-status: ready
+status: implemented
 size: small
 branch: arktype-undefined-json-schema
 ---
@@ -8,10 +8,11 @@ branch: arktype-undefined-json-schema
 
 ## Status Summary
 
-Spec captured. Implementation has not started yet. The intended fix is to
-reproduce the `type({...}).or('undefined')` Arktype JSON Schema issue through
-the public CLI behavior, then extend the existing Arktype JSON Schema fallback
-only if the current workaround does not already cover it.
+Implementation is complete locally and awaiting push/PR.
+The red test reproduced the Arktype optional-object wrapper issue through public
+CLI behavior. The parser now unwraps `anyOf` unions that contain one concrete
+schema plus optional markers, so object options are discovered while unsupported
+record-style schemas still fall back to JSON input with a clearer reason.
 
 ## Summary Ask
 
@@ -36,10 +37,21 @@ and `serve --help` should show `--port` rather than falling back to the generic
 
 ## Checklist
 
-- [ ] Add a failing Arktype CLI test for an optional object input unioned with
-  `undefined`.
-- [ ] Extend the Arktype JSON Schema workaround only as much as needed for that
-  test.
-- [ ] Run the focused Arktype test and the package test suite.
+- [x] Add a failing Arktype CLI test for an optional object input unioned with
+  `undefined`. _Added a public CLI behavior test in `test/arktype.test.ts`; it
+  failed because `--port` was unknown and help fell back to `--input [json]`._
+- [x] Extend the Arktype JSON Schema workaround only as much as needed for that
+  test. _`src/parse-procedure.ts` now unwraps `anyOf` when exactly one branch is
+  non-optional, reusing the existing object/tuple/primitive parsing path._
+- [x] Run the focused Arktype test and the package test suite. _Focused
+  red/green test passes; Arktype/Zod4/Valibot suites, compile, lint, and the
+  full Vitest suite pass._
 - [ ] Push the branch and open a pull request if code or tests change.
 
+## Implementation Notes
+
+- The existing Arktype converter already maps the unsupported `undefined` unit
+  to `{optional: true}` via `toJsonSchema({fallback})`.
+- The missing piece was downstream parsing: object-shaped `anyOf` unions with an
+  optional marker were not reduced to their object branch, so the CLI could not
+  discover flags.
