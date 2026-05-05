@@ -6,8 +6,7 @@
  * Copyright (c) 2017-2026 Haydn Paterson
  *
  * Modifications: reuse trpc-cli's existing StandardSchemaV1 contract, keep only the
- * TypeBox adapter surface trpc-cli needs, and expose a lower-case factory plus the
- * upstream-style StandardSchemaV1 alias.
+ * TypeBox adapter surface trpc-cli needs, and expose a trpc-cli-specific factory name.
  */
 
 import type {Static, TSchema} from 'typebox'
@@ -31,7 +30,7 @@ export type TypeBoxStandardSchema<Type extends TSchema> = StandardSchemaV1Contra
   }
 }
 
-export function standardSchema<Type extends TSchema>(schema: Type): TypeBoxStandardSchema<Type> {
+export function typeboxToStandardSchema<Type extends TSchema>(schema: Type): TypeBoxStandardSchema<Type> {
   const validator = new Validator({}, schema)
   const jsonSchema = {
     input: () => validator.Schema() as Record<string, unknown>,
@@ -56,8 +55,6 @@ export function standardSchema<Type extends TSchema>(schema: Type): TypeBoxStand
     },
   } as TypeBoxStandardSchema<Type>
 }
-
-export {standardSchema as StandardSchemaV1}
 
 function pathSegments(error: TLocalizedValidationError) {
   if (!error.instancePath) return []

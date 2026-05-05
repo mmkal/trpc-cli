@@ -537,14 +537,14 @@ trpc-cli reads the JSON Schema from `~standard.jsonSchema.input({target: 'draft-
 
 ```ts
 import {type TrpcCliMeta} from 'trpc-cli'
-import {standardSchema} from 'trpc-cli/typebox'
+import {typeboxToStandardSchema} from 'trpc-cli/typebox'
 import Type from 'typebox'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
 const router = t.router({
   add: t.procedure
-    .input(standardSchema(Type.Tuple([Type.Number(), Type.Number()])))
+    .input(typeboxToStandardSchema(Type.Tuple([Type.Number(), Type.Number()])))
     .query(({input}) => input[0] + input[1]),
 })
 

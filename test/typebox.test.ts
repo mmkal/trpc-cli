@@ -2,7 +2,7 @@ import {initTRPC} from 'trpcserver11'
 import Type from 'typebox'
 import {expect, test} from 'vitest'
 import {TrpcCliMeta} from '../src/index.js'
-import {StandardSchemaV1, standardSchema} from '../src/typebox.js'
+import {typeboxToStandardSchema} from '../src/typebox.js'
 import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
@@ -12,9 +12,9 @@ const t = initTRPC.meta<TrpcCliMeta>().create()
 test('merging input types', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Object({bar: Type.String()})))
-      .input(standardSchema(Type.Object({baz: Type.Number()})))
-      .input(standardSchema(Type.Object({qux: Type.Boolean()})))
+      .input(typeboxToStandardSchema(Type.Object({bar: Type.String()})))
+      .input(typeboxToStandardSchema(Type.Object({baz: Type.Number()})))
+      .input(typeboxToStandardSchema(Type.Object({qux: Type.Boolean()})))
       .query(({input}) => JSON.stringify({bar: input.bar, baz: input.baz, qux: input.qux})),
   })
 
@@ -26,7 +26,7 @@ test('merging input types', async () => {
 test('string input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(StandardSchemaV1(Type.String())) //
+      .input(typeboxToStandardSchema(Type.String())) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -36,7 +36,7 @@ test('string input', async () => {
 test('enum input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Union([Type.Literal('aa'), Type.Literal('bb')]))) //
+      .input(typeboxToStandardSchema(Type.Union([Type.Literal('aa'), Type.Literal('bb')]))) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -52,7 +52,7 @@ test('enum input', async () => {
 test('number input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Number())) //
+      .input(typeboxToStandardSchema(Type.Number())) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -66,7 +66,7 @@ test('number input', async () => {
 test('boolean input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Boolean())) //
+      .input(typeboxToStandardSchema(Type.Boolean())) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -81,7 +81,7 @@ test('boolean input', async () => {
 test('literal input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Literal(2))) //
+      .input(typeboxToStandardSchema(Type.Literal(2))) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -95,7 +95,7 @@ test('literal input', async () => {
 test('optional input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Union([Type.String(), Type.Undefined()]))) //
+      .input(typeboxToStandardSchema(Type.Union([Type.String(), Type.Undefined()]))) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -106,7 +106,7 @@ test('optional input', async () => {
 test('union input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Union([Type.Number(), Type.String()]))) //
+      .input(typeboxToStandardSchema(Type.Union([Type.Number(), Type.String()]))) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -117,7 +117,7 @@ test('union input', async () => {
 test('array input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Array(Type.String()))) //
+      .input(typeboxToStandardSchema(Type.Array(Type.String()))) //
       .query(({input}) => JSON.stringify(input)),
   })
 
@@ -129,7 +129,7 @@ test('array input', async () => {
 test('tuple input', async () => {
   const router = t.router({
     foo: t.procedure
-      .input(standardSchema(Type.Tuple([Type.String(), Type.Number()]))) //
+      .input(typeboxToStandardSchema(Type.Tuple([Type.String(), Type.Number()]))) //
       .query(({input}) => JSON.stringify(input || null)),
   })
 
@@ -144,7 +144,7 @@ test('tuple input with flags', async () => {
   const router = t.router({
     foo: t.procedure
       .input(
-        standardSchema(
+        typeboxToStandardSchema(
           Type.Tuple([
             Type.String(),
             Type.Number(),
@@ -176,7 +176,7 @@ test('object options', async () => {
   const router = t.router({
     foo: t.procedure
       .input(
-        standardSchema(
+        typeboxToStandardSchema(
           Type.Object({
             userId: Type.Number(),
             name: Type.String(),
