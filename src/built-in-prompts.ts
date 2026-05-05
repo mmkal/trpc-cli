@@ -164,12 +164,14 @@ class LineReader {
   private lines: string[] = []
   private waiting: Array<{resolve: (line: string) => void; reject: (error: Error) => void}> = []
   private closed = false
+  private shouldPauseOnDispose: boolean
 
   constructor(
     private input: Readable,
     private output: Writable,
     private signal?: AbortSignal,
   ) {
+    this.shouldPauseOnDispose = this.input.isPaused()
     this.input.on('data', this.onData)
     this.input.on('end', this.onEnd)
     this.input.on('error', this.onError)
@@ -193,6 +195,7 @@ class LineReader {
     this.input.off('end', this.onEnd)
     this.input.off('error', this.onError)
     this.signal?.removeEventListener('abort', this.onAbort)
+    if (this.shouldPauseOnDispose) this.input.pause()
   }
 
   private onData = (chunk: Buffer | string) => {
