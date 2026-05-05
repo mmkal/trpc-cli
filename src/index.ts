@@ -428,6 +428,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const positionalValues = args.slice(0, -2)
 
         const globalJsonInput = options[globalJsonInputOptionKey]
+        if (globalJsonInput !== undefined && positionalValues.some(hasPositionalValue)) {
+          throw new CliValidationError(`Cannot combine --json with positional arguments.`)
+        }
         const input =
           globalJsonInput === undefined ? parsedProcedure.getPojoInput({positionalValues, options}) : globalJsonInput
 
@@ -738,3 +741,8 @@ const parseJson = (
 }
 
 export {t, os} from './norpc.js'
+
+const hasPositionalValue = (value: unknown) => {
+  if (Array.isArray(value)) return value.length > 0
+  return value !== undefined
+}

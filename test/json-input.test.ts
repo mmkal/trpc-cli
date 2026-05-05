@@ -92,3 +92,13 @@ test('global json input fails clearly when a procedure already defines --json', 
     `Error: Global JSON input uses --json for complete procedure input, but procedure "conflict" already defines an option with that flag. Rename that input option or do not enable createCli({jsonInput: true}).`,
   )
 })
+
+test('global json input cannot be combined with positional arguments', async () => {
+  const router = t.router({
+    primitive: t.procedure.input(z.string()).query(({input}) => input.toUpperCase()),
+  })
+
+  await expect(runWith({router, jsonInput: true}, ['primitive', 'ignored', '--json', '"hello"'])).rejects.toThrow(
+    /Cannot combine --json with positional arguments/,
+  )
+})
