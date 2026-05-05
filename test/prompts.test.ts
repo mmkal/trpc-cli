@@ -1,9 +1,17 @@
 import * as trpcServer from '@trpc/server'
 import {Command} from 'commander'
+import {PassThrough, Writable} from 'node:stream'
 import {expect, expectTypeOf, test, vi} from 'vitest'
 import {describe} from 'vitest'
 import {z} from 'zod/v3'
-import {AnyRouter, createCli, TrpcCliParams, TrpcCliRunParams} from '../src/index.js'
+import {
+  AnyRouter,
+  builtInPrompts,
+  createBuiltInPrompts,
+  createCli,
+  TrpcCliParams,
+  TrpcCliRunParams,
+} from '../src/index.js'
 
 describe('types', () => {
   const t = trpcServer.initTRPC.create()
@@ -30,6 +38,53 @@ describe('types', () => {
     const prompts = await import('prompts')
     expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
   })
+
+  test('built-in prompt types', () => {
+    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts: true})
+    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts: builtInPrompts})
+    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts: createBuiltInPrompts()})
+  })
+})
+
+test('built-in prompts collect missing CLI input from injected streams', async () => {
+  const t = trpcServer.initTRPC.create()
+
+  const router = t.router({
+    create: t.procedure
+      .input(
+        z.object({
+          projectName: z.string().describe('What will your project be called?'),
+          language: z.enum(['typescript', 'javascript']).describe('What language will you be using?'),
+          packages: z
+            .enum(['better-auth', 'pgkit', 'tailwind', 'trpc'])
+            .array()
+            .describe('What packages will you be using?'),
+          gitInit: z.boolean().describe('Initialize a git repository?'),
+        }),
+      )
+      .mutation(async ({input}) => JSON.stringify(input, null, 2)),
+  })
+
+  const streams = createPromptStreams(['my-app', '2', '1,3', 'n'].join('\n') + '\n')
+
+  const result = await runWith({router}, ['create'], {
+    prompts: createBuiltInPrompts({input: streams.input, output: streams.output}),
+  })
+
+  expect(JSON.parse(result)).toMatchObject({
+    projectName: 'my-app',
+    language: 'javascript',
+    packages: ['better-auth', 'tailwind'],
+    gitInit: false,
+  })
+
+  const promptText = streams.readOutput()
+  expect(promptText).toContain('--project-name <string> What will your project be called?:')
+  expect(promptText).toContain('* 1. typescript')
+  expect(promptText).toContain('2. javascript')
+  expect(promptText).toContain('[x] 1. better-auth')
+  expect(promptText).toContain('[x] 3. tailwind')
+  expect(promptText).toContain('--git-init [boolean] Initialize a git repository?')
 })
 
 test('custom prompter', async () => {
@@ -190,4 +245,17 @@ async function runWith<R extends AnyRouter>(
     })
 
   return result
+}
+
+function createPromptStreams(inputText: string) {
+  const input = new PassThrough()
+  input.end(inputText)
+  const chunks: string[] = []
+  const output = new Writable({
+    write(chunk, _encoding, callback) {
+      chunks.push(chunk.toString())
+      callback()
+    },
+  })
+  return {input, output, readOutput: () => chunks.join('')}
 }

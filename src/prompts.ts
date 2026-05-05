@@ -1,4 +1,5 @@
 import {Argument, Command, Option} from 'commander'
+import {createBuiltInPrompts} from './built-in-prompts.js'
 import {getEnumChoices} from './json-schema.js'
 import {toJsonSchema} from './json-schema.js'
 import {isProgressiveObjectSchema} from './progressive-object.js'
@@ -340,13 +341,15 @@ const enquirerPrompter = (prompts: EnquirerLike): Prompter => {
   }
 }
 
-export const promptify = (program: CommanderProgramLike, prompts: Promptable) => {
+export const promptify = (program: CommanderProgramLike, prompts: Promptable | true) => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
   let promptsInput = prompts as any
   if (promptsInput?.default) promptsInput = promptsInput.default as never
 
   let prompter: Prompter
-  if (typeof promptsInput === 'function' && typeof promptsInput.inject === 'function') {
+  if (promptsInput === true) {
+    prompter = createBuiltInPrompts()
+  } else if (typeof promptsInput === 'function' && typeof promptsInput.inject === 'function') {
     prompter = promptsPrompter(promptsInput as PromptsLike)
   } else if (promptsInput?.name === 'Enquirer') {
     prompter = enquirerPrompter(promptsInput as EnquirerLike)

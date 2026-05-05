@@ -86,6 +86,7 @@ declare module 'zod' {
 }
 
 export * from './types.js'
+export {builtInPrompts, createBuiltInPrompts, type BuiltInPromptsOptions} from './built-in-prompts.js'
 
 /** @deprecated use `import * as trpcServer from '@trpc/server'` instead */
 export const trpcServer = "@deprecated use `import * as trpcServer from '@trpc/server'` instead"
