@@ -111,6 +111,7 @@ export class Command extends BaseCommand {
 
 export {type AnyRouter, type AnyProcedure, type NorpcProcedureLike, type NorpcRouterLike} from './parse-router.js'
 export {parseRouter} from './parse-router.js'
+export {deepHelp} from './json.js'
 
 /**
  * Run a trpc router as a CLI.

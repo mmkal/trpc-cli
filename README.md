@@ -51,6 +51,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [Input Prompts](#input-prompts)
    - [Completions](#completions)
    - [`.toJSON()`](#tojson)
+   - [`deepHelp(program)`](#deephelpprogram)
    - [Using Existing Routers](#using-existing-routers)
 - [Reference](#reference)
    - [API docs](#api-docs)
@@ -1308,6 +1309,30 @@ cli.toJSON() // {"name":"mycli", "version": "1.2.3", "commands": [{"name"":"hell
 
 This is a _rough_ JSON representation of the CLI - useful for generating documentation etc. It returns basic information about the CLI and each command - to get any extra details you will need to use the `cli.buildProgram()` method and walk the tree of commands yourself.
 
+### `deepHelp(program)`
+
+If you want a single plain-text document containing help for every visible command, use `deepHelp` with a Commander program from `buildProgram()`:
+
+```ts
+import {createCli, deepHelp} from 'trpc-cli'
+
+const cli = createCli({router: myRouter, name: 'mycli'})
+
+console.log(deepHelp(cli.buildProgram()))
+```
+
+The output keeps Commander's normal `helpInformation()` formatting for each command and adds `=== full command path ===` headings in depth-first order. You can expose the string however you like, including from your own router:
+
+```ts
+import {createCli, deepHelp} from 'trpc-cli'
+
+const cli = createCli({router: appRouter, name: 'mycli'})
+
+const docsRouter = t.router({
+  help: t.procedure.query(() => deepHelp(cli.buildProgram())),
+})
+```
+
 ### Using Existing Routers
 
 🚧 This feature is usable but likely to change. Right now, the trpc-cli bin script will import `tsx` before running your CLI in order to import routers written in typescript. This might change in future to allow for more ways of running typescript files (possibly checking if [`importx`](https://github.com/antfu-collective/importx) instead of tsx) 🚧
@@ -1327,7 +1352,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L123)
+#### [createCli](./src/index.ts#L124)
 
 Run a trpc router as a CLI.
 
