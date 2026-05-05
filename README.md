@@ -7,7 +7,7 @@
 trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a professional-grade CLI with zero boilerplate. Get end-to-end type safety, input validation, auto-generated help documentation, and command completion for free.
 
 - ✅ Get all of trpc's type safety and DX building a CLI
-- ✅ Automatic positional arguments and options via zod input types (or arktype, or valibot)
+- ✅ Automatic positional arguments and options via zod input types (or arktype, valibot, effect, or typebox)
 - ✅ Easily add subcommands via nested trpc routers
 - ✅ Rich helptext out of the box
 - ✅ Exactly one dependency: [`commander`](https://npmjs.com/package/commander)
@@ -37,6 +37,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [arktype](#arktype)
    - [valibot](#valibot)
    - [effect](#effect)
+   - [typebox](#typebox)
 - [Examples](#examples)
    - [Calculator Example](#calculator-example)
    - [Migrator Example](#migrator-example)
@@ -524,6 +525,30 @@ const router = t.router({
 })
 
 const cli = createCli({router, trpcServer: import('@trpc/server')})
+
+cli.run() // e.g. `mycli add 1 2`
+```
+
+### typebox
+
+TypeBox works through its Standard Schema adapter shape. The TypeBox repository currently documents this as a [reference adapter](https://github.com/sinclairzx81/typebox/tree/main/example/standard) rather than a stable package export, so wrap the TypeBox schema before passing it into `.input(...)`.
+
+trpc-cli reads the JSON Schema from `~standard.jsonSchema.input({target: 'draft-07'})`, so TypeBox schemas do not need a separate conversion dependency once they are wrapped.
+
+```ts
+import {type TrpcCliMeta} from 'trpc-cli'
+import Type from 'typebox'
+import StandardSchemaV1 from './standard-schema-adapter'
+
+const t = initTRPC.meta<TrpcCliMeta>().create()
+
+const router = t.router({
+  add: t.procedure
+    .input(StandardSchemaV1(Type.Tuple([Type.Number(), Type.Number()])))
+    .query(({input}) => input[0] + input[1]),
+})
+
+const cli = createCli({router})
 
 cli.run() // e.g. `mycli add 1 2`
 ```
@@ -1373,7 +1398,7 @@ The only dependency is [`commander`](https://npmjs.com/package/commander), for p
 
 ![Dependency tree from npmgraph](./docs/deps.png)
 
-`@trpc/server` and `@orpc/server` are peerDependencies, but one of the two must be installed. Similarly one of `zod`, `valibot`, `arktype` or `effect` will likely be needed for input validation. The code from [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) has been copied more or less as-is to this repo in order to support json schema conversion for old versions of zod.
+`@trpc/server` and `@orpc/server` are peerDependencies, but one of the two must be installed. Similarly one of `zod`, `valibot`, `arktype`, `effect` or `typebox` will likely be needed for input validation. The code from [zod-to-json-schema](https://npmjs.com/package/zod-to-json-schema) has been copied more or less as-is to this repo in order to support json schema conversion for old versions of zod.
 
 ### Testing
 
