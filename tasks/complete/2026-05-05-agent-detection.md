@@ -1,5 +1,5 @@
 ---
-status: ready
+status: done
 size: small
 branch: agent-detection
 ---
@@ -8,9 +8,9 @@ branch: agent-detection
 
 ## Status Summary
 
-Spec is ready for a small implementation pass. The intended surface is a pure
-exported helper with docs and tests; no CLI behavior should change unless users
-opt into it by calling the helper.
+Done. Added a pure exported `isAgent` helper, covered Claude Code/Codex/opencode
+signals with tests, documented agent-aware prompt disabling, and verified with
+focused tests, compile, and lint. No missing implementation pieces remain.
 
 ## Summary Ask
 
@@ -43,12 +43,12 @@ prompt hangs or unhelpful interaction loops when a coding agent invokes the CLI.
 
 ## Checklist
 
-- [ ] Add a pure `isAgent` helper with an injectable environment object.
-- [ ] Cover Claude, Codex, and opencode-style env vars with focused tests.
-- [ ] Export the helper from the public package entrypoint.
-- [ ] Document the `prompts: isAgent() ? null : prompts` use case.
-- [ ] Run the focused tests plus compile or the full suite if the change touches
-  shared types.
+- [x] Add a pure `isAgent` helper with an injectable environment object. _Implemented in `src/agent.ts` with a `process.env` default and injectable `AgentEnvironment`._
+- [x] Cover Claude, Codex, and opencode-style env vars with focused tests. _Added `test/agent.test.ts` for `CLAUDECODE`, Codex `CODEX_*`, opencode worker env, and non-agent false positives._
+- [x] Export the helper from the public package entrypoint. _Exported `isAgent` and `AgentEnvironment` from `src/index.ts`._
+- [x] Document the `prompts: isAgent() ? null : prompts` use case. _Updated the README input prompt example to disable prompts only for detected coding agents._
+- [x] Run the focused tests plus compile or the full suite if the change touches
+  shared types. _Ran focused Vitest files, `pnpm compile`, and `pnpm lint`; all passed._
 
 ## Out of Scope
 
@@ -57,3 +57,11 @@ prompt hangs or unhelpful interaction loops when a coding agent invokes the CLI.
   agents.
 - Do not add runtime dependencies.
 
+## Implementation Notes
+
+- 2026-05-05: `TrpcCliRunParams.prompts` now accepts `null` so the documented
+  agent-aware prompt disabling example type-checks while preserving existing
+  runtime behavior.
+- 2026-05-05: `pnpm install --frozen-lockfile` was needed because the worktree
+  had no `node_modules`; it used the existing lockfile and made no dependency
+  changes.

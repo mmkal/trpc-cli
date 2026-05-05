@@ -1222,18 +1222,20 @@ You can enable prompts for positional arguments and options simply by installing
 npm install @inquirer/prompts
 ```
 
-The pass it in when running your CLI:
+Then pass it in when running your CLI:
 
 ```ts
 import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer', or import * as prompts from 'prompts'
-import {createCli} from 'trpc-cli'
+import {createCli, isAgent} from 'trpc-cli'
 
 const cli = createCli({router: myRouter})
 
-cli.run({prompts})
+await cli.run({
+  prompts: isAgent() ? null : prompts,
+})
 ```
 
-The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation.
+Human users will then be asked to input any missing arguments or options, while known coding-agent environments like Claude Code, Codex, and opencode skip prompts. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation.
 
 You can also pass in a custom "Prompter". This in theory enables you to prompt in *any way* you'd like. You will be passed a `Command` instance, and then must define `input`, `select`, `confirm` and `checkbox` prompts. You can also define `setup` and `teardown` functions which run before and after the individual prompts for arguments and options. This could be used to render an all-in-one form filling in inputs. See [the tests for an example](./test/prompts.test.ts).
 
@@ -1327,7 +1329,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L123)
+#### [createCli](./src/index.ts#L124)
 
 Run a trpc router as a CLI.
 
