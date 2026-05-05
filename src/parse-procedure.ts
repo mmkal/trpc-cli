@@ -132,11 +132,6 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
   }
 
   if (mergedSchema.anyOf) {
-    const nonOptionalSchemas = mergedSchema.anyOf.filter(sub => !isOptional(sub)).map(toRoughJsonSchema7)
-    if (nonOptionalSchemas.length === 1) {
-      return handleMergedSchema(nonOptionalSchemas[0])
-    }
-
     const allObjects = mergedSchema.anyOf.every(sub => acceptsObject(toRoughJsonSchema7(sub)))
     if (allObjects) {
       return {
@@ -147,6 +142,9 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
           getPojoInput: argv => argv.options,
         },
       }
+    }
+    if (mergedSchema.anyOf.length === 2 && JSON.stringify(mergedSchema.anyOf[0]) === '{"not":{}}') {
+      return handleMergedSchema(mergedSchema.anyOf[1] as JSONSchema7)
     }
   }
 
