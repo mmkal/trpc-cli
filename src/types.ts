@@ -1,5 +1,5 @@
 import type {JSONSchema7} from 'json-schema'
-import {CommandJSON} from './json.js'
+import type {CommandJSON} from './json.js'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './parse-router.js'
 
 export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
@@ -197,6 +197,9 @@ export type CommanderProgramLike = {
   name: () => string
   parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
   helpInformation: () => string
+  commands?: readonly CommanderProgramLike[]
+  hidden?: boolean
+  _hidden?: boolean
 }
 
 export interface TrpcCli {
