@@ -2,7 +2,6 @@ import * as trpcServer from '@trpc/server'
 import {Command} from 'commander'
 import {PassThrough, Writable} from 'node:stream'
 import {expect, expectTypeOf, test, vi} from 'vitest'
-import {describe} from 'vitest'
 import {z} from 'zod/v3'
 import {
   AnyRouter,
@@ -13,37 +12,35 @@ import {
   TrpcCliRunParams,
 } from '../src/index.js'
 
-describe('types', () => {
-  const t = trpcServer.initTRPC.create()
-  const router = t.router({
-    hi: t.procedure.input(z.string()).query(({input}) => `hi ${input}`),
-  })
+const promptTypeTrpc = trpcServer.initTRPC.create()
+const promptTypeRouter = promptTypeTrpc.router({
+  hi: promptTypeTrpc.procedure.input(z.string()).query(({input}) => `hi ${input}`),
+})
 
-  test('clack types', async () => {
-    const prompts = await import('@clack/prompts')
-    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
-  })
+test('clack prompt types', async () => {
+  const prompts = await import('@clack/prompts')
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts})
+})
 
-  test('inquirer types', async () => {
-    const prompts = await import('@inquirer/prompts')
-    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
-  })
+test('inquirer prompt types', async () => {
+  const prompts = await import('@inquirer/prompts')
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts})
+})
 
-  test('enquirer types', async () => {
-    const prompts = await import('enquirer')
-    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
-  })
+test('enquirer prompt types', async () => {
+  const prompts = await import('enquirer')
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts})
+})
 
-  test('prompts types', async () => {
-    const prompts = await import('prompts')
-    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts})
-  })
+test('prompts package types', async () => {
+  const prompts = await import('prompts')
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts})
+})
 
-  test('built-in prompt types', () => {
-    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts: true})
-    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts: builtInPrompts})
-    expectTypeOf(createCli({router}).run).toBeCallableWith({prompts: createBuiltInPrompts()})
-  })
+test('built-in prompt types', () => {
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts: true})
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts: builtInPrompts})
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts: createBuiltInPrompts()})
 })
 
 test('built-in prompts collect missing CLI input from injected streams', async () => {
