@@ -105,17 +105,25 @@ test('global json input supports procedure properties named json through the com
   expect(help).not.toContain('--json <string>')
 })
 
-test('global json input fails clearly when an option alias already defines --json', async () => {
+test('global json input ignores aliases named json', async () => {
   const router = t.router({
-    conflict: t.procedure
+    withJsonAlias: t.procedure
       .meta({aliases: {options: {value: 'json'}}})
       .input(z.object({value: z.string()}))
       .query(({input}) => JSON.stringify(input)),
   })
 
-  await expect(runWith({router, jsonInput: true}, ['conflict', '--help'])).rejects.toThrowErrorMatchingInlineSnapshot(
-    `Error: Global JSON input uses --json for complete procedure input, but procedure "conflict" already defines an option with that flag. Rename that input option or do not enable createCli({jsonInput: true}).`,
+  expect(
+    await runWith({router, jsonInput: true}, ['with-json-alias', '--json', '{"value":"from-json"}']),
+  ).toMatchInlineSnapshot(`"{"value":"from-json"}"`)
+  expect(await runWith({router, jsonInput: true}, ['with-json-alias', '--value', 'from-flag'])).toMatchInlineSnapshot(
+    `"{"value":"from-flag"}"`,
   )
+
+  const help = await runWith({router, jsonInput: true}, ['with-json-alias', '--help'])
+  expect(help).toContain('--json <json>')
+  expect(help).toContain('--value <string>')
+  expect(help).not.toContain('--json, --value')
 })
 
 test('global json input cannot be combined with positional arguments', async () => {

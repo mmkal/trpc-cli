@@ -251,12 +251,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             ? propertyValue.alias
             : meta.aliases?.options?.[propertyKey]
         if (alias) {
-          let prefix = '-'
-          if (alias.startsWith('-')) prefix = ''
-          else if (alias.length > 1) prefix = '--'
-
-          flags = `${prefix}${alias}, ${flags}`
-          delete unusedOptionAliases[propertyKey]
+          const aliasFlag = optionAliasFlag(alias)
+          if (params.jsonInput && aliasFlag === '--json') {
+            delete unusedOptionAliases[propertyKey]
+          } else {
+            flags = `${aliasFlag}, ${flags}`
+            delete unusedOptionAliases[propertyKey]
+          }
         }
 
         const isHidden = 'hidden' in propertyValue && propertyValue.hidden === true
@@ -394,13 +395,6 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
 
       if (params.jsonInput) {
-        const existingJsonOption = command.options.find(option => option.flags.split(/[,\s]+/).includes('--json'))
-        if (existingJsonOption) {
-          throw new Error(
-            `Global JSON input uses --json for complete procedure input, but procedure "${procedurePath}" already defines an option with that flag. Rename that input option or do not enable createCli({jsonInput: true}).`,
-          )
-        }
-
         const jsonOption = new GlobalJsonInputOption(
           '--json <json>',
           'Complete procedure input formatted as JSON',
@@ -690,6 +684,12 @@ const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
   if (val === 'true') return true
   if (val === 'false') return false
   return fallback
+}
+
+const optionAliasFlag = (alias: string) => {
+  if (alias.startsWith('-')) return alias
+  if (alias.length > 1) return `--${alias}`
+  return `-${alias}`
 }
 
 const getOptionValueParser = (schema: JSONSchema7) => {
