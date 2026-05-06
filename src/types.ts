@@ -19,6 +19,12 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** The `@trpc/server` module to use for calling procedures. Required when using trpc v10. */
   // createCallerFactory?: CreateCallerFactoryLike
   trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
+  /**
+   * Add a global `--json <json>` option to every procedure command. When used,
+   * the JSON value is passed as the complete procedure input instead of mapping
+   * positional arguments and options from the input schema.
+   */
+  jsonInput?: boolean
 }
 
 /** Rough shape of the `@trpc/server` (v10) module. Needed to pass in to `createCli` when using trpc v10. */

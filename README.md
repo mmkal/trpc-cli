@@ -408,6 +408,20 @@ Rather than ignoring these procedures, trpc-cli makes them available through JSO
 
 You can also explicitly opt into this behavior for any procedure by setting `jsonInput: true` in its meta, regardless of whether its input could be mapped to CLI arguments.
 
+For agent-driven or power-user workflows, you can opt into a global complete-input JSON path:
+
+```ts
+const cli = createCli({
+  router,
+  jsonInput: true,
+})
+
+// mycli add --json '{"left": 1, "right": 2}'
+// mycli greet --json '"Ada"'
+```
+
+This adds `--json <json>` to every procedure command. The value is parsed as the complete procedure input, so it is an alternative to schema-derived flags and positional arguments. It is not an output formatting mode. Existing per-procedure `meta.jsonInput` behavior is unchanged and still exposes `--input [json]`. While global JSON input is enabled, `--json` always means complete input: procedure properties named `json` should be passed inside the JSON object, like `mycli run --json '{"json":"123"}'`, and option aliases named `json` are ignored.
+
 #### Advanced Meta Configuration
 
 If you don't want to put properties (like `default`, `aliases`, `jsonInput` or `negateBooleans`) at the top level of a procedure's meta, you can nest them under `cliMeta`:
@@ -1327,7 +1341,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L123)
+#### [createCli](./src/index.ts#L153)
 
 Run a trpc router as a CLI.
 

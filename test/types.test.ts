@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import {test, expectTypeOf} from 'vitest'
 import {z} from 'zod/v4'
-import {EnquirerLike, InquirerPromptsLike, Promptable} from '../src/index.js'
+import {AnyRouter, EnquirerLike, InquirerPromptsLike, Promptable, TrpcCliParams} from '../src/index.js'
 
 test('prompt types', async () => {
   expectTypeOf<typeof import('@inquirer/prompts')>().toExtend<InquirerPromptsLike>()
@@ -9,6 +9,10 @@ test('prompt types', async () => {
 
   expectTypeOf<typeof import('@inquirer/prompts')>().toExtend<Promptable>()
   expectTypeOf<typeof import('enquirer')>().toExtend<Promptable>()
+})
+
+test('json input option type', async () => {
+  expectTypeOf<TrpcCliParams<AnyRouter>>().toHaveProperty('jsonInput').toEqualTypeOf<boolean | undefined>()
 })
 
 test('zod meta', async () => {

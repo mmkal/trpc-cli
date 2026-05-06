@@ -39,6 +39,8 @@ const getOrpcServerModule = () => {
   return orpcServerOrError
 }
 
+const globalJsonInputOptionKey = '__trpcCliJsonInput'
+
 // @ts-ignore zod is an optional peer dependency so might not be installed. oh well, you still get this one interface
 declare module 'zod/v4' {
   export interface GlobalMeta {
@@ -105,6 +107,34 @@ export class Command extends BaseCommand {
   __result?: unknown
   /** @internal stash the argv so it's accessible from action handlers via cli context */
   __argv?: string[]
+
+  _checkForMissingMandatoryOptions() {
+    if (this.__hasGlobalJsonInput()) return
+    callBaseCommandMethod(this, '_checkForMissingMandatoryOptions')
+  }
+
+  _checkNumberOfArguments() {
+    if (this.__hasGlobalJsonInput()) return
+    callBaseCommandMethod(this, '_checkNumberOfArguments')
+  }
+
+  private __hasGlobalJsonInput() {
+    return this.getOptionValue(globalJsonInputOptionKey) !== undefined
+  }
+}
+
+class GlobalJsonInputOption extends BaseOption {
+  attributeName() {
+    return globalJsonInputOptionKey
+  }
+}
+
+function callBaseCommandMethod(
+  command: Command,
+  methodName: '_checkForMissingMandatoryOptions' | '_checkNumberOfArguments',
+) {
+  const method = (BaseCommand.prototype as unknown as Record<typeof methodName, (this: Command) => void>)[methodName]
+  method.call(command)
 }
 
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
@@ -209,18 +239,25 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         const description = getDescription(propertyValue)
 
         const longOption = `--${kebabCase(propertyKey)}`
+        if (params.jsonInput && longOption === '--json') {
+          // In global JSON input mode, `--json` is reserved for the complete input object.
+          // A schema property named `json` is still accepted through `--json '{"json": ...}'`.
+          delete unusedOptionAliases[propertyKey]
+          return
+        }
         let flags = longOption
         const alias =
           propertyValue && 'alias' in propertyValue && typeof propertyValue.alias === 'string'
             ? propertyValue.alias
             : meta.aliases?.options?.[propertyKey]
         if (alias) {
-          let prefix = '-'
-          if (alias.startsWith('-')) prefix = ''
-          else if (alias.length > 1) prefix = '--'
-
-          flags = `${prefix}${alias}, ${flags}`
-          delete unusedOptionAliases[propertyKey]
+          const aliasFlag = optionAliasFlag(alias)
+          if (params.jsonInput && aliasFlag === '--json') {
+            delete unusedOptionAliases[propertyKey]
+          } else {
+            flags = `${aliasFlag}, ${flags}`
+            delete unusedOptionAliases[propertyKey]
+          }
         }
 
         const isHidden = 'hidden' in propertyValue && propertyValue.hidden === true
@@ -357,6 +394,16 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
 
+      if (params.jsonInput) {
+        const jsonOption = new GlobalJsonInputOption(
+          '--json <json>',
+          'Complete procedure input formatted as JSON',
+        ).argParser(value => parseJson(value, InvalidOptionArgumentError))
+        const conflictingOptions = [...new Set(command.options.map(option => option.attributeName()))]
+        if (conflictingOptions.length) jsonOption.conflicts(conflictingOptions)
+        command.addOption(jsonOption)
+      }
+
       const invalidOptionAliases = Object.entries(unusedOptionAliases).map(([option, alias]) => `${option}: ${alias}`)
       if (invalidOptionAliases.length) {
         throw new Error(`Invalid option aliases: ${invalidOptionAliases.join(', ')}`)
@@ -380,7 +427,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         // the last arg is the Command instance itself, the second last is the options object, and the other args are positional
         const positionalValues = args.slice(0, -2)
 
-        const input = parsedProcedure.getPojoInput({positionalValues, options})
+        const globalJsonInput = options[globalJsonInputOptionKey]
+        if (globalJsonInput !== undefined && positionalValues.some(hasPositionalValue)) {
+          throw new CliValidationError(`Cannot combine --json with positional arguments.`)
+        }
+        const input =
+          globalJsonInput === undefined ? parsedProcedure.getPojoInput({positionalValues, options}) : globalJsonInput
 
         let caller: Record<string, (input: unknown) => unknown>
         const deprecatedCreateCaller = Reflect.get(params, 'createCallerFactory') as CreateCallerFactoryLike | undefined
@@ -634,6 +686,12 @@ const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
   return fallback
 }
 
+const optionAliasFlag = (alias: string) => {
+  if (alias.startsWith('-')) return alias
+  if (alias.length > 1) return `--${alias}`
+  return `-${alias}`
+}
+
 const getOptionValueParser = (schema: JSONSchema7) => {
   const allowedSchemas = getAllowedSchemas(schema)
     .slice()
@@ -689,3 +747,8 @@ const parseJson = (
 }
 
 export {t, os} from './norpc.js'
+
+const hasPositionalValue = (value: unknown) => {
+  if (Array.isArray(value)) return value.length > 0
+  return value !== undefined
+}
