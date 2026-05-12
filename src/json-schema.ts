@@ -287,6 +287,7 @@ export function toJsonSchema(input: unknown, dependencies: Dependencies): Result
 
     const standardJsonSchemaConverter = getStandardJsonSchemaConverter(input)
     if (standardJsonSchemaConverter) {
+      // Standard Schema adapters are expected to honor this target; downstream CLI parsing expects draft-07 shape.
       return {success: true, value: standardJsonSchemaConverter({target: 'draft-07'}) as JSONSchema7}
     }
 

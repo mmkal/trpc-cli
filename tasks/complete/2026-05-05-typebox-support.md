@@ -54,3 +54,4 @@ That adapter also exposes `~standard.jsonSchema.input()` and `~standard.jsonSche
 - 2026-05-05: Re-verified after adding the export with `pnpm vitest run test/typebox.test.ts`, `pnpm compile`, `pnpm lint`, `pnpm build`, a Node self-reference import from `trpc-cli`, validator matrix tests, and full `pnpm test`.
 - 2026-05-05: Renamed the public adapter helper to `typeboxToStandardSchema` to make the conversion explicit.
 - 2026-05-12: Removed the package `exports` map to avoid breaking documented deep imports like `trpc-cli/dist/proxify.js`; the root export lazy-loads TypeBox only when `typeboxToStandardSchema` is called.
+- 2026-05-12: Follow-up from Pull Frog review: removed the untested TypeBox `~optional` positional branch because `Type.Optional(...)` only works as an object-property modifier in TypeBox validation, and added a comment documenting the draft-07 expectation for Standard JSON Schema converters.
