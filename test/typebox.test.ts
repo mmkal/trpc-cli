@@ -1,8 +1,7 @@
 import {initTRPC} from 'trpcserver11'
 import Type from 'typebox'
 import {expect, test} from 'vitest'
-import {TrpcCliMeta} from '../src/index.js'
-import {typeboxToStandardSchema} from '../src/typebox.js'
+import {TrpcCliMeta, typeboxToStandardSchema} from '../src/index.js'
 import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)

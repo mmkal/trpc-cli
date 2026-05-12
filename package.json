@@ -5,19 +5,6 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
-    },
-    "./typebox": {
-      "types": "./dist/typebox.d.ts",
-      "import": "./dist/typebox.js",
-      "default": "./dist/typebox.js"
-    },
-    "./package.json": "./package.json"
-  },
   "bin": "dist/bin.js",
   "files": [
     "dist"

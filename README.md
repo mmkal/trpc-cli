@@ -531,13 +531,12 @@ cli.run() // e.g. `mycli add 1 2`
 
 ### typebox
 
-TypeBox does not add Standard Schema directly to its schema objects. trpc-cli provides a small adapter at `trpc-cli/typebox` based on TypeBox's [reference adapter](https://github.com/sinclairzx81/typebox/tree/main/example/standard), so wrap the TypeBox schema before passing it into `.input(...)`.
+TypeBox does not add Standard Schema directly to its schema objects. trpc-cli provides a small adapter based on TypeBox's [reference adapter](https://github.com/sinclairzx81/typebox/tree/main/example/standard), so wrap the TypeBox schema before passing it into `.input(...)`.
 
 trpc-cli reads the JSON Schema from `~standard.jsonSchema.input({target: 'draft-07'})`, so TypeBox schemas do not need a separate conversion dependency once they are wrapped.
 
 ```ts
-import {type TrpcCliMeta} from 'trpc-cli'
-import {typeboxToStandardSchema} from 'trpc-cli/typebox'
+import {type TrpcCliMeta, typeboxToStandardSchema} from 'trpc-cli'
 import Type from 'typebox'
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
@@ -1352,7 +1351,7 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L123)
+#### [createCli](./src/index.ts#L129)
 
 Run a trpc router as a CLI.
 
