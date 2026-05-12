@@ -86,12 +86,6 @@ declare module 'zod' {
 }
 
 export * from './types.js'
-export {typeboxToStandardSchema} from './typebox.js'
-export type {
-  TypeBoxStandardJsonSchemaConverter,
-  TypeBoxStandardJsonSchemaOptions,
-  TypeBoxStandardSchema,
-} from './typebox.js'
 
 /** @deprecated use `import * as trpcServer from '@trpc/server'` instead */
 export const trpcServer = "@deprecated use `import * as trpcServer from '@trpc/server'` instead"

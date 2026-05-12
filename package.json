@@ -44,7 +44,6 @@
     "@trpc/server": "^10.45.2 || ^11.0.1",
     "@valibot/to-json-schema": "^1.1.0",
     "effect": "^3.14.2 || ^4.0.0",
-    "typebox": "^1.1.37",
     "valibot": "^1.1.0",
     "zod": "^3.24.0 || ^4.0.0"
   },
@@ -59,9 +58,6 @@
       "optional": true
     },
     "effect": {
-      "optional": true
-    },
-    "typebox": {
       "optional": true
     },
     "valibot": {
@@ -102,7 +98,6 @@
     "trpcserver10": "npm:@trpc/server@^10.45.2",
     "trpcserver11": "npm:@trpc/server@^11.1.1",
     "tsx": "4.20.3",
-    "typebox": "^1.1.37",
     "typescript": "5.8.3",
     "valibot": "1.2.0",
     "vitest": "3.2.4",
