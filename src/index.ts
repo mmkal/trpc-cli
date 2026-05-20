@@ -111,6 +111,19 @@ export class Command extends BaseCommand {
 
 export {type AnyRouter, type AnyProcedure, type NorpcProcedureLike, type NorpcRouterLike} from './parse-router.js'
 export {parseRouter} from './parse-router.js'
+export {
+  openapiProxify,
+  OpenApiProxifyHttpError,
+  type OpenApiDocument,
+  type OpenApiHeadersInit,
+  type OpenApiOperationObject,
+  type OpenApiParameterObject,
+  type OpenApiPathItemObject,
+  type OpenApiProxifyOperation,
+  type OpenApiProxifyParams,
+  type OpenApiRequestBodyObject,
+  type OpenApiSchemaObject,
+} from './openapi-proxify.js'
 
 /**
  * Run a trpc router as a CLI.
