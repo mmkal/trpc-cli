@@ -39,7 +39,7 @@ test('global json input is opt-in', async () => {
     object: t.procedure.input(z.object({foo: z.string().optional()})).query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await run(router, ['object', '--help'])).not.toContain('--json')
+  expect(await run(router, ['object', '--help'])).not.toMatch(/^\s*--json\b/m)
   await expect(run(router, ['object', '--json', '{"foo":"bar"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CommanderError: error: unknown option '--json'
@@ -134,4 +134,59 @@ test('global json input cannot be combined with positional arguments', async () 
   await expect(runWith({router, jsonInput: true}, ['primitive', 'ignored', '--json', '"hello"'])).rejects.toThrow(
     /Cannot combine --json with positional arguments/,
   )
+})
+
+test('global json input cannot be combined with variadic positional arguments', async () => {
+  const router = t.router({
+    list: t.procedure.input(z.array(z.string())).query(({input}) => JSON.stringify(input)),
+  })
+
+  // an empty variadic array doesn't count as a positional value, so --json on its own is fine
+  expect(await runWith({router, jsonInput: true}, ['list', '--json', '["x","y"]'])).toMatchInlineSnapshot(`"["x","y"]"`)
+
+  await expect(runWith({router, jsonInput: true}, ['list', 'a', 'b', '--json', '["x"]'])).rejects.toThrow(
+    /Cannot combine --json with positional arguments/,
+  )
+})
+
+test('global json input cannot be combined with schema-derived flags', async () => {
+  const router = t.router({
+    object: t.procedure.input(z.object({foo: z.string(), count: z.number()})).query(({input}) => JSON.stringify(input)),
+  })
+
+  await expect(runWith({router, jsonInput: true}, ['object', '--foo', 'bar', '--json', '{"foo":"bar","count":2}']))
+    .rejects.toMatchInlineSnapshot(`
+      CLI exited with code 1
+        Caused by: CommanderError: error: option '--json <json>' cannot be used with option '--foo <string>'
+    `)
+})
+
+test('global json input rejects malformed json', async () => {
+  const router = t.router({
+    object: t.procedure.input(z.object({foo: z.string(), count: z.number()})).query(({input}) => JSON.stringify(input)),
+  })
+
+  await expect(runWith({router, jsonInput: true}, ['object', '--json', '{not-json'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: option '--json <json>' argument '{not-json' is invalid. Malformed JSON.
+  `)
+})
+
+test('global json input payloads still go through procedure validation', async () => {
+  const router = t.router({
+    object: t.procedure.input(z.object({foo: z.string(), count: z.number()})).query(({input}) => JSON.stringify(input)),
+  })
+
+  await expect(
+    runWith({router, jsonInput: true}, ['object', '--json', '{"foo":"bar"}']), // missing required `count`
+  ).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received undefined → at count
+  `)
+  await expect(
+    runWith({router, jsonInput: true}, ['object', '--json', '{"foo":"bar","count":"two"}']), // wrong type for `count`
+  ).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at count
+  `)
 })
