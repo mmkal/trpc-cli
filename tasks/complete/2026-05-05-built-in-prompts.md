@@ -101,3 +101,13 @@ shape intact.
 - Do not add a large runtime dependency just to make prompts built-in.
 - Do not remove support for existing prompt libraries.
 - Do not attempt to fully reproduce Clack or Inquirer styling.
+
+## CI Fix Note (2026-06-10)
+
+- The PR's `build` check (pkg.pr.new workflow) failed on 2026-05-05, but not due
+  to this branch's code: `pnpm build` succeeded and the subsequent
+  `pnpm pkg-pr-new publish` step got an HTML error page from the pkg-pr-new API
+  ("Unexpected token '<', \"<!DOCTYPE\"... is not valid JSON") — a transient
+  service-side failure. Recent runs of the same workflow on other branches pass.
+- Fixed by merging origin/main and pushing to re-trigger the workflow; verified
+  `pnpm compile`, `pnpm lint`, `pnpm build`, and `pnpm test` all pass locally.
