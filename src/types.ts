@@ -1,6 +1,6 @@
 import type {JSONSchema7} from 'json-schema'
 import type {Readable, Writable} from 'node:stream'
-import {CommandJSON} from './json.js'
+import type {CommandJSON} from './json.js'
 import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './parse-router.js'
 
 export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
@@ -182,7 +182,7 @@ export type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
-  prompts?: Promptable | true
+  prompts?: Promptable | true | null
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
   process?: {
@@ -198,6 +198,9 @@ export type CommanderProgramLike = {
   name: () => string
   parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
   helpInformation: () => string
+  commands?: readonly CommanderProgramLike[]
+  hidden?: boolean
+  _hidden?: boolean
 }
 
 export interface TrpcCli {
