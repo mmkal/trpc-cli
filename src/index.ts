@@ -88,6 +88,8 @@ declare module 'zod' {
 }
 
 export * from './types.js'
+export {builtInPrompts, createBuiltInPrompts, type BuiltInPromptsOptions} from './built-in-prompts.js'
+export {isAgent, type AgentEnvironment} from './agent.js'
 
 /** @deprecated use `import * as trpcServer from '@trpc/server'` instead */
 export const trpcServer = "@deprecated use `import * as trpcServer from '@trpc/server'` instead"
@@ -141,6 +143,7 @@ function callBaseCommandMethod(
 
 export {type AnyRouter, type AnyProcedure, type NorpcProcedureLike, type NorpcRouterLike} from './parse-router.js'
 export {parseRouter} from './parse-router.js'
+export {deepHelp} from './json.js'
 
 /**
  * Run a trpc router as a CLI.

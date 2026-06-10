@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import {test, expectTypeOf} from 'vitest'
 import {z} from 'zod/v4'
-import {AnyRouter, EnquirerLike, InquirerPromptsLike, Promptable, TrpcCliParams} from '../src/index.js'
+import {AnyRouter, EnquirerLike, InquirerPromptsLike, isAgent, Promptable, TrpcCliParams} from '../src/index.js'
+import type {TrpcCliRunParams} from '../src/index.js'
 
 test('prompt types', async () => {
   expectTypeOf<typeof import('@inquirer/prompts')>().toExtend<InquirerPromptsLike>()
@@ -13,6 +14,10 @@ test('prompt types', async () => {
 
 test('json input option type', async () => {
   expectTypeOf<TrpcCliParams<AnyRouter>>().toHaveProperty('jsonInput').toEqualTypeOf<boolean | undefined>()
+})
+
+test('agent-aware prompt disabling type', async () => {
+  expectTypeOf({prompts: isAgent({}) ? null : ({} as Promptable)}).toMatchTypeOf<TrpcCliRunParams>()
 })
 
 test('zod meta', async () => {
