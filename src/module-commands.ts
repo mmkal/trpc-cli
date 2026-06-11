@@ -14,11 +14,10 @@
  * name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type syntax into
  * JSON Schema - is all `Type.Script`.
  */
-import {getSchemaTypes} from './json-schema.js'
 import {t} from './norpc.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import Type from './typebox/index.js'
-import {kebabCase} from './util.js'
+import {getSchemaTypes, kebabCase} from './util.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = (...args: any[]) => any

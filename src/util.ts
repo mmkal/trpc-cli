@@ -22,3 +22,35 @@ export const kebabCase = (str: string) =>
     .replaceAll(/([\da-z])([A-Z])/g, '$1-$2')
     .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
     .toLowerCase()
+
+/**
+ * The JSON Schema `type`(s) a schema can produce, looking through `enum`/`const`/`oneOf`/`anyOf`.
+ * Lives here rather than json-schema.ts so that modules loaded via dynamic import (module-commands.ts) don't
+ * pull in json-schema.ts's top-level-await validator probing - bun's bundler mis-hoists its `__promiseAll`
+ * helper when a top-level-await module is shared between the entry and a dynamic chunk.
+ */
+export const getSchemaTypes = (
+  propertyValue: import('json-schema').JSONSchema7,
+): Array<'string' | 'boolean' | 'number' | 'integer' | (string & {})> => {
+  type JSONSchema7 = import('json-schema').JSONSchema7
+  const array: string[] = []
+  if ('type' in propertyValue) {
+    array.push(...[propertyValue.type!].flat())
+  }
+  if ('enum' in propertyValue && Array.isArray(propertyValue.enum)) {
+    array.push(...propertyValue.enum.flatMap(s => typeof s))
+  }
+  if ('const' in propertyValue && propertyValue.const === null) {
+    array.push('null')
+  } else if ('const' in propertyValue) {
+    array.push(typeof propertyValue.const)
+  }
+  if ('oneOf' in propertyValue) {
+    array.push(...(propertyValue.oneOf as JSONSchema7[]).flatMap(getSchemaTypes))
+  }
+  if ('anyOf' in propertyValue) {
+    array.push(...(propertyValue.anyOf as JSONSchema7[]).flatMap(getSchemaTypes))
+  }
+
+  return [...new Set(array)]
+}
