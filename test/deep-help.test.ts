@@ -34,12 +34,12 @@ test('deepHelp renders full help blocks depth-first for visible command nodes', 
     Available subcommands: admin, status
 
     Options:
-      -h, --help        display help for command
+      -h, --help      display help for command
 
     Commands:
-      admin             Available subcommands: users, audit
-      status [options]  Show system status.
-      help [command]    display help for command
+      admin           Available subcommands: users, audit
+      status          Show system status.
+      help [command]  display help for command
 
     === ops admin ===
     Usage: ops admin [options] [command]
@@ -76,9 +76,6 @@ test('deepHelp renders full help blocks depth-first for visible command nodes', 
       --email <string>  Email address to invite
       --role [string]   Role for invited user (choices: "owner", "member", default:
                         "member")
-      --json <json>     Provide the complete procedure input as JSON - other flags
-                        and positional arguments are unavailable when using this
-                        option
       -h, --help        display help for command
 
     === ops admin users suspend ===
@@ -89,9 +86,6 @@ test('deepHelp renders full help blocks depth-first for visible command nodes', 
     Options:
       --user-id <string>  User identifier
       --reason [string]   Reason for suspension
-      --json <json>       Provide the complete procedure input as JSON - other flags
-                          and positional arguments are unavailable when using this
-                          option
       -h, --help          display help for command
 
     === ops admin audit ===
@@ -101,9 +95,6 @@ test('deepHelp renders full help blocks depth-first for visible command nodes', 
 
     Options:
       --limit [number]  Number of audit events to show (default: 10)
-      --json <json>     Provide the complete procedure input as JSON - other flags
-                        and positional arguments are unavailable when using this
-                        option
       -h, --help        display help for command
 
     === ops status ===
@@ -112,9 +103,7 @@ test('deepHelp renders full help blocks depth-first for visible command nodes', 
     Show system status.
 
     Options:
-      --json <json>  Provide the complete procedure input as JSON - other flags and
-                     positional arguments are unavailable when using this option
-      -h, --help     display help for command
+      -h, --help  display help for command
     "
   `)
 })

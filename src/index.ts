@@ -625,7 +625,7 @@ export const kebabCase = (str: string) =>
     .toLowerCase()
 
 /**
- * Resolve the effective `jsonInput` mode for a procedure: meta overrides the CLI-wide param, defaulting to `'auto'`.
+ * Resolve the effective `jsonInput` mode for a procedure: meta overrides the CLI-wide param, defaulting to `'never'`.
  * Booleans (the pre-1.0 form of this setting) are rejected with a migration message.
  */
 const resolveJsonInputMode = (metaValue: unknown, paramsValue: unknown): JsonInputMode => {
@@ -634,7 +634,7 @@ const resolveJsonInputMode = (metaValue: unknown, paramsValue: unknown): JsonInp
       throw new Error(`jsonInput: ${value} is no longer supported - use '${value ? 'always' : 'never'}'`)
     }
   }
-  return (metaValue || paramsValue || 'auto') as JsonInputMode
+  return (metaValue || paramsValue || 'never') as JsonInputMode
 }
 
 /** check if argv activates JSON input mode: a token that's exactly `--json` or starts with `--json=`, before any bare `--` terminator */

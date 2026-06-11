@@ -388,7 +388,7 @@ const router = t.router({
 
 #### JSON input
 
-Every command accepts a `--json <json>` option supplying the *complete* procedure input as JSON, as an alternative to its regular flags and positional arguments:
+Set `jsonInput: 'auto'` to make every command accept a `--json <json>` option supplying the *complete* procedure input as JSON, as an alternative to its regular flags and positional arguments:
 
 ```ts
 const router = t.router({
@@ -397,18 +397,18 @@ const router = t.router({
     .query(({input}) => input.left + input.right),
 })
 
-const cli = createCli({router})
+const cli = createCli({router, jsonInput: 'auto'})
 
 // Both of these work:
 // mycli add --left 1 --right 2
 // mycli add --json '{"left": 1, "right": 2}'
 ```
 
-When `--json` is passed, it must supply the *whole* input - schema-derived flags and positional arguments are unavailable, so something like `mycli add --left 1 --json '{"right": 2}'` results in an unknown option error. The JSON payload still goes through the procedure's own input validation. This is especially useful for machine-generated invocations (e.g. an LLM calling your CLI), where serialising one JSON blob is more reliable than building up an argv - any trpc-cli CLI can be driven this way.
+When `--json` is passed, it must supply the *whole* input - schema-derived flags and positional arguments are unavailable, so something like `mycli add --left 1 --json '{"right": 2}'` results in an unknown option error. The JSON payload still goes through the procedure's own input validation. This is especially useful for machine-generated invocations (e.g. an LLM calling your CLI), where serialising one JSON blob is more reliable than building up an argv.
 
 If a procedure's input schema defines its own `json` property, the schema wins: that command keeps its regular schema-derived `--json` flag, and the JSON-input behavior is disabled for it.
 
-This behavior is controlled by the `jsonInput` setting, which accepts `'never'`, `'auto'` (the default, described above) or `'always'`, either CLI-wide via `createCli({jsonInput: ...})` or per procedure in its meta (the meta value takes precedence):
+The `jsonInput` setting accepts `'never'` (the default - commands don't accept `--json`), `'auto'` (described above) or `'always'`, either CLI-wide via `createCli({jsonInput: ...})` or per procedure in its meta (the meta value takes precedence):
 
 ```ts
 const router = t.router({
@@ -650,16 +650,29 @@ Usage: calculator [options] [command]
 Available subcommands: add, subtract, multiply, divide, square-root
 
 Options:
-  -V, --version                                   output the version number
-  -h, --help                                      display help for command
+  -V, --version                         output the version number
+  -h, --help                            display help for command
 
 Commands:
-  add [options] <parameter_1> <parameter_2>       Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
-  subtract [options] <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have a number and you want to make it smaller.
-  multiply [options] <parameter_1> <parameter_2>  Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
-  divide [options] <numerator> <denominator>      Divide two numbers. Useful if you have a number and you want to make it smaller and `subtract` isn't quite powerful enough for you.
-  square-root [options] <number>                  Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.
-  help [command]                                  display help for command
+  add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
+                                        your friend both have apples, and you
+                                        want to know how many apples there are
+                                        in total.
+  subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
+                                        a number and you want to make it
+                                        smaller.
+  multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
+                                        you want to count the number of tiles on
+                                        your bathroom wall and are short on
+                                        time.
+  divide <numerator> <denominator>      Divide two numbers. Useful if you have a
+                                        number and you want to make it smaller
+                                        and `subtract` isn't quite powerful
+                                        enough for you.
+  square-root <number>                  Square root of a number. Useful if you
+                                        have a square, know the area, and want
+                                        to find the length of the side.
+  help [command]                        display help for command
 
 ```
 <!-- codegen:end -->
@@ -676,13 +689,11 @@ Add two numbers. Use this if you and your friend both have apples, and you want
 to know how many apples there are in total.
 
 Arguments:
-  parameter_1    number (required)
-  parameter_2    number (required)
+  parameter_1  number (required)
+  parameter_2  number (required)
 
 Options:
-  --json <json>  Provide the complete procedure input as JSON - other flags and
-                 positional arguments are unavailable when using this option
-  -h, --help     display help for command
+  -h, --help   display help for command
 
 ```
 <!-- codegen:end -->

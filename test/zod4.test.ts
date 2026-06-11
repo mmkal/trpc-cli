@@ -671,13 +671,11 @@ test('use zod4 meta', async () => {
     "Usage: program create-file [options] <File path>
 
     Arguments:
-      File path      The path to the file to be created. If necessary, parent
-                     folders will be created (required)
+      File path   The path to the file to be created. If necessary, parent folders
+                  will be created (required)
 
     Options:
-      --json <json>  Provide the complete procedure input as JSON - other flags and
-                     positional arguments are unavailable when using this option
-      -h, --help     display help for command
+      -h, --help  display help for command
     "
   `)
 
@@ -689,9 +687,6 @@ test('use zod4 meta', async () => {
       path to the file to be created  path to the file to be created (required)
 
     Options:
-      --json <json>                   Provide the complete procedure input as JSON -
-                                      other flags and positional arguments are
-                                      unavailable when using this option
       -h, --help                      display help for command
     "
   `)

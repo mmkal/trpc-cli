@@ -59,8 +59,6 @@ test('override of process.exit and pass in bad option', async () => {
 
     Options:
       --bar <number>
-      --json <json>   Provide the complete procedure input as JSON - other flags and
-                      positional arguments are unavailable when using this option
       -h, --help      display help for command
     ]
   `)
@@ -151,12 +149,12 @@ test('modify commander program manually', async () => {
     Available subcommands: add, square-root
 
     Options:
-      -h, --help                                 display help for command
+      -h, --help                       display help for command
 
     Commands:
-      add [options] <parameter_1> <parameter_2>
-      square-root [options] <number>
-      help [command]                             display help for command
+      add <parameter_1> <parameter_2>
+      square-root <number>
+      help [command]                   display help for command
 
     Good luck have fun
     "

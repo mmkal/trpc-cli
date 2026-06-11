@@ -41,7 +41,7 @@ export const runWith = async <R extends AnyRouter>(
   // Usually when the result includes the JSON-only `--json <json>` option it's because there's a bug in this library - we've failed to convert
   // to json-schema or failed to process some weird json-schema, meaning the cli just accepts one big json object. In these cases if the test
   // tries to do `mycli --foo bar` it'll fail with a message that includes `--json <json>` in the help text because it's expecting `--json '{"foo":"bar"}'`.
-  // Note: matched on the description rather than the flags because the cosmetic `--json <json>` option (shown in every command's help by default) is expected.
+  // Note: matched on the description rather than the flags because the cosmetic `--json <json>` option (shown in flags-mode help when jsonInput is 'auto') has identical flags.
   const hasJsonInput = result.includes('Input formatted as JSON')
   if (result.includes('--') && hasJsonInput !== expectJsonInput) {
     throw new Error(`${hasJsonInput ? 'Got' : 'Did not get'} the JSON-only --json option:\n\n${result}`)

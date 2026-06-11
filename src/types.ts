@@ -24,9 +24,9 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /**
    * Controls whether commands accept a `--json <json>` option supplying the complete procedure input as JSON.
    *
-   * - `'auto'` (default): every command accepts `--json` as an alternative to its schema-derived flags and positional arguments. When `--json` is passed it must be the *only* input - combining it with other flags or positional arguments results in an unknown option error. Exception: if a procedure's schema already defines a `json` property, the schema wins - that command keeps its regular schema-derived `--json` flag.
+   * - `'never'` (default): commands don't accept `--json` (unless their schema defines a `json` property, or their schema couldn't be converted to CLI arguments, in which case `--json` is the only way to pass input).
+   * - `'auto'`: every command accepts `--json` as an alternative to its schema-derived flags and positional arguments. When `--json` is passed it must be the *only* input - combining it with other flags or positional arguments results in an unknown option error. Exception: if a procedure's schema already defines a `json` property, the schema wins - that command keeps its regular schema-derived `--json` flag.
    * - `'always'`: every command *only* accepts `--json` - no schema-derived flags or positional arguments.
-   * - `'never'`: commands don't accept `--json` (unless their schema defines a `json` property, or their schema couldn't be converted to CLI arguments, in which case `--json` is the only way to pass input).
    *
    * Individual procedures can override this with `jsonInput` in their meta.
    */
@@ -35,9 +35,9 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
 
 /**
  * Mode for the `jsonInput` setting (CLI-wide via `createCli({jsonInput: ...})` or per-procedure via meta):
- * - `'auto'` (default): the command accepts `--json <json>` as an alternative to its schema-derived flags/positional arguments
+ * - `'never'` (default): the command doesn't accept `--json` at all
+ * - `'auto'`: the command accepts `--json <json>` as an alternative to its schema-derived flags/positional arguments
  * - `'always'`: the command *only* accepts `--json <json>`
- * - `'never'`: the command doesn't accept `--json` at all
  */
 export type JsonInputMode = 'never' | 'auto' | 'always'
 
@@ -75,8 +75,8 @@ export interface TrpcCliMeta {
   /**
    * Per-procedure override of the CLI-wide `jsonInput` setting (see `TrpcCliParams`).
    * If `'always'`, this command uses a single `--json <json>` option expecting the entire input as JSON, e.g. `--json '{"foo": "bar"}'` - useful to opt out of the default mapping of input schemas to CLI options.
-   * If `'never'`, this command is always built from its schema and won't accept `--json`.
-   * If `'auto'` (default), this command accepts `--json` as an alternative to its schema-derived flags/positional arguments.
+   * If `'auto'`, this command accepts `--json` as an alternative to its schema-derived flags/positional arguments.
+   * If `'never'` (default), this command is always built from its schema and won't accept `--json`.
    */
   jsonInput?: JsonInputMode
   /** Sub-property for the CLI meta. If present, will take precedence over the top-level meta, to avoid conflicts with other tools. */

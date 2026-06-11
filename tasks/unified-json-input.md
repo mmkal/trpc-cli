@@ -7,7 +7,7 @@ size: medium
 
 ## Status Summary
 
-Revision 2 implemented and green. `jsonInput` is now a `'never' | 'auto' | 'always'` union at both levels (booleans throw a migration message), `'auto'` is the default so every CLI accepts `--json` out of the box, and `'auto'` leaves whose schema already derives a `json` option keep their own flag (schema-wins guard). Resolution lives in `resolveJsonInputMode` in src/index.ts; tests in test/json-input.test.ts; README rewritten around default-on. Remaining: owner review of the PR (#204, kept as draft).
+Revision 3 implemented and green. `jsonInput` is a `'never' | 'auto' | 'always'` union at both levels (booleans throw a migration message), with `'never'` as the default - JSON input is opt-in via `createCli({jsonInput: 'auto'})` (sniffing hybrid) or `'always'` (JSON-only). The schema-wins guard and all `'auto'`/`'always'` behavior from Revision 2 are unchanged. Resolution lives in `resolveJsonInputMode` in src/index.ts; tests in test/json-input.test.ts; README/codegen reframed as opt-in; Revision 2's default-on snapshot churn reverted. Remaining: owner review of the PR (#204, kept as draft).
 
 ## Goal
 
@@ -112,8 +112,8 @@ Owner decision: default-on gave every single command a boilerplate-y `--json <js
 
 ### Revision 3 checklist
 
-- [ ] Flip the default in `resolveJsonInputMode` (src/index.ts) from `'auto'` to `'never'`.
-- [ ] Update jsdoc on both `jsonInput` params (src/types.ts) - default is `'never'`; regenerate README codegen.
-- [ ] Tests: the zero-config test now asserts NO `--json` (in help or as an accepted option); keep explicit `'auto'`/`'always'`/`'never'` and meta-override tests (they should be unaffected); revert the default-on snapshot churn across the suite (the 19 snapshots from Revision 2 mostly return to their pre-default-on state).
-- [ ] README: JSON input section reframed as opt-in (lead with `jsonInput: 'auto'` usage); breaking-changes blockquote keeps the rename + boolean-removal notes but drops the "all CLIs upgraded" framing.
-- [ ] Update PR #204 body: headline back to opt-in, mode table unchanged otherwise.
+- [x] Flip the default in `resolveJsonInputMode` (src/index.ts) from `'auto'` to `'never'`. _one-line change in the resolution expression, plus the function's jsdoc_
+- [x] Update jsdoc on both `jsonInput` params (src/types.ts) - default is `'never'`; regenerate README codegen. _`'never'` listed first as `(default)` on `TrpcCliParams.jsonInput`, `TrpcCliMeta.jsonInput` and the `JsonInputMode` alias; README's calculator codegen blocks regenerated via `eslint --fix README.md` (the API docs block codegens from `createCli`'s jsdoc, which doesn't mention jsonInput, so it was unaffected)_
+- [x] Tests: the zero-config test now asserts NO `--json` (in help or as an accepted option); keep explicit `'auto'`/`'always'`/`'never'` and meta-override tests (they should be unaffected); revert the default-on snapshot churn across the suite (the 19 snapshots from Revision 2 mostly return to their pre-default-on state). _new "zero config: commands do not accept --json" test; the 'auto'-behavior tests (combination errors, malformed JSON, sniffing, help, schema-wins, default-command forwarding) now pass `jsonInput: 'auto'` explicitly via `runWith`; deep-help/help/lifecycle/zod4/e2e/json snapshots verified byte-identical to the pre-Revision-2 state (json.test.ts differs only in snapshot indentation)_
+- [x] README: JSON input section reframed as opt-in (lead with `jsonInput: 'auto'` usage); breaking-changes blockquote keeps the rename + boolean-removal notes but drops the "all CLIs upgraded" framing. _sample now shows `createCli({router, jsonInput: 'auto'})`; dropped the "any trpc-cli CLI can be driven this way" clause; blockquote unchanged_
+- [x] Update PR #204 body: headline back to opt-in, mode table unchanged otherwise. _via `gh pr edit 204`_
