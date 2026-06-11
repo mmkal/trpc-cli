@@ -185,6 +185,21 @@ test('module positionals: scalar parameters show up as positional arguments in h
       -h, --help         display help for command
     "
   `)
+
+  // camelCase parameter names are kebab-cased for display
+  const doubleHelp = await runWith({module: positionalModulePath, name: 'mypkg'}, ['double', '--help'])
+  expect(doubleHelp).toMatchInlineSnapshot(`
+    "Usage: mypkg double [options] <the-number>
+
+    double a number
+
+    Arguments:
+      the-number  number (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
 })
 
 test('module positionals: positional arguments are validated and spread back into the function call', async () => {

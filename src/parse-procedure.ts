@@ -486,7 +486,8 @@ const parameterName = (s: JSONSchema7Definition, position: number): string => {
   if (looksLikeArray(s)) return `[${name}...]`
 
   // commander requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
-  name = name.replaceAll(/\W+/g, ' ').trim()
+  // dashes are allowed though, so kebab-case names (e.g. from module-commands parameter names) display as `<the-number>`
+  name = name.replaceAll(/[^\w-]+/g, ' ').trim()
   return isOptional(s) ? `[${name}]` : `<${name}>`
 }
 
