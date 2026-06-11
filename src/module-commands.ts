@@ -135,7 +135,7 @@ const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<st
   if (flattened !== schema) {
     // merging produced a plain object, losing the schema's non-enumerable ~standard - re-attach it, validating
     // against the original intersection schema while exposing the flattened shape for CLI flag derivation
-    const standard = (schema as {'~standard': Record<string, unknown>})['~standard']
+    const standard = (schema as unknown as {'~standard': Record<string, unknown>})['~standard']
     Object.defineProperty(flattened, '~standard', {
       configurable: true,
       enumerable: false,
