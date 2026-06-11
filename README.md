@@ -581,11 +581,11 @@ const router = t.router({
     .input(
       Type.Script(`
         {
-                /** a message to say hello to new users */
-                greeting: string
-                /** make it loud */
-                shout?: boolean
-              }
+          /** a message to say hello to new users */
+          greeting: string
+          /** make it loud */
+          shout?: boolean
+        }
       `),
     )
     .query(({input}) =>
@@ -600,7 +600,7 @@ cli.run() // e.g. `mycli hello --greeting hi --shout`
 
 Schemas built via `trpc-cli/typebox` are plain TypeBox JSON Schema objects, but with two additions over the upstream package:
 
-1. They carry a (lazily-built, non-enumerable) `~standard` prop implementing [standard-schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema), so they can be passed straight to trpc/orpc/norpc `.input(...)` with no adapter. Upstream TypeBox [won't implement `~standard` natively](https://github.com/sinclairzx81/typebox/discussions/1152) on separation-of-concerns grounds - vendoring lets trpc-cli take that opinion on itself.
+1. They carry a (lazily-built, non-enumerable) `~standard` prop implementing [standard-schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema), so they can be passed straight to trpc/orpc/norpc `.input(...)` with no adapter. Upstream TypeBox [won't implement `~standard` natively](https://github.com/sinclairzx81/typebox/discussions/1152) on separation-of-concerns grounds - vendoring lets trpc-cli take that opinion on itself. One caveat: only schemas *returned by the builders* carry the prop at runtime - a sub-schema plucked from inside a `Type.Script(...)` result (e.g. `Input.properties.foo`) typechecks as having `~standard` but doesn't carry it; use the exported `attachStandardSchema(subSchema)` if you need to pass one to `.input(...)` directly. Similarly, with `Settings.Set({immutableTypes: true})` TypeBox freezes schemas at construction time, so `~standard` can't be attached at all - builders still work, but the frozen schemas they return won't be accepted by `.input(...)`.
 2. The vendored `Type.Script` parses `/** jsdoc comments */` preceding object properties into JSON Schema `description` fields (which become help text for flags, as in the example above). Upstream [treats comments as whitespace](https://github.com/sinclairzx81/typebox/issues/1597) for parser-performance reasons. Static type inference is unaffected - the type-level parser keeps ignoring comments.
 
 Since the example above uses the built-in norpc router (`t` from `trpc-cli` itself), it's a fully working CLI with **zero peer dependencies installed** - no zod, no `@trpc/server`, no `@orpc/server`.

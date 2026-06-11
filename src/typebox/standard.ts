@@ -14,22 +14,13 @@
  */
 
 import type {StandardSchemaV1} from '../standard-schema/contract.js'
+import type {StandardJsonSchemaConverter} from '../standard-schema/json-schema.js'
 // note: TSchema/TProperties/TEnumValue/TLiteralValue are needed for the interface augmentations
 // below - merged interface declarations must repeat identical type parameter lists.
 import type {Static, TEnumValue, TLiteralValue, TProperties, TSchema} from './vendor/index.js'
 import {Validator} from './vendor/schema/index.js'
 
-export interface StandardJsonSchemaOptions {
-  /** The target version of the generated JSON Schema. typebox schemas *are* JSON schemas, compatible with draft-07 and later drafts for the keyword subset typebox emits, so this is accepted but not acted on. */
-  target: 'draft-2020-12' | 'draft-07' | 'openapi-3.0' | ({} & string)
-  libraryOptions?: Record<string, unknown> | undefined
-}
-
-/** The [Standard JSON Schema](https://standardschema.dev/json-schema) converter interface. */
-export interface StandardJsonSchemaConverter {
-  input: (options: StandardJsonSchemaOptions) => Record<string, unknown>
-  output: (options: StandardJsonSchemaOptions) => Record<string, unknown>
-}
+export type {StandardJsonSchemaConverter, StandardJsonSchemaOptions} from '../standard-schema/json-schema.js'
 
 type TypeboxStatic<Schema> = Schema extends import('./vendor/type/types/schema.js').TSchema ? Static<Schema> : never
 
@@ -51,6 +42,7 @@ export interface TypeboxStandardProps<out Schema> {
   readonly vendor: 'typebox'
   readonly validate: (value: unknown) => StandardSchemaV1.Result<TypeboxStatic<Schema>>
   readonly types?: {readonly input: TypeboxStatic<Schema>; readonly output: TypeboxStatic<Schema>} | undefined
+  /** [Standard JSON Schema](https://standardschema.dev/json-schema) converter. typebox schemas *are* JSON schemas, compatible with draft-07 and later drafts for the keyword subset typebox emits, so the `target` option is accepted but not acted on. */
   readonly jsonSchema: StandardJsonSchemaConverter
 }
 
@@ -89,6 +81,11 @@ declare module './vendor/type/types/bigint.js' {
 }
 declare module './vendor/type/types/boolean.js' {
   interface TBoolean {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/cyclic.js' {
+  interface TCyclic<Defs extends TProperties = TProperties, Ref extends string = string> {
     readonly '~standard': TypeboxStandardProps<this>
   }
 }
@@ -152,6 +149,11 @@ declare module './vendor/type/types/symbol.js' {
     readonly '~standard': TypeboxStandardProps<this>
   }
 }
+declare module './vendor/type/types/template_literal.js' {
+  interface TTemplateLiteral<Pattern extends string = string> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
 declare module './vendor/type/types/tuple.js' {
   interface TTuple<Types extends TSchema[] = TSchema[]> {
     readonly '~standard': TypeboxStandardProps<this>
@@ -185,6 +187,10 @@ declare module './vendor/type/types/void.js' {
  * Idempotent: passing the same schema twice is a no-op. Non-schema values are returned as-is.
  */
 export function attachStandardSchema<T>(value: T): T {
+  // `Settings.Set({immutableTypes: true})` makes Memory.Create freeze every schema, and
+  // defineProperty on a frozen object throws. Degrade gracefully: frozen schemas are returned
+  // as-is, without a `~standard` prop (documented in the README's typebox section).
+  if (!Object.isExtensible(value)) return value
   if (!looksLikeSchema(value)) return value
   if (Object.getOwnPropertyDescriptor(value, '~standard')) return value
   let props: StandardSchemaV1.Props<unknown, unknown> | undefined

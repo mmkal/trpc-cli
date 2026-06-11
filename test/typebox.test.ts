@@ -2,6 +2,7 @@ import {initTRPC} from 'trpcserver11'
 import {expect, expectTypeOf, test} from 'vitest'
 import {TrpcCliMeta} from '../src/index.js'
 import Type, {Script, type Static} from '../src/typebox/index.js'
+import {Settings} from '../src/typebox/vendor/system/index.js'
 import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
@@ -11,14 +12,14 @@ const t = initTRPC.meta<TrpcCliMeta>().create()
 test('script with jsdoc comments', async () => {
   const Input = Type.Script(`
     {
-        /** a message to say hello to new users */
-        greeting: string
-        /**
-         * how many times to repeat the
-         * greeting
-         */
-        repeat?: number
-      }
+      /** a message to say hello to new users */
+      greeting: string
+      /**
+       * how many times to repeat the
+       * greeting
+       */
+      repeat?: number
+    }
   `)
 
   expect(Input).toMatchObject({
@@ -46,12 +47,12 @@ test('script with jsdoc comments', async () => {
 test('jsdoc on nested properties', () => {
   const Input = Script(`
     {
-        /** outer doc */
-        config: {
-          /** inner doc */
-          verbose: boolean
-        }
+      /** outer doc */
+      config: {
+        /** inner doc */
+        verbose: boolean
       }
+    }
   `)
 
   expect(Input).toMatchObject({
@@ -67,13 +68,27 @@ test('jsdoc on nested properties', () => {
 test('jsdoc-like text inside string literal types is not treated as a comment', () => {
   const Input = Script(`
     {
-        weird: '/** not a doc */',
-        real: string
-      }
+      weird: '/** not a doc */',
+      real: string
+    }
   `)
 
   expect(Input.properties.weird).toMatchObject({const: '/** not a doc */'})
   expect(Input.properties.real).not.toHaveProperty('description')
+})
+
+test("// line comments don't attach as descriptions", () => {
+  // known limitation of the jsdoc patch: only `/** ... */` jsdoc comments become descriptions.
+  // `//` line comments are treated as trivia, same as upstream.
+  const Input = Script(`
+    {
+      // this is a regular comment, not a jsdoc
+      name: string
+    }
+  `)
+
+  expect(Input.properties.name).toMatchObject({type: 'string'})
+  expect(Input.properties.name).not.toHaveProperty('description')
 })
 
 test('~standard validate', () => {
@@ -295,6 +310,87 @@ test('script tuple input', async () => {
   })
 
   expect(await run(router, ['add', '2', '3'])).toMatchInlineSnapshot(`"5"`)
+})
+
+test('Type.Base subclassing works - classes are not wrapped', () => {
+  // upstream-documented (deprecated) custom-type pattern - see vendor/type/types/base.ts.
+  // `wrap` must skip classes: arrow functions have no [[Construct]], so wrapping Base
+  // would make `extends Type.Base` throw "is not a constructor".
+  class DateType extends Type.Base<Date> {
+    override Check(value: unknown): value is Date {
+      return value instanceof Date
+    }
+  }
+  const date = new DateType()
+  expect(date.Check(new Date())).toBe(true)
+  expect(date.Check('2020-01-01')).toBe(false)
+})
+
+test('wrapped builders keep their function names', () => {
+  expect(Type.String.name).toBe('String')
+  expect(Type.Script.name).toBe('Script')
+  // upstream names this `_Object_` internally ("Prevent Collision With Global Scope") - we
+  // preserve whatever name the vendored function has, same as you'd see with raw typebox
+  expect(Type.Object.name).toBe('_Object_')
+})
+
+test('immutableTypes setting degrades gracefully - builders return frozen schemas without ~standard', () => {
+  Settings.Set({immutableTypes: true})
+  try {
+    const Person = Type.Object({name: Type.String()})
+    expect(Object.isFrozen(Person)).toBe(true)
+    expect(Person).toMatchObject({type: 'object', properties: {name: {type: 'string'}}})
+    // frozen schemas can't have `~standard` attached - documented graceful degradation
+    expect(Object.getOwnPropertyDescriptor(Person, '~standard')).toBeUndefined()
+  } finally {
+    Settings.Set({immutableTypes: false})
+  }
+})
+
+test('template literal input', async () => {
+  const Id = Type.TemplateLiteral('user-${number}')
+  expectTypeOf(Id['~standard'].vendor).toEqualTypeOf<'typebox'>()
+
+  const router = t.router({
+    foo: t.procedure
+      .input(Id) //
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['foo', 'user-123'])).toMatchInlineSnapshot(`""user-123""`)
+  await expect(run(router, ['foo', 'admin-123'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ must match pattern "^user--?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+  `)
+})
+
+test('cyclic input', async () => {
+  const Node = Type.Cyclic(
+    {
+      node: Type.Object({
+        value: Type.String(),
+        child: Type.Optional(Type.Ref('node')),
+      }),
+    },
+    'node',
+  )
+  expectTypeOf(Node['~standard'].vendor).toEqualTypeOf<'typebox'>()
+
+  const router = t.router({
+    foo: t.procedure
+      .input(Node) //
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  // root-level `{$defs, $ref}` schemas can't be flattened into CLI flags, so trpc-cli falls
+  // back to the `--json` option - which still round-trips through `~standard` validation.
+  expect(await run(router, ['foo', '--json', '{"value": "hi", "child": {"value": "there"}}'])).toMatchInlineSnapshot(
+    `"{"value":"hi","child":{"value":"there"}}"`,
+  )
+  await expect(run(router, ['foo', '--json', '{"value": 123}'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ must be string → at value
+  `)
 })
 
 test('static inference flows into procedures', () => {

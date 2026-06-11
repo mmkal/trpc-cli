@@ -1,4 +1,5 @@
 import {JSONSchema7} from 'json-schema'
+import type {StandardJsonSchemaConverter} from './standard-schema/json-schema.js'
 import {Dependencies, Result} from './types.js'
 import {zodToJsonSchema as zodV3ToJsonSchema} from './zod-to-json-schema/index.js'
 
@@ -259,12 +260,8 @@ const getModule = <T>(moduleOrError: T | string): T => {
   return moduleOrError
 }
 
-type StandardJsonSchemaOptions = {
-  target: 'draft-2020-12' | 'draft-07' | 'openapi-3.0' | (string & {})
-  libraryOptions?: Record<string, unknown>
-}
-
-type StandardJsonSchemaConverter = (options: StandardJsonSchemaOptions) => Record<string, unknown>
+/** One side (`input` or `output`) of a Standard JSON Schema `~standard.jsonSchema` converter - see src/standard-schema/json-schema.ts for the shared types. */
+type ConvertToJsonSchema = StandardJsonSchemaConverter['input']
 
 /**
  * Attempts to convert a trpc procedure input to JSON schema.
@@ -374,11 +371,11 @@ function getVendor(schema: unknown) {
   return (schema as {['~standard']?: {vendor?: string}})?.['~standard']?.vendor ?? null
 }
 
-function getStandardJsonSchemaConverter(schema: unknown): StandardJsonSchemaConverter | null {
+function getStandardJsonSchemaConverter(schema: unknown): ConvertToJsonSchema | null {
   const jsonSchema = (schema as {['~standard']?: {jsonSchema?: Record<string, unknown>}})?.['~standard']?.jsonSchema
   if (!jsonSchema) return null
-  if (typeof jsonSchema.input === 'function') return jsonSchema.input as StandardJsonSchemaConverter
-  if (typeof jsonSchema.output === 'function') return jsonSchema.output as StandardJsonSchemaConverter
+  if (typeof jsonSchema.input === 'function') return jsonSchema.input as ConvertToJsonSchema
+  if (typeof jsonSchema.output === 'function') return jsonSchema.output as ConvertToJsonSchema
   return null
 }
 
