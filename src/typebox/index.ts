@@ -27,8 +27,25 @@ export {attachStandardSchema} from './standard.js'
 export type {StandardJsonSchemaConverter, StandardJsonSchemaOptions, TypeboxStandardProps} from './standard.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const wrap = <Fn extends (...args: any[]) => any>(fn: Fn): Fn =>
-  ((...args: never[]) => attachStandardSchema(fn(...args) as unknown)) as Fn
+const wrap = <Fn extends (...args: any[]) => any>(fn: Fn): Fn => {
+  const wrapped = ((...args: never[]) => attachStandardSchema(fn(...args) as unknown)) as Fn
+  // keep the original name for stack traces and debugging (`Type.Object.name === 'Object'`)
+  Object.defineProperty(wrapped, 'name', {value: fn.name, configurable: true})
+  return wrapped
+}
+
+/**
+ * Returns true for plain (wrappable) functions, false for classes. Classes in the namespace
+ * (`Base`, `DecodeBuilder`, `EncodeBuilder`) must be passed through untouched: arrow wrappers
+ * have no [[Construct]], so wrapping them breaks `class DateType extends Type.Base<Date> {...}`
+ * with "Class extends value ... is not a constructor". Classes are detectable by their
+ * non-writable `prototype` property (plain functions have a writable one).
+ */
+const isWrappableFunction = (value: unknown): boolean => {
+  if (typeof value !== 'function') return false
+  const prototype = Object.getOwnPropertyDescriptor(value, 'prototype')
+  return !prototype || Boolean(prototype.writable)
+}
 
 /**
  * The typebox `Type` namespace, with every builder wrapped so that returned schemas carry a
@@ -36,7 +53,12 @@ const wrap = <Fn extends (...args: any[]) => any>(fn: Fn): Fn =>
  * exactly, so `Type.Script` static inference and `Static<typeof T>` keep working.
  */
 const Type: typeof VendorType = Object.fromEntries(
-  Object.entries(VendorType).map(([key, value]) => [key, typeof value === 'function' ? wrap(value as never) : value]),
+  // `<unknown>` matters: letting tsc infer the union of all ~200 builder function types here
+  // sends it into "excessive stack depth" comparisons when forming the mapped tuple type
+  Object.entries<unknown>(VendorType).map(([key, value]) => [
+    key,
+    isWrappableFunction(value) ? wrap(value as never) : value,
+  ]),
 ) as never
 
 export default Type

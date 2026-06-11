@@ -84,6 +84,11 @@ declare module './vendor/type/types/boolean.js' {
     readonly '~standard': TypeboxStandardProps<this>
   }
 }
+declare module './vendor/type/types/cyclic.js' {
+  interface TCyclic<Defs extends TProperties = TProperties, Ref extends string = string> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
 declare module './vendor/type/types/enum.js' {
   interface TEnum<Values extends TEnumValue[] = TEnumValue[]> {
     readonly '~standard': TypeboxStandardProps<this>
@@ -144,6 +149,11 @@ declare module './vendor/type/types/symbol.js' {
     readonly '~standard': TypeboxStandardProps<this>
   }
 }
+declare module './vendor/type/types/template_literal.js' {
+  interface TTemplateLiteral<Pattern extends string = string> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
 declare module './vendor/type/types/tuple.js' {
   interface TTuple<Types extends TSchema[] = TSchema[]> {
     readonly '~standard': TypeboxStandardProps<this>
@@ -177,6 +187,10 @@ declare module './vendor/type/types/void.js' {
  * Idempotent: passing the same schema twice is a no-op. Non-schema values are returned as-is.
  */
 export function attachStandardSchema<T>(value: T): T {
+  // `Settings.Set({immutableTypes: true})` makes Memory.Create freeze every schema, and
+  // defineProperty on a frozen object throws. Degrade gracefully: frozen schemas are returned
+  // as-is, without a `~standard` prop (documented in the README's typebox section).
+  if (!Object.isExtensible(value)) return value
   if (!looksLikeSchema(value)) return value
   if (Object.getOwnPropertyDescriptor(value, '~standard')) return value
   let props: StandardSchemaV1.Props<unknown, unknown> | undefined
