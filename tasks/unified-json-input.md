@@ -105,3 +105,15 @@ Owner decisions after reviewing the v1 design:
 - The cosmetic help-only `--json` option is tagged with `__cosmeticJsonOption` and skipped in prompts.ts's shadow-command analysis - otherwise interactive prompting would ask users for "json" on every command that triggers prompts.
 - Default-on knock-on effects in snapshots: every leaf gains the `--json <json>` help line, commands that previously had zero options now show `[options]` in parent help command lists, and `toJSON()` output includes the cosmetic option (flags-mode build). 19 snapshots updated deliberately.
 - `getParsedProcedure` (src/parse-router.ts) now checks `meta.jsonInput === 'always'` instead of truthiness - `'never'`/`'auto'` are truthy strings and must not trigger the JSON-only build there.
+
+## Revision 3 (2026-06-11): default back to 'never'
+
+Owner decision: default-on gave every single command a boilerplate-y `--json <json>` line in its help output, which felt like too much noise as a default. The union, the schema-wins guard, boolean rejection, and all `'auto'`/`'always'` behavior stay exactly as Revision 2 built them - the ONLY semantic change is the unset-everywhere default: `meta.jsonInput || params.jsonInput || 'never'`. JSON input is opt-in again (`createCli({jsonInput: 'auto'})` for the sniffing hybrid, `'always'` for JSON-only).
+
+### Revision 3 checklist
+
+- [ ] Flip the default in `resolveJsonInputMode` (src/index.ts) from `'auto'` to `'never'`.
+- [ ] Update jsdoc on both `jsonInput` params (src/types.ts) - default is `'never'`; regenerate README codegen.
+- [ ] Tests: the zero-config test now asserts NO `--json` (in help or as an accepted option); keep explicit `'auto'`/`'always'`/`'never'` and meta-override tests (they should be unaffected); revert the default-on snapshot churn across the suite (the 19 snapshots from Revision 2 mostly return to their pre-default-on state).
+- [ ] README: JSON input section reframed as opt-in (lead with `jsonInput: 'auto'` usage); breaking-changes blockquote keeps the rename + boolean-removal notes but drops the "all CLIs upgraded" framing.
+- [ ] Update PR #204 body: headline back to opt-in, mode table unchanged otherwise.
