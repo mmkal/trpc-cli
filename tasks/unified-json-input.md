@@ -7,7 +7,7 @@ size: medium
 
 ## Status Summary
 
-Revision 2 in progress. The v1 implementation (boolean `jsonInput`, opt-in) is complete and green; Revision 2 below (decided with the owner 2026-06-11) changes the param to a `'never' | 'auto' | 'always'` union, makes `'auto'` the **default** (all CLIs gain `--json` support on upgrade), adds a per-leaf schema-wins guard, and drops boolean values entirely. See "Revision 2" section for the delta checklist.
+Revision 2 implemented and green. `jsonInput` is now a `'never' | 'auto' | 'always'` union at both levels (booleans throw a migration message), `'auto'` is the default so every CLI accepts `--json` out of the box, and `'auto'` leaves whose schema already derives a `json` option keep their own flag (schema-wins guard). Resolution lives in `resolveJsonInputMode` in src/index.ts; tests in test/json-input.test.ts; README rewritten around default-on. Remaining: owner review of the PR (#204, kept as draft).
 
 ## Goal
 
@@ -82,13 +82,13 @@ Owner decisions after reviewing the v1 design:
 
 ### Revision 2 checklist
 
-- [ ] Change `TrpcCliParams.jsonInput` and `TrpcCliMeta.jsonInput` to the union type; export a `JsonInputMode` type alias; update jsdoc (README codegen follows).
-- [ ] Runtime rejection of booleans with helpful migration message.
-- [ ] Implement per-leaf mode resolution (meta > global > 'auto') and the schema-wins guard.
-- [ ] Default-on behavior: cosmetic `--json` appears in help of all `'auto'` leaves by default (no `jsonInput` param needed); `'never'` removes it; schema-json leaves keep their own flag.
-- [ ] Tests: update v1 tests for the union (no `jsonInput: true` in fixtures); add: default-on works with zero config; `'never'` globally disables; `'always'` globally = JSON-only everywhere; meta `'never'`/`'always'`/`'auto'` override global; schema-wins guard (json-named property command keeps its flag under sniffed argv, sibling commands go JSON-only); boolean rejection error message. Expect widespread snapshot updates: the cosmetic `--json` now appears in help output across the whole suite.
-- [ ] README: rewrite the JSON input docs around default-on (headline: every CLI accepts `--json`), document the union + both breaking changes (`--input` rename, boolean removal).
-- [ ] Update PR #204 body for the new design.
+- [x] Change `TrpcCliParams.jsonInput` and `TrpcCliMeta.jsonInput` to the union type; export a `JsonInputMode` type alias; update jsdoc (README codegen follows). _done in src/types.ts; `JsonInputMode` exported alongside; type test in test/types.test.ts covers both levels_
+- [x] Runtime rejection of booleans with helpful migration message. _`resolveJsonInputMode` in src/index.ts throws `jsonInput: true is no longer supported - use 'always'` (and the 'never' equivalent) at buildProgram time, checking both meta and params values_
+- [x] Implement per-leaf mode resolution (meta > global > 'auto') and the schema-wins guard. _in configureCommand: 'always' → jsonProcedureInputs(); otherwise derive from schema and, for 'auto' leaves without a schema `json` option (checked via flattenedProperties + kebabCase), go JSON-only when `jsonFlagSniffed`_
+- [x] Default-on behavior: cosmetic `--json` appears in help of all `'auto'` leaves by default (no `jsonInput` param needed); `'never'` removes it; schema-json leaves keep their own flag. _cosmetic option tagged `__cosmeticJsonOption` so prompts.ts skips prompting for it; also surfaces in toJSON() output_
+- [x] Tests: update v1 tests for the union (no `jsonInput: true` in fixtures); add: default-on works with zero config; `'never'` globally disables; `'always'` globally = JSON-only everywhere; meta `'never'`/`'always'`/`'auto'` override global; schema-wins guard (json-named property command keeps its flag under sniffed argv, sibling commands go JSON-only); boolean rejection error message. Expect widespread snapshot updates: the cosmetic `--json` now appears in help output across the whole suite. _test/json-input.test.ts rewritten (17 tests); orpc/norpc fixtures moved to `'always'`; 19 snapshots updated across zod4/e2e/deep-help/help/lifecycle/json tests - commands with no schema options also gain `[options]` in subcommand lists_
+- [x] README: rewrite the JSON input docs around default-on (headline: every CLI accepts `--json`), document the union + both breaking changes (`--input` rename, boolean removal). _new "JSON input" section ahead of "Complex Inputs with JSON", with a combined breaking-changes blockquote_
+- [x] Update PR #204 body for the new design. _headline "every command accepts --json by default"; WARNING covers both breaking changes_
 
 ## Implementation Notes
 
@@ -96,4 +96,12 @@ Owner decisions after reviewing the v1 design:
 - Detection nuance discovered while reconciling two spec statements ("sniff process.argv when no explicit argv" vs "buildProgram() without runParams builds in flags mode"): `run()` now calls `buildProgram(runParams || {})`, so the run path always sniffs (explicit argv if provided, else process.argv minus the node/script prefix), while user-facing `buildProgram()`/`toJSON()` with no arguments build in flags mode.
 - Commander checks missing mandatory options *before* unknown options, so an opted-out procedure with a required flag invoked with only `--json` errors with "required option ... not specified" rather than "unknown option '--json'". Both are failures, just a message-ordering quirk - the opt-out test uses an optional flag to assert the unknown-option message.
 - The test-run.ts `expectJsonInput` heuristic now matches on the `Input formatted as JSON` description text instead of option flags, because the cosmetic `--json <json>` option (expected in flags-mode help under global jsonInput) has identical flags to the real JSON-only option.
-- Edge case (tested): a schema property literally named `json` under global jsonInput - passing `--json` always activates JSON mode, so the property can only be supplied through the JSON payload. In flags mode the schema-derived `--json <string>` option is shown in help (the cosmetic option is skipped to avoid a duplicate registration); it's unreachable as a flag. Deemed acceptable for an edge case, flagged here for review.
+- Edge case (tested): a schema property literally named `json`. ~~Under v1, passing `--json` always activated JSON mode, so the property could only be supplied through the JSON payload.~~ _superseded by the Revision 2 schema-wins guard: an `'auto'` leaf whose derived options include a `json` property is always built from its schema, so its `--json` flag keeps its schema meaning even when `--json` is sniffed in the argv (test: "schema wins: a procedure with its own json property keeps its schema-derived --json flag")._
+
+### Revision 2 implementation log (2026-06-11)
+
+- `resolveJsonInputMode(metaValue, paramsValue)` (src/index.ts) checks both values for booleans *before* resolving, so `meta: 'always'` + `params: true` still throws the migration message. Resolution is the idiomatic `metaValue || paramsValue || 'auto'`.
+- The schema-wins check inspects `flattenedProperties(schemaDerived.optionsJsonSchema)` for a key whose `kebabCase` is `json`. This also matches the unparseable-schema fallback (whose options schema *is* a real `json` option), which neatly keeps that fallback as-is under every mode including `'never'` - no special-casing needed.
+- The cosmetic help-only `--json` option is tagged with `__cosmeticJsonOption` and skipped in prompts.ts's shadow-command analysis - otherwise interactive prompting would ask users for "json" on every command that triggers prompts.
+- Default-on knock-on effects in snapshots: every leaf gains the `--json <json>` help line, commands that previously had zero options now show `[options]` in parent help command lists, and `toJSON()` output includes the cosmetic option (flags-mode build). 19 snapshots updated deliberately.
+- `getParsedProcedure` (src/parse-router.ts) now checks `meta.jsonInput === 'always'` instead of truthiness - `'never'`/`'auto'` are truthy strings and must not trigger the JSON-only build there.
