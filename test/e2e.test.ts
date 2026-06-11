@@ -67,29 +67,16 @@ test('cli help', async () => {
       Available subCommands: add, subtract, multiply, divide, square-root
 
       Options:
-        -V, --version                         output the version number
-        -h, --help                            display help for command
+        -V, --version                                   output the version number
+        -h, --help                                      display help for command
 
       Commands:
-        add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
-                                              your friend both have apples, and you
-                                              want to know how many apples there are
-                                              in total.
-        subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
-                                              a number and you want to make it
-                                              smaller.
-        multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
-                                              you want to count the number of tiles on
-                                              your bathroom wall and are short on
-                                              time.
-        divide <numerator> <denominator>      Divide two numbers. Useful if you have a
-                                              number and you want to make it smaller
-                                              and \`subtract\` isn't quite powerful
-                                              enough for you.
-        square-root <number>                  Square root of a number. Useful if you
-                                              have a square, know the area, and want
-                                              to find the length of the side.
-        help [command]                        display help for command
+        add [options] <parameter_1> <parameter_2>       Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+        subtract [options] <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have a number and you want to make it smaller.
+        multiply [options] <parameter_1> <parameter_2>  Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
+        divide [options] <numerator> <denominator>      Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+        square-root [options] <number>                  Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.
+        help [command]                                  display help for command
       "
     `)
 })
@@ -103,11 +90,13 @@ test('cli help add', async () => {
     to know how many apples there are in total.
 
     Arguments:
-      parameter_1  number (required)
-      parameter_2  number (required)
+      parameter_1    number (required)
+      parameter_2    number (required)
 
     Options:
-      -h, --help   display help for command
+      --json <json>  Provide the complete procedure input as JSON - other flags and
+                     positional arguments are unavailable when using this option
+      -h, --help     display help for command
     "
   `)
 })
@@ -121,11 +110,13 @@ test('cli help divide', async () => {
     and \`subtract\` isn't quite powerful enough for you.
 
     Arguments:
-      numerator    number numerator (required)
-      denominator  number denominator (required)
+      numerator      number numerator (required)
+      denominator    number denominator (required)
 
     Options:
-      -h, --help   display help for command
+      --json <json>  Provide the complete procedure input as JSON - other flags and
+                     positional arguments are unavailable when using this option
+      -h, --help     display help for command
 
 
     Examples:
@@ -152,11 +143,13 @@ test('cli add failure', async () => {
     to know how many apples there are in total.
 
     Arguments:
-      parameter_1  number (required)
-      parameter_2  number (required)
+      parameter_1    number (required)
+      parameter_2    number (required)
 
     Options:
-      -h, --help   display help for command
+      --json <json>  Provide the complete procedure input as JSON - other flags and
+                     positional arguments are unavailable when using this option
+      -h, --help     display help for command
     "
   `)
 })
@@ -177,11 +170,13 @@ test('cli divide failure', async () => {
     and \`subtract\` isn't quite powerful enough for you.
 
     Arguments:
-      numerator    number numerator (required)
-      denominator  number denominator (required)
+      numerator      number numerator (required)
+      denominator    number denominator (required)
 
     Options:
-      -h, --help   display help for command
+      --json <json>  Provide the complete procedure input as JSON - other flags and
+                     positional arguments are unavailable when using this option
+      -h, --help     display help for command
     "
   `)
 })
@@ -199,29 +194,16 @@ test('cli non-existent command', async () => {
     Available subcommands: add, subtract, multiply, divide, square-root
 
     Options:
-      -V, --version                         output the version number
-      -h, --help                            display help for command
+      -V, --version                                   output the version number
+      -h, --help                                      display help for command
 
     Commands:
-      add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
-                                            your friend both have apples, and you
-                                            want to know how many apples there are
-                                            in total.
-      subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
-                                            a number and you want to make it
-                                            smaller.
-      multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
-                                            you want to count the number of tiles on
-                                            your bathroom wall and are short on
-                                            time.
-      divide <numerator> <denominator>      Divide two numbers. Useful if you have a
-                                            number and you want to make it smaller
-                                            and \`subtract\` isn't quite powerful
-                                            enough for you.
-      square-root <number>                  Square root of a number. Useful if you
-                                            have a square, know the area, and want
-                                            to find the length of the side.
-      help [command]                        display help for command
+      add [options] <parameter_1> <parameter_2>       Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+      subtract [options] <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have a number and you want to make it smaller.
+      multiply [options] <parameter_1> <parameter_2>  Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
+      divide [options] <numerator> <denominator>      Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+      square-root [options] <number>                  Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.
+      help [command]                                  display help for command
     "
   `)
 })
@@ -234,29 +216,16 @@ test('cli no command', async () => {
     Available subcommands: add, subtract, multiply, divide, square-root
 
     Options:
-      -V, --version                         output the version number
-      -h, --help                            display help for command
+      -V, --version                                   output the version number
+      -h, --help                                      display help for command
 
     Commands:
-      add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
-                                            your friend both have apples, and you
-                                            want to know how many apples there are
-                                            in total.
-      subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
-                                            a number and you want to make it
-                                            smaller.
-      multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
-                                            you want to count the number of tiles on
-                                            your bathroom wall and are short on
-                                            time.
-      divide <numerator> <denominator>      Divide two numbers. Useful if you have a
-                                            number and you want to make it smaller
-                                            and \`subtract\` isn't quite powerful
-                                            enough for you.
-      square-root <number>                  Square root of a number. Useful if you
-                                            have a square, know the area, and want
-                                            to find the length of the side.
-      help [command]                        display help for command
+      add [options] <parameter_1> <parameter_2>       Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+      subtract [options] <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have a number and you want to make it smaller.
+      multiply [options] <parameter_1> <parameter_2>  Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
+      divide [options] <numerator> <denominator>      Divide two numbers. Useful if you have a number and you want to make it smaller and \`subtract\` isn't quite powerful enough for you.
+      square-root [options] <number>                  Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.
+      help [command]                                  display help for command
     "
   `)
 })
@@ -384,6 +353,9 @@ test('migrations incompatible flags', async () => {
     Options:
       --to [string]    Mark migrations up to this one as exectued
       --step [number]  Mark this many migrations as executed; Exclusive minimum: 0
+      --json <json>    Provide the complete procedure input as JSON - other flags
+                       and positional arguments are unavailable when using this
+                       option
       -h, --help       display help for command
     "
   `)
@@ -418,6 +390,9 @@ test('fs copy help', async () => {
 
     Options:
       --force [boolean]  Overwrite destination if it exists (default: false)
+      --json <json>      Provide the complete procedure input as JSON - other flags
+                         and positional arguments are unavailable when using this
+                         option
       -h, --help         display help for command
     "
   `)
@@ -480,6 +455,9 @@ test('fs copy', async () => {
     Options:
       --ignore-whitespace [boolean]  Ignore whitespace changes (default: false)
       --trim [boolean]               Trim start/end whitespace (default: false)
+      --json <json>                  Provide the complete procedure input as JSON -
+                                     other flags and positional arguments are
+                                     unavailable when using this option
       -h, --help                     display help for command
     "
   `)
@@ -496,6 +474,9 @@ test('fs diff', async () => {
     Options:
       --ignore-whitespace [boolean]  Ignore whitespace changes (default: false)
       --trim [boolean]               Trim start/end whitespace (default: false)
+      --json <json>                  Provide the complete procedure input as JSON -
+                                     other flags and positional arguments are
+                                     unavailable when using this option
       -h, --help                     display help for command
     "
   `)

@@ -88,6 +88,7 @@ test('options with various modifiers', async () => {
       --array-of-booleans-with-default [values...]  Type: boolean array (default: [true])
       --number-with-min-and-max <number>            Minimum: 0; Maximum: 10
       --regex <string>                              Pattern: ^[a-z]+$
+      --json <json>                                 Provide the complete procedure input as JSON - other flags and positional arguments are unavailable when using this option
       -h, --help                                    display help for command
     "
   `)

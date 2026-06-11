@@ -82,7 +82,7 @@ describe('trpc style', () => {
   test('json input via meta', async () => {
     const router = t.router({
       hello: t.procedure
-        .meta({jsonInput: true})
+        .meta({jsonInput: 'always'})
         .input(z.object({foo: z.string(), bar: z.number()}))
         .query(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
     })
@@ -194,7 +194,7 @@ describe('orpc style', () => {
   test('json input via meta', async () => {
     const router = os.router({
       hello: os
-        .meta({jsonInput: true})
+        .meta({jsonInput: 'always'})
         .input(z.object({foo: z.string(), bar: z.number()}))
         .handler(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
     })

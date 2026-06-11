@@ -8,7 +8,7 @@ expect.addSnapshotSerializer(snapshotSerializer)
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
-test('--json accepts complete inputs for mapped procedures', async () => {
+test('--json accepts complete inputs by default - no configuration needed', async () => {
   const router = t.router({
     object: t.procedure.input(z.object({foo: z.string(), count: z.number()})).query(({input}) => JSON.stringify(input)),
     tuple: t.procedure
@@ -24,18 +24,18 @@ test('--json accepts complete inputs for mapped procedures', async () => {
     }),
   })
 
-  expect(
-    await runWith({router, jsonInput: true}, ['object', '--json', '{"foo":"bar","count":2}']),
-  ).toMatchInlineSnapshot(`"{"foo":"bar","count":2}"`)
-  expect(await runWith({router, jsonInput: true}, ['tuple', '--json', '["left",{"right":3}]'])).toMatchInlineSnapshot(
+  expect(await run(router, ['object', '--json', '{"foo":"bar","count":2}'])).toMatchInlineSnapshot(
+    `"{"foo":"bar","count":2}"`,
+  )
+  expect(await run(router, ['tuple', '--json', '["left",{"right":3}]'])).toMatchInlineSnapshot(
     `"["left",{"right":3}]"`,
   )
-  expect(
-    await runWith({router, jsonInput: true}, ['positionals', '--json', '{"first":"hi","shout":true}']),
-  ).toMatchInlineSnapshot(`"{"first":"hi","shout":true}"`)
-  expect(
-    await runWith({router, jsonInput: true}, ['deeply', 'nested', 'command', '--json', '{"name":"Ada"}']),
-  ).toMatchInlineSnapshot(`"hello Ada"`)
+  expect(await run(router, ['positionals', '--json', '{"first":"hi","shout":true}'])).toMatchInlineSnapshot(
+    `"{"first":"hi","shout":true}"`,
+  )
+  expect(await run(router, ['deeply', 'nested', 'command', '--json', '{"name":"Ada"}'])).toMatchInlineSnapshot(
+    `"hello Ada"`,
+  )
 })
 
 test('--json cannot be combined with schema-derived flags', async () => {
@@ -44,8 +44,8 @@ test('--json cannot be combined with schema-derived flags', async () => {
   })
 
   // when --json is passed, the command is built JSON-only, so schema-derived flags simply don't exist
-  await expect(runWith({router, jsonInput: true}, ['object', '--foo', 'bar', '--json', '{"foo":"bar","count":2}']))
-    .rejects.toMatchInlineSnapshot(`
+  await expect(run(router, ['object', '--foo', 'bar', '--json', '{"foo":"bar","count":2}'])).rejects
+    .toMatchInlineSnapshot(`
       CLI exited with code 1
         Caused by: CommanderError: error: unknown option '--foo'
     `)
@@ -58,11 +58,10 @@ test('--json cannot be combined with positional arguments', async () => {
       .query(({input}) => `hello ${input.name}`),
   })
 
-  await expect(runWith({router, jsonInput: true}, ['greet', 'Ada', '--json', '{"name":"Bob"}'])).rejects
-    .toMatchInlineSnapshot(`
-      CLI exited with code 1
-        Caused by: CommanderError: error: too many arguments for 'greet'. Expected 0 arguments but got 1.
-    `)
+  await expect(run(router, ['greet', 'Ada', '--json', '{"name":"Bob"}'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: too many arguments for 'greet'. Expected 0 arguments but got 1.
+  `)
 })
 
 test('--json with variadic positional arguments', async () => {
@@ -70,12 +69,11 @@ test('--json with variadic positional arguments', async () => {
     list: t.procedure.input(z.array(z.string())).query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await runWith({router, jsonInput: true}, ['list', '--json', '["x","y"]'])).toMatchInlineSnapshot(`"["x","y"]"`)
-  await expect(runWith({router, jsonInput: true}, ['list', 'a', 'b', '--json', '["x"]'])).rejects
-    .toMatchInlineSnapshot(`
-      CLI exited with code 1
-        Caused by: CommanderError: error: too many arguments for 'list'. Expected 0 arguments but got 2.
-    `)
+  expect(await run(router, ['list', '--json', '["x","y"]'])).toMatchInlineSnapshot(`"["x","y"]"`)
+  await expect(run(router, ['list', 'a', 'b', '--json', '["x"]'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: too many arguments for 'list'. Expected 0 arguments but got 2.
+  `)
 })
 
 test('--json rejects malformed json', async () => {
@@ -83,7 +81,7 @@ test('--json rejects malformed json', async () => {
     object: t.procedure.input(z.object({foo: z.string(), count: z.number()})).query(({input}) => JSON.stringify(input)),
   })
 
-  await expect(runWith({router, jsonInput: true}, ['object', '--json', '{not-json'])).rejects.toMatchInlineSnapshot(`
+  await expect(run(router, ['object', '--json', '{not-json'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CommanderError: error: option '--json <json>' argument '{not-json' is invalid. Malformed JSON. If passing a string, pass it as a valid JSON string with quotes ("{not-json")
   `)
@@ -95,13 +93,13 @@ test('--json payloads still go through procedure validation', async () => {
   })
 
   await expect(
-    runWith({router, jsonInput: true}, ['object', '--json', '{"foo":"bar"}']), // missing required `count`
+    run(router, ['object', '--json', '{"foo":"bar"}']), // missing required `count`
   ).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: ✖ Invalid input: expected number, received undefined → at count
   `)
   await expect(
-    runWith({router, jsonInput: true}, ['object', '--json', '{"foo":"bar","count":"two"}']), // wrong type for `count`
+    run(router, ['object', '--json', '{"foo":"bar","count":"two"}']), // wrong type for `count`
   ).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at count
@@ -113,7 +111,7 @@ test('--json=equals form activates json mode', async () => {
     object: t.procedure.input(z.object({foo: z.string(), count: z.number()})).query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await runWith({router, jsonInput: true}, ['object', '--json={"foo":"bar","count":2}'])).toMatchInlineSnapshot(
+  expect(await run(router, ['object', '--json={"foo":"bar","count":2}'])).toMatchInlineSnapshot(
     `"{"foo":"bar","count":2}"`,
   )
 })
@@ -126,7 +124,7 @@ test('literal --json after -- terminator does not activate json mode', async () 
   })
 
   // after `--`, tokens are operands, not options - so `--json` here is a positional value, and the command is built from its schema
-  expect(await runWith({router, jsonInput: true}, ['echo', '--', '--json'])).toMatchInlineSnapshot(`"echoed: --json"`)
+  expect(await run(router, ['echo', '--', '--json'])).toMatchInlineSnapshot(`"echoed: --json"`)
 })
 
 test('explicit run({argv}) is sniffed, not process.argv', async () => {
@@ -138,7 +136,7 @@ test('explicit run({argv}) is sniffed, not process.argv', async () => {
   process.argv = [...originalArgv.slice(0, 2), 'object', '--json', '{"foo":"from-process-argv","count":1}']
   try {
     // the explicit argv has no --json, so flags mode should be used, even though process.argv has --json
-    expect(await runWith({router, jsonInput: true}, ['object', '--foo', 'bar', '--count', '2'])).toMatchInlineSnapshot(
+    expect(await run(router, ['object', '--foo', 'bar', '--count', '2'])).toMatchInlineSnapshot(
       `"{"foo":"bar","count":2}"`,
     )
   } finally {
@@ -151,7 +149,7 @@ test('help in flags mode shows --json on leaf commands; json-mode help shows onl
     object: t.procedure.input(z.object({foo: z.string(), count: z.number()})).query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await runWith({router, jsonInput: true}, ['object', '--help'])).toMatchInlineSnapshot(`
+  expect(await run(router, ['object', '--help'])).toMatchInlineSnapshot(`
     "Usage: program object [options]
 
     Options:
@@ -163,7 +161,50 @@ test('help in flags mode shows --json on leaf commands; json-mode help shows onl
       -h, --help        display help for command
     "
   `)
-  expect(await runWith({router, jsonInput: true}, ['object', '--json', '{}', '--help'], {expectJsonInput: true}))
+  expect(await run(router, ['object', '--json', '{}', '--help'], {expectJsonInput: true})).toMatchInlineSnapshot(`
+    "Usage: program object [options]
+
+    Options:
+      --json <json>  Input formatted as JSON
+      -h, --help     display help for command
+    "
+  `)
+})
+
+test(`jsonInput: 'never' disables --json globally`, async () => {
+  const router = t.router({
+    object: t.procedure.input(z.object({foo: z.string().optional()})).query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await runWith({router, jsonInput: 'never'}, ['object', '--help'])).not.toContain('--json')
+  await expect(runWith({router, jsonInput: 'never'}, ['object', '--json', '{"foo":"bar"}'])).rejects
+    .toMatchInlineSnapshot(`
+      CLI exited with code 1
+        Caused by: CommanderError: error: unknown option '--json'
+    `)
+  // schema-derived flags still work as usual
+  expect(await runWith({router, jsonInput: 'never'}, ['object', '--foo', 'bar'])).toMatchInlineSnapshot(
+    `"{"foo":"bar"}"`,
+  )
+})
+
+test(`jsonInput: 'always' makes every command JSON-only`, async () => {
+  const router = t.router({
+    object: t.procedure.input(z.object({foo: z.string(), count: z.number()})).query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(
+    await runWith({router, jsonInput: 'always'}, ['object', '--json', '{"foo":"bar","count":2}'], {
+      expectJsonInput: true,
+    }),
+  ).toMatchInlineSnapshot(`"{"foo":"bar","count":2}"`)
+  // schema-derived flags don't exist at all - even without --json in the argv
+  await expect(runWith({router, jsonInput: 'always'}, ['object', '--foo', 'bar', '--count', '2'])).rejects
+    .toMatchInlineSnapshot(`
+      CLI exited with code 1
+        Caused by: CommanderError: error: unknown option '--foo'
+    `)
+  expect(await runWith({router, jsonInput: 'always'}, ['object', '--help'], {expectJsonInput: true}))
     .toMatchInlineSnapshot(`
       "Usage: program object [options]
 
@@ -174,51 +215,57 @@ test('help in flags mode shows --json on leaf commands; json-mode help shows onl
     `)
 })
 
-test('global json input is opt-in', async () => {
+test(`meta jsonInput overrides the global setting`, async () => {
   const router = t.router({
-    object: t.procedure.input(z.object({foo: z.string().optional()})).query(({input}) => JSON.stringify(input)),
-  })
-
-  expect(await run(router, ['object', '--help'])).not.toContain('--json')
-  await expect(run(router, ['object', '--json', '{"foo":"bar"}'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CommanderError: error: unknown option '--json'
-  `)
-})
-
-test('meta.jsonInput: false opts a procedure out of global json input', async () => {
-  const router = t.router({
-    optedOut: t.procedure
-      .meta({jsonInput: false})
+    neverJson: t.procedure
+      .meta({jsonInput: 'never'})
       .input(z.object({foo: z.string().optional()}))
       .query(({input}) => JSON.stringify(input)),
-    optedIn: t.procedure.input(z.object({foo: z.string()})).query(({input}) => JSON.stringify(input)),
-  })
-
-  expect(await runWith({router, jsonInput: true}, ['opted-out', '--foo', 'bar'])).toMatchInlineSnapshot(
-    `"{"foo":"bar"}"`,
-  )
-  expect(await runWith({router, jsonInput: true}, ['opted-out', '--help'])).not.toContain('--json')
-  await expect(runWith({router, jsonInput: true}, ['opted-out', '--json', '{"foo":"bar"}'])).rejects
-    .toMatchInlineSnapshot(`
-      CLI exited with code 1
-        Caused by: CommanderError: error: unknown option '--json'
-    `)
-  // sibling procedures without the opt-out still accept --json in the same invocation style
-  expect(await runWith({router, jsonInput: true}, ['opted-in', '--json', '{"foo":"bar"}'])).toMatchInlineSnapshot(
-    `"{"foo":"bar"}"`,
-  )
-})
-
-test('meta.jsonInput: true procedures use --json', async () => {
-  const router = t.router({
-    legacy: t.procedure
-      .meta({jsonInput: true})
+    alwaysJson: t.procedure
+      .meta({jsonInput: 'always'})
+      .input(z.object({foo: z.string()}))
+      .query(({input}) => JSON.stringify(input)),
+    autoJson: t.procedure
+      .meta({jsonInput: 'auto'})
       .input(z.object({foo: z.string()}))
       .query(({input}) => JSON.stringify(input)),
   })
 
-  // no global jsonInput setting needed - meta.jsonInput makes the procedure JSON-only
+  // meta 'never' under the default global 'auto': flags work, no --json in help, --json is an unknown option
+  expect(await run(router, ['never-json', '--foo', 'bar'])).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
+  expect(await run(router, ['never-json', '--help'])).not.toContain('--json')
+  await expect(run(router, ['never-json', '--json', '{"foo":"bar"}'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--json'
+  `)
+
+  // meta 'always' under global 'never': JSON-only regardless
+  expect(
+    await runWith({router, jsonInput: 'never'}, ['always-json', '--json', '{"foo":"bar"}'], {expectJsonInput: true}),
+  ).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
+
+  // meta 'auto' under global 'never': hybrid behavior for this command only
+  expect(await runWith({router, jsonInput: 'never'}, ['auto-json', '--json', '{"foo":"bar"}'])).toMatchInlineSnapshot(
+    `"{"foo":"bar"}"`,
+  )
+  expect(await runWith({router, jsonInput: 'never'}, ['auto-json', '--foo', 'bar'])).toMatchInlineSnapshot(
+    `"{"foo":"bar"}"`,
+  )
+
+  // meta 'never' under global 'always': built from its schema regardless
+  expect(await runWith({router, jsonInput: 'always'}, ['never-json', '--foo', 'bar'])).toMatchInlineSnapshot(
+    `"{"foo":"bar"}"`,
+  )
+})
+
+test(`meta jsonInput: 'always' procedures are JSON-only`, async () => {
+  const router = t.router({
+    legacy: t.procedure
+      .meta({jsonInput: 'always'})
+      .input(z.object({foo: z.string()}))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
   expect(await run(router, ['legacy', '--json', '{"foo":"bar"}'], {expectJsonInput: true})).toMatchInlineSnapshot(
     `"{"foo":"bar"}"`,
   )
@@ -230,6 +277,33 @@ test('meta.jsonInput: true procedures use --json', async () => {
       -h, --help     display help for command
     "
   `)
+  await expect(run(router, ['legacy', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--foo'
+  `)
+})
+
+test('boolean jsonInput values are rejected with a migration message', async () => {
+  const router = t.router({
+    object: t.procedure.input(z.object({foo: z.string()})).query(({input}) => JSON.stringify(input)),
+  })
+
+  await expect(runWith({router, jsonInput: true as never}, ['object', '--foo', 'bar'])).rejects.toThrow(
+    `jsonInput: true is no longer supported - use 'always'`,
+  )
+  await expect(runWith({router, jsonInput: false as never}, ['object', '--foo', 'bar'])).rejects.toThrow(
+    `jsonInput: false is no longer supported - use 'never'`,
+  )
+
+  const booleanMetaRouter = t.router({
+    object: t.procedure
+      .meta({jsonInput: false as never})
+      .input(z.object({foo: z.string()}))
+      .query(({input}) => JSON.stringify(input)),
+  })
+  await expect(run(booleanMetaRouter, ['object', '--foo', 'bar'])).rejects.toThrow(
+    `jsonInput: false is no longer supported - use 'never'`,
+  )
 })
 
 test('global json input works through default command forwarding', async () => {
@@ -240,18 +314,32 @@ test('global json input works through default command forwarding', async () => {
       .query(({input}) => JSON.stringify(input)),
   })
 
-  expect(await runWith({router, jsonInput: true}, ['--json', '{"foo":"bar"}'])).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
+  expect(await run(router, ['--json', '{"foo":"bar"}'])).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
 })
 
-test('procedures with a property named json defer to the global --json option', async () => {
+test('schema wins: a procedure with its own json property keeps its schema-derived --json flag', async () => {
   const router = t.router({
     withJsonProperty: t.procedure
       .input(z.object({json: z.string(), other: z.string().optional()}))
       .query(({input}) => JSON.stringify(input)),
+    sibling: t.procedure.input(z.object({foo: z.string()})).query(({input}) => JSON.stringify(input)),
   })
 
-  // passing --json always activates JSON mode, so the schema property can only be supplied through the JSON payload
-  expect(
-    await runWith({router, jsonInput: true}, ['with-json-property', '--json', '{"json":"123"}']),
-  ).toMatchInlineSnapshot(`"{"json":"123"}"`)
+  // even though --json is sniffed in the argv, this command's schema already defines `json`, so the schema wins:
+  // the flag means "the json property", not "the complete procedure input"
+  expect(await run(router, ['with-json-property', '--json', '123', '--other', 'x'])).toMatchInlineSnapshot(
+    `"{"json":"123","other":"x"}"`,
+  )
+  // no cosmetic duplicate - the only --json in help is the schema-derived one
+  expect(await run(router, ['with-json-property', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program with-json-property [options]
+
+    Options:
+      --json <string>
+      --other [string]
+      -h, --help        display help for command
+    "
+  `)
+  // sibling commands without a json property still go JSON-only in the same invocation style
+  expect(await run(router, ['sibling', '--json', '{"foo":"bar"}'])).toMatchInlineSnapshot(`"{"foo":"bar"}"`)
 })

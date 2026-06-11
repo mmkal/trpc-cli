@@ -154,7 +154,7 @@ test('orpc unjsonifiable schema', async () => {
 test('orpc json input via meta', async () => {
   const router = o.router({
     hello: o
-      .meta({jsonInput: true})
+      .meta({jsonInput: 'always'})
       .input(z.object({foo: z.string(), bar: z.number()}))
       .handler(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
   })

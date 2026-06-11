@@ -288,7 +288,7 @@ export const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
 }
 
 export const getParsedProcedure = (procedureInfo: ProcedureInfo): ParsedProcedure => {
-  if (procedureInfo.meta.jsonInput) {
+  if (procedureInfo.meta.jsonInput === 'always') {
     return jsonProcedureInputs()
   }
 

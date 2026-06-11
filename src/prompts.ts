@@ -77,6 +77,9 @@ export const createShadowCommand = (
   const optionsMap = new Map<string, Shadowed<Option>>()
 
   command.options.forEach(original => {
+    // the cosmetic `--json` option is help-only (any argv actually containing `--json` results in a JSON-only build
+    // where it doesn't exist) - don't prompt for it
+    if ('__cosmeticJsonOption' in original) return
     const id = Date.now().toString() + Math.random().toString().slice(1)
     const shadowOption = new Option(
       original.flags.replace('<', '[').replace('>', ']'),
