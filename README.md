@@ -637,29 +637,16 @@ Usage: calculator [options] [command]
 Available subcommands: add, subtract, multiply, divide, square-root
 
 Options:
-  -V, --version                         output the version number
-  -h, --help                            display help for command
+  -V, --version                                   output the version number
+  -h, --help                                      display help for command
 
 Commands:
-  add <parameter_1> <parameter_2>       Add two numbers. Use this if you and
-                                        your friend both have apples, and you
-                                        want to know how many apples there are
-                                        in total.
-  subtract <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have
-                                        a number and you want to make it
-                                        smaller.
-  multiply <parameter_1> <parameter_2>  Multiply two numbers together. Useful if
-                                        you want to count the number of tiles on
-                                        your bathroom wall and are short on
-                                        time.
-  divide <numerator> <denominator>      Divide two numbers. Useful if you have a
-                                        number and you want to make it smaller
-                                        and `subtract` isn't quite powerful
-                                        enough for you.
-  square-root <number>                  Square root of a number. Useful if you
-                                        have a square, know the area, and want
-                                        to find the length of the side.
-  help [command]                        display help for command
+  add [options] <parameter_1> <parameter_2>       Add two numbers. Use this if you and your friend both have apples, and you want to know how many apples there are in total.
+  subtract [options] <parameter_1> <parameter_2>  Subtract two numbers. Useful if you have a number and you want to make it smaller.
+  multiply [options] <parameter_1> <parameter_2>  Multiply two numbers together. Useful if you want to count the number of tiles on your bathroom wall and are short on time.
+  divide [options] <numerator> <denominator>      Divide two numbers. Useful if you have a number and you want to make it smaller and `subtract` isn't quite powerful enough for you.
+  square-root [options] <number>                  Square root of a number. Useful if you have a square, know the area, and want to find the length of the side.
+  help [command]                                  display help for command
 
 ```
 <!-- codegen:end -->
@@ -676,11 +663,13 @@ Add two numbers. Use this if you and your friend both have apples, and you want
 to know how many apples there are in total.
 
 Arguments:
-  parameter_1  number (required)
-  parameter_2  number (required)
+  parameter_1    number (required)
+  parameter_2    number (required)
 
 Options:
-  -h, --help   display help for command
+  --json <json>  Provide the complete procedure input as JSON - other flags and
+                 positional arguments are unavailable when using this option
+  -h, --help     display help for command
 
 ```
 <!-- codegen:end -->

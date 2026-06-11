@@ -28,70 +28,70 @@ test('simple toJSON', async () => {
   const cli = createCli({router: myRouter, name: 'mycli', version: '1.2.3'})
   expect(cli.toJSON()).toMatchInlineSnapshot(
     `
-    {
-      "name": "mycli",
-      "version": "1.2.3",
-      "description": "Available subcommands: hello",
-      "usage": "[options] [command]",
-      "arguments": [],
-      "options": [
-        {
-          "name": "version",
-          "required": false,
-          "optional": false,
-          "negate": false,
-          "variadic": false,
-          "flags": "-V, --version",
-          "short": "-V",
-          "description": "output the version number",
-          "attributeName": "version"
-        }
-      ],
-      "commands": [
-        {
-          "name": "hello",
-          "usage": "[options]",
-          "arguments": [],
-          "options": [
-            {
-              "name": "first-name",
-              "required": true,
-              "optional": false,
-              "negate": false,
-              "variadic": false,
-              "flags": "--first-name <string>",
-              "attributeName": "firstName"
-            },
-            {
-              "name": "role",
-              "required": true,
-              "optional": false,
-              "negate": false,
-              "variadic": false,
-              "flags": "--role <string>",
-              "choices": [
-                "user",
-                "admin",
-                "anonymous"
-              ],
-              "attributeName": "role"
-            },
-            {
-              "name": "json",
-              "required": true,
-              "optional": false,
-              "negate": false,
-              "variadic": false,
-              "flags": "--json <json>",
-              "description": "Provide the complete procedure input as JSON - other flags and positional arguments are unavailable when using this option",
-              "attributeName": "json"
-            }
-          ],
-          "commands": []
-        }
-      ]
-    }
-  `,
+      {
+        "name": "mycli",
+        "version": "1.2.3",
+        "description": "Available subcommands: hello",
+        "usage": "[options] [command]",
+        "arguments": [],
+        "options": [
+          {
+            "name": "version",
+            "required": false,
+            "optional": false,
+            "negate": false,
+            "variadic": false,
+            "flags": "-V, --version",
+            "short": "-V",
+            "description": "output the version number",
+            "attributeName": "version"
+          }
+        ],
+        "commands": [
+          {
+            "name": "hello",
+            "usage": "[options]",
+            "arguments": [],
+            "options": [
+              {
+                "name": "first-name",
+                "required": true,
+                "optional": false,
+                "negate": false,
+                "variadic": false,
+                "flags": "--first-name <string>",
+                "attributeName": "firstName"
+              },
+              {
+                "name": "role",
+                "required": true,
+                "optional": false,
+                "negate": false,
+                "variadic": false,
+                "flags": "--role <string>",
+                "choices": [
+                  "user",
+                  "admin",
+                  "anonymous"
+                ],
+                "attributeName": "role"
+              },
+              {
+                "name": "json",
+                "required": true,
+                "optional": false,
+                "negate": false,
+                "variadic": false,
+                "flags": "--json <json>",
+                "description": "Provide the complete procedure input as JSON - other flags and positional arguments are unavailable when using this option",
+                "attributeName": "json"
+              }
+            ],
+            "commands": []
+          }
+        ]
+      }
+    `,
   )
 })
 
