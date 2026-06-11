@@ -13,12 +13,14 @@ expect.addSnapshotSerializer(snapshotSerializer)
 const router = t.router({
   greet: t.procedure
     .input(
-      Type.Script(`{
-        /** a message to say hello to new users */
-        greeting: string
-        /** make it loud */
-        shout?: boolean
-      }`),
+      Type.Script(`
+        {
+                /** a message to say hello to new users */
+                greeting: string
+                /** make it loud */
+                shout?: boolean
+              }
+      `),
     )
     .query(({input}) => (input.shout ? input.greeting.toUpperCase() + '!!!' : input.greeting)),
   add: t.procedure
@@ -41,8 +43,8 @@ test('jsdoc descriptions show up in help', async () => {
 test('validation failures come from the typebox validator', async () => {
   await expect(run(router, ['greet', '--greeting', 'hi', '--shout', 'maybe'])).rejects.toMatchInlineSnapshot(
     `
-    CLI exited with code 1
-      Caused by: Error: Invalid input: ✖ must be boolean → at shout
-  `,
+      CLI exited with code 1
+        Caused by: Error: Invalid input: ✖ must be boolean → at shout
+    `,
   )
 })

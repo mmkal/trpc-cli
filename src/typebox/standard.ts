@@ -31,9 +31,7 @@ export interface StandardJsonSchemaConverter {
   output: (options: StandardJsonSchemaOptions) => Record<string, unknown>
 }
 
-type TypeboxStatic<Schema> = Schema extends import('./vendor/type/types/schema.js').TSchema
-  ? Static<Schema>
-  : never
+type TypeboxStatic<Schema> = Schema extends import('./vendor/type/types/schema.js').TSchema ? Static<Schema> : never
 
 /**
  * The `~standard` props attached to schemas built via `trpc-cli/typebox` - StandardSchemaV1 plus
@@ -73,6 +71,7 @@ export interface TypeboxStandardProps<out Schema> {
  * prop - nested sub-schemas don't, which is fine since users pass top-level schemas to
  * `.input(...)`.
  */
+/* eslint-disable @typescript-eslint/no-unused-vars -- merged interface declarations must repeat identical type parameter lists, even though the parameters go unused here */
 declare module './vendor/type/types/any.js' {
   interface TAny {
     readonly '~standard': TypeboxStandardProps<this>
@@ -178,6 +177,7 @@ declare module './vendor/type/types/void.js' {
     readonly '~standard': TypeboxStandardProps<this>
   }
 }
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 /**
  * Attaches a lazily-built, non-enumerable `~standard` prop (StandardSchemaV1 +

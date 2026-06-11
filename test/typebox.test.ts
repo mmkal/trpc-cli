@@ -9,15 +9,17 @@ expect.addSnapshotSerializer(snapshotSerializer)
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
 test('script with jsdoc comments', async () => {
-  const Input = Type.Script(`{
-    /** a message to say hello to new users */
-    greeting: string
-    /**
-     * how many times to repeat the
-     * greeting
-     */
-    repeat?: number
-  }`)
+  const Input = Type.Script(`
+    {
+        /** a message to say hello to new users */
+        greeting: string
+        /**
+         * how many times to repeat the
+         * greeting
+         */
+        repeat?: number
+      }
+  `)
 
   expect(Input).toMatchObject({
     type: 'object',
@@ -42,13 +44,15 @@ test('script with jsdoc comments', async () => {
 })
 
 test('jsdoc on nested properties', () => {
-  const Input = Script(`{
-    /** outer doc */
-    config: {
-      /** inner doc */
-      verbose: boolean
-    }
-  }`)
+  const Input = Script(`
+    {
+        /** outer doc */
+        config: {
+          /** inner doc */
+          verbose: boolean
+        }
+      }
+  `)
 
   expect(Input).toMatchObject({
     properties: {
@@ -61,25 +65,27 @@ test('jsdoc on nested properties', () => {
 })
 
 test('jsdoc-like text inside string literal types is not treated as a comment', () => {
-  const Input = Script(`{
-    weird: '/** not a doc */',
-    real: string
-  }`)
+  const Input = Script(`
+    {
+        weird: '/** not a doc */',
+        real: string
+      }
+  `)
 
   expect(Input.properties.weird).toMatchObject({const: '/** not a doc */'})
   expect(Input.properties.real).not.toHaveProperty('description')
 })
 
-test('~standard validate', async () => {
+test('~standard validate', () => {
   const Person = Type.Object({name: Type.String(), age: Type.Number()})
 
   expect(Person['~standard'].vendor).toBe('typebox')
   expect(Person['~standard'].version).toBe(1)
 
-  const ok = await Person['~standard'].validate({name: 'bob', age: 42})
+  const ok = Person['~standard'].validate({name: 'bob', age: 42})
   expect(ok).toMatchObject({value: {name: 'bob', age: 42}})
 
-  const bad = await Person['~standard'].validate({name: 'bob', age: 'not a number'})
+  const bad = Person['~standard'].validate({name: 'bob', age: 'not a number'})
   expect(bad).toMatchObject({issues: [{path: ['age'], message: expect.stringContaining('number')}]})
 })
 
@@ -94,7 +100,8 @@ test('~standard jsonSchema converter', () => {
 
 test('~standard does not pollute serialization', () => {
   const Person = Type.Object({name: Type.String()})
-  expect(JSON.parse(JSON.stringify(Person))).toEqual({
+  const serialized = JSON.stringify(Person) // JSON round-trip is the point here - schemas should serialize as clean JSON Schema
+  expect(JSON.parse(serialized)).toEqual({
     type: 'object',
     required: ['name'],
     properties: {name: {type: 'string'}},
