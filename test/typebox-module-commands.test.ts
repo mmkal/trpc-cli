@@ -301,3 +301,70 @@ test('module positionals: default value without a type annotation errors clearly
     'Parameter "width" of "pad" has no type annotation. Annotate it, e.g. `(width: string)` or `(width: {someFlag: string})`.',
   )
 })
+
+test('module commands: intersection and multi-line union type aliases keep their tails', async () => {
+  const params = {
+    module: {
+      // regression: these aliases used to be sliced at the first balanced `}`, silently dropping `& {...}`/union tails
+      source: `
+        type Opts = {mode: string} & {
+          /** an extra flag from the intersection tail */
+          extra: string
+        }
+        type Wide =
+          | {kind: 'a'}
+          | {kind: 'b'}
+
+        export async function configure(options: Opts) {
+          return options.mode + ':' + options.extra
+        }
+        export async function pick(options: {choice: Wide}) {
+          return options.choice.kind
+        }
+      `,
+      exports: {
+        configure: async (options: any) => `${options.mode}:${options.extra}`,
+        pick: async (options: any) => options.choice.kind,
+      },
+    },
+  }
+  const help = await runWith(params, ['configure', '--help'])
+  expect(help).toContain('--extra')
+  expect(help).toContain('an extra flag from the intersection tail')
+  expect(await runWith(params, ['configure', '--mode', 'fast', '--extra', 'yes'])).toMatchInlineSnapshot(`"fast:yes"`)
+  // dropping the intersection tail would make --extra an unknown flag; dropping union variants would reject kind: 'b'
+  await expect(runWith(params, ['configure', '--mode', 'fast'])).rejects.toThrowError(/extra/)
+})
+
+test('module commands: generic type parameters containing => are skipped correctly', async () => {
+  const params = {
+    module: {
+      // without the => exception in findBalancedEnd, the `>` of `() => void` would close the generic
+      // bracket early and the whole declaration would mis-slice. (A *parameter* typed as a generic like
+      // `callback?: T` is a different story - it errors as an unresolvable reference, by design.)
+      source: `
+        export async function run<T extends () => void>(options: {name: string}) {
+          return 'ran ' + options.name
+        }
+      `,
+      exports: {run: async (options: any) => `ran ${options.name}`},
+    },
+  }
+  expect(await runWith(params, ['run', '--name', 'build'])).toMatchInlineSnapshot(`"ran build"`)
+})
+
+test('module commands: jsdoc still attaches when a line comment sits between it and the declaration', async () => {
+  const params = {
+    module: {
+      source: `
+        /** does the thing */
+        // eslint-disable-next-line some-rule
+        export async function thing(options: {input: string}) {
+          return options.input
+        }
+      `,
+      exports: {thing: async (options: any) => options.input},
+    },
+  }
+  expect(await runWith(params, ['--help'])).toContain('does the thing')
+})

@@ -581,11 +581,11 @@ const router = t.router({
     .input(
       Type.Script(`
         {
-                /** a message to say hello to new users */
-                greeting: string
-                /** make it loud */
-                shout?: boolean
-              }
+          /** a message to say hello to new users */
+          greeting: string
+          /** make it loud */
+          shout?: boolean
+        }
       `),
     )
     .query(({input}) =>
@@ -600,7 +600,7 @@ cli.run() // e.g. `mycli hello --greeting hi --shout`
 
 Schemas built via `trpc-cli/typebox` are plain TypeBox JSON Schema objects, but with two additions over the upstream package:
 
-1. They carry a (lazily-built, non-enumerable) `~standard` prop implementing [standard-schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema), so they can be passed straight to trpc/orpc/norpc `.input(...)` with no adapter. Upstream TypeBox [won't implement `~standard` natively](https://github.com/sinclairzx81/typebox/discussions/1152) on separation-of-concerns grounds - vendoring lets trpc-cli take that opinion on itself.
+1. They carry a (lazily-built, non-enumerable) `~standard` prop implementing [standard-schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema), so they can be passed straight to trpc/orpc/norpc `.input(...)` with no adapter. Upstream TypeBox [won't implement `~standard` natively](https://github.com/sinclairzx81/typebox/discussions/1152) on separation-of-concerns grounds - vendoring lets trpc-cli take that opinion on itself. One caveat: only schemas *returned by the builders* carry the prop at runtime - a sub-schema plucked from inside a `Type.Script(...)` result (e.g. `Input.properties.foo`) typechecks as having `~standard` but doesn't carry it; use the exported `attachStandardSchema(subSchema)` if you need to pass one to `.input(...)` directly. Similarly, with `Settings.Set({immutableTypes: true})` TypeBox freezes schemas at construction time, so `~standard` can't be attached at all - builders still work, but the frozen schemas they return won't be accepted by `.input(...)`.
 2. The vendored `Type.Script` parses `/** jsdoc comments */` preceding object properties into JSON Schema `description` fields (which become help text for flags, as in the example above). Upstream [treats comments as whitespace](https://github.com/sinclairzx81/typebox/issues/1597) for parser-performance reasons. Static type inference is unaffected - the type-level parser keeps ignoring comments.
 
 Since the example above uses the built-in norpc router (`t` from `trpc-cli` itself), it's a fully working CLI with **zero peer dependencies installed** - no zod, no `@trpc/server`, no `@orpc/server`.
@@ -670,11 +670,13 @@ Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becom
 Details and limitations:
 
 - The path is resolved against `process.cwd()`. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
-- Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file. Functions with no parameters become commands with no arguments.
+- Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file (intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags). Functions with no parameters become commands with no arguments.
 - Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
 - Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...`. Re-exports, `export {f}` statements and default exports are not picked up.
 - For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({module: {source: rawSourceText, exports: await import('./commands.js')}})`.
 - `buildProgram`/`toJSON` aren't supported in this mode (module loading is async; those APIs are sync) - use `run`, or build a router yourself.
+- Don't pass user-controlled strings as `module` - the path is read and dynamically imported, i.e. executed.
+- Bundle-size note: the dynamic import of the module-commands machinery pulls the vendored typebox parser into bundles (~4MB unminified). Irrelevant for the normal Node CLI case; if you're bundling for size, prefer a router with explicit schemas.
 
 ---
 

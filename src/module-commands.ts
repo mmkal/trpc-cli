@@ -213,6 +213,11 @@ const buildPositionalProcedure = (
     if (param.description) item.description = param.description
     if (cliOptional[i]) item.optional = true
   })
+  if (lastIsFlagsObject) {
+    // a trailing options object declared via an intersection alias (`type Opts = {a} & {b}`) parses to allOf
+    // inside the tuple too - flatten it the same way so flag derivation sees a single object schema
+    schema.items[params.length - 1] = mergeIntersection(schema.items[params.length - 1])
+  }
   schema.minItems = cliOptional.includes(true) ? cliOptional.indexOf(true) : params.length
 
   return builder.input(schema as never).handler(({input}) => fn(...(input as unknown[])))
@@ -238,7 +243,37 @@ const parseParamSchema = (commandName: string, param: ExtractedParam, context: R
         `Declare it as \`type X = {...}\` or \`interface X {...}\` in the same file, or inline the type.`,
     )
   }
-  return schema
+  return flattenIntersection(schema)
+}
+
+/**
+ * `type Opts = {a} & {b}` parses to `{allOf: [...]}`, but trpc-cli's flag derivation wants a single top-level object
+ * schema - merge object-only intersections into one (preserving validation behavior, since an intersection of plain
+ * object schemas is equivalent to the merged object). Anything else (mixed intersections, unions) is returned as-is,
+ * and the merged schema gets the original's non-enumerable `~standard` re-attached with the flattened shape exposed
+ * for CLI flag derivation.
+ */
+const flattenIntersection = (schema: unknown): unknown => {
+  const flattened = mergeIntersection(schema)
+  if (flattened !== schema) {
+    const standard = (schema as {'~standard': Record<string, unknown>})['~standard']
+    Object.defineProperty(flattened, '~standard', {
+      configurable: true,
+      enumerable: false,
+      value: {...standard, jsonSchema: {input: () => flattened, output: () => flattened}},
+    })
+  }
+  return flattened
+}
+
+const mergeIntersection = (schema: unknown): unknown => {
+  if (!schema || typeof schema !== 'object' || !Array.isArray((schema as {allOf?: unknown}).allOf)) return schema
+  const {allOf, ...rest} = schema as {allOf: unknown[]} & Record<string, unknown>
+  const subs = allOf.map(mergeIntersection) as Array<{type?: string; properties?: object; required?: string[]}>
+  if (!subs.every(sub => sub && typeof sub === 'object' && sub.type === 'object')) return schema
+  const properties = Object.assign({}, ...subs.map(sub => sub.properties || {})) as object
+  const required = [...new Set(subs.flatMap(sub => sub.required || []))]
+  return {...rest, type: 'object', properties, ...(required.length > 0 ? {required} : {})}
 }
 
 const describeParam = (param: ExtractedParam) => JSON.stringify(param.name || param.typeText)
@@ -268,7 +303,7 @@ const isArrayOfPrimitives = (schema: unknown): boolean => {
 interface SourceScan {
   /** for each index of the source: true if inside a comment or string/template literal */
   masked: boolean[]
-  /** block comments in order of appearance, with their raw text */
+  /** line and block comments in order of appearance, with their raw text */
   comments: Array<{start: number; end: number; text: string}>
 }
 
@@ -288,6 +323,7 @@ const scanSource = (source: string): SourceScan => {
       const newline = source.indexOf('\n', i)
       const end = newline === -1 ? source.length : newline
       for (let j = i; j < end; j++) masked[j] = true
+      comments.push({start: i, end, text: source.slice(i, end)})
       i = end
     } else if (ch === '/' && next === '*') {
       const close = source.indexOf('*/', i + 2)
@@ -340,6 +376,7 @@ const findBalancedEnd = (source: string, scan: SourceScan, start: number, open: 
   let depth = 0
   for (let i = start; i < source.length; i++) {
     if (scan.masked[i]) continue
+    if (close === '>' && source[i] === '>' && source[i - 1] === '=') continue // the `>` of `=>` in e.g. `<T extends () => void>`
     if (source[i] === open) depth++
     else if (source[i] === close) {
       depth--
@@ -349,12 +386,54 @@ const findBalancedEnd = (source: string, scan: SourceScan, start: number, open: 
   throw new Error(`Unbalanced \`${open}${close}\` starting at index ${start} of module source`)
 }
 
-/** Finds the cleaned text of a jsdoc block comment separated from `index` only by whitespace, if any. */
+/**
+ * Returns the index just after the end of a type-alias right-hand side starting at `start`: the first depth-0 `;`,
+ * or a depth-0 newline that doesn't continue the type expression (an adjacent significant `=`/`|`/`&` on either
+ * side of the newline means it continues - covering multi-line unions/intersections with leading or trailing
+ * operators). Tracks `{}[]()<>` depth with the usual exception for the `>` of `=>`.
+ */
+const findTypeAliasEnd = (source: string, scan: SourceScan, start: number): number => {
+  const isComment = (i: number) => scan.comments.some(c => i >= c.start && i < c.end)
+  const nextSignificant = (from: number): string => {
+    for (let j = from; j < source.length; j++) {
+      if (/\s/.test(source[j])) continue
+      if (scan.masked[j] && isComment(j)) continue
+      return source[j]
+    }
+    return ''
+  }
+  let depth = 0
+  let lastSignificant = '='
+  for (let i = start; i < source.length; i++) {
+    const ch = source[i]
+    if (scan.masked[i]) {
+      if (!isComment(i)) lastSignificant = '"' // string literal contents - significant, but never a continuation operator
+      continue
+    }
+    if (ch === ';' && depth === 0) return i
+    if (ch === '\n' && depth === 0) {
+      const continues = /[=|&]/.test(lastSignificant) || /[|&]/.test(nextSignificant(i + 1))
+      if (!continues) return i
+    }
+    if (ch === '{' || ch === '[' || ch === '(' || ch === '<') depth++
+    else if (ch === '}' || ch === ']' || ch === ')') depth--
+    else if (ch === '>' && source[i - 1] !== '=') depth--
+    if (!/\s/.test(ch)) lastSignificant = ch
+  }
+  return source.length
+}
+
+/** Finds the cleaned text of the nearest preceding jsdoc block comment, skipping whitespace and any intervening line comments. */
 const jsdocBefore = (source: string, scan: SourceScan, index: number): string | undefined => {
   let i = index - 1
-  while (i >= 0 && /\s/.test(source[i])) i--
-  const comment = scan.comments.find(c => c.end === i + 1)
-  if (!comment?.text.startsWith('/**')) return undefined
+  let comment: SourceScan['comments'][number] | undefined
+  while (true) {
+    while (i >= 0 && /\s/.test(source[i])) i--
+    comment = scan.comments.find(c => c.end === i + 1)
+    if (!comment) return undefined
+    if (comment.text.startsWith('/**')) break
+    i = comment.start - 1 // a non-jsdoc comment (e.g. `// eslint-disable...`) - keep looking above it
+  }
   return cleanJsdoc(comment.text)
 }
 
@@ -499,15 +578,11 @@ const buildDeclarationContext = (source: string): Record<string, unknown> => {
   for (const match of source.matchAll(/(?<![.\w$])(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=\s*/g)) {
     if (scan.masked[match.index]) continue
     const start = match.index + match[0].length
-    let end: number
-    if (source[start] === '{') {
-      end = findBalancedEnd(source, scan, start, '{', '}')
-    } else {
-      // simple single-line alias like `type Mode = 'a' | 'b'` - slice to end of line, dropping any trailing semicolon
-      const newline = source.indexOf('\n', start)
-      end = newline === -1 ? source.length : newline
-    }
-    const text = `type ${match[1]} = ${source.slice(start, end).replace(/;\s*$/, '')}`
+    // slice to the end of the whole statement, not just the first balanced `{}` - aliases like
+    // `type Opts = {mode: string} & {extra: string}` or multi-line unions must keep their tails,
+    // otherwise the schema would silently lose properties/variants
+    const end = findTypeAliasEnd(source, scan, start)
+    const text = `type ${match[1]} = ${source.slice(start, end).replace(/;\s*$/, '').trim()}`
     declarations.push({name: match[1], text})
   }
   for (const match of source.matchAll(
