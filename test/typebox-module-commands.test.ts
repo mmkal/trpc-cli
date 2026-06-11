@@ -250,7 +250,7 @@ test('module positionals: rest parameters error clearly', async () => {
     },
   }
   await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter "...numbers" of "sum" is a rest parameter, which isn\'t supported. Use an explicitly-typed array parameter (e.g. `numbers: string[]`, which becomes a variadic positional argument), or move it into a trailing options object.',
+    'Parameter "...numbers" of "sum" is a rest parameter, which isn\'t supported. Use an explicitly-typed array parameter (e.g. `numbers: number[]`, which becomes a variadic positional argument), or move it into a trailing options object.',
   )
 })
 
@@ -286,7 +286,7 @@ test('module positionals: optional array parameter errors clearly', async () => 
     },
   }
   await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter 1 ("files") of "lint" is an optional array. Optional array parameters aren\'t supported as positional arguments - make it required (a variadic positional can already receive zero values when callers pass none), or move it into a trailing options object.',
+    'Parameter 1 ("files") of "lint" is an optional array. Optional array parameters aren\'t supported as positional arguments - make it required, or move it into a trailing options object.',
   )
 })
 
@@ -367,4 +367,77 @@ test('module commands: jsdoc still attaches when a line comment sits between it 
     },
   }
   expect(await runWith(params, ['--help'])).toContain('does the thing')
+})
+
+test('module commands: union-of-objects parameter derives union flags', async () => {
+  const params = {
+    module: {
+      // regression (caught in review): the flags-object decision briefly only accepted plain objects,
+      // erroring on unions of objects which the base branch supported
+      source: `
+        export function fetchIt(options: {url: string} | {file: string}) {
+          return 'url' in options ? 'fetching ' + options.url : 'reading ' + options.file
+        }
+      `,
+      exports: {fetchIt: (options: any) => ('url' in options ? `fetching ${options.url}` : `reading ${options.file}`)},
+    },
+  }
+  const help = await runWith(params, ['fetch-it', '--help'])
+  expect(help).toContain('--url')
+  expect(help).toContain('--file')
+  expect(await runWith(params, ['fetch-it', '--url', 'http://x'])).toMatchInlineSnapshot(`"fetching http://x"`)
+  expect(await runWith(params, ['fetch-it', '--file', 'a.txt'])).toMatchInlineSnapshot(`"reading a.txt"`)
+})
+
+test('module positionals: trailing intersection-alias options object is flattened into flags', async () => {
+  const params = {
+    module: {
+      // pins the tuple-level mergeIntersection: without it the trailing allOf wouldn't register as a flags object
+      source: `
+        type Common = {verbose?: boolean}
+        type Opts = Common & {tag: string}
+
+        export function ship(name: string, options: Opts) {
+          return name + ':' + options.tag + (options.verbose ? ' (verbose)' : '')
+        }
+      `,
+      exports: {ship: (name: any, options: any) => `${name}:${options.tag}${options.verbose ? ' (verbose)' : ''}`},
+    },
+  }
+  const help = await runWith(params, ['ship', '--help'])
+  expect(help).toContain('--tag')
+  expect(help).toContain('--verbose')
+  expect(await runWith(params, ['ship', 'v1', '--tag', 'latest', '--verbose'])).toMatchInlineSnapshot(
+    `"v1:latest (verbose)"`,
+  )
+})
+
+test('module positionals: boolean and literal-union positionals', async () => {
+  const params = {
+    module: {
+      source: `
+        export function set(key: 'theme' | 'editor', enabled: boolean) {
+          return key + '=' + enabled
+        }
+      `,
+      exports: {set: (key: any, enabled: any) => `${key}=${enabled}`},
+    },
+  }
+  expect(await runWith(params, ['set', 'theme', 'true'])).toMatchInlineSnapshot(`"theme=true"`)
+  await expect(runWith(params, ['set', 'nope', 'true'])).rejects.toThrowError(/nope/)
+})
+
+test('module positionals: destructured trailing options object works', async () => {
+  const params = {
+    module: {
+      // destructuring is only rejected for *positional* params - a trailing flags object may destructure
+      source: `
+        export function build(target: string, {minify}: {minify?: boolean}) {
+          return 'built ' + target + (minify ? ' (minified)' : '')
+        }
+      `,
+      exports: {build: (target: any, {minify}: any) => `built ${target}${minify ? ' (minified)' : ''}`},
+    },
+  }
+  expect(await runWith(params, ['build', 'web', '--minify'])).toMatchInlineSnapshot(`"built web (minified)"`)
 })

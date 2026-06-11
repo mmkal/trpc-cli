@@ -133,8 +133,8 @@ const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<st
 
   const paramSchemas = command.params.map(param => parseParamSchema(command.name, param, context))
 
-  if (command.params.length === 1 && isObjectSchema(paramSchemas[0])) {
-    // single object parameter: everything is a flag, the function receives the validated object directly
+  if (command.params.length === 1 && isObjectLikeSchema(paramSchemas[0])) {
+    // single object(-union) parameter: everything is a flag, the function receives the validated object directly
     return builder.input(paramSchemas[0] as never).handler(({input}) => fn(input))
   }
 
@@ -158,7 +158,7 @@ const buildPositionalProcedure = (
   paramSchemas: unknown[],
 ): NorpcProcedureLike => {
   const {params} = command
-  const lastIsFlagsObject = isObjectSchema(paramSchemas.at(-1))
+  const lastIsFlagsObject = isObjectLikeSchema(paramSchemas.at(-1))
   const positionalParams = lastIsFlagsObject ? params.slice(0, -1) : params
 
   positionalParams.forEach((param, i) => {
@@ -168,7 +168,7 @@ const buildPositionalProcedure = (
         `${where} is a destructuring pattern, which isn't supported for positional arguments. Give the parameter a name, or move it into a trailing options object.`,
       )
     }
-    if (isObjectSchema(paramSchemas[i])) {
+    if (isObjectLikeSchema(paramSchemas[i])) {
       throw new Error(
         `${where} is an object type, but only the *last* parameter can be an object - leading parameters become positional arguments and a trailing object parameter maps to flags. Move it to the end, or flatten it into the trailing options object.`,
       )
@@ -176,7 +176,7 @@ const buildPositionalProcedure = (
     if (isArrayOfPrimitives(paramSchemas[i])) {
       if (param.optional) {
         throw new Error(
-          `${where} is an optional array. Optional array parameters aren't supported as positional arguments - make it required (a variadic positional can already receive zero values when callers pass none), or move it into a trailing options object.`,
+          `${where} is an optional array. Optional array parameters aren't supported as positional arguments - make it required, or move it into a trailing options object.`,
         )
       }
       return // required array of primitives -> variadic positional, supported by the existing tuple handling
@@ -280,6 +280,17 @@ const describeParam = (param: ExtractedParam) => JSON.stringify(param.name || pa
 
 const isObjectSchema = (schema: unknown): boolean =>
   !!schema && typeof schema === 'object' && (schema as {type?: string}).type === 'object'
+
+/**
+ * Object-ish schemas that can occupy the flags position: plain objects, plus unions of them (`{a} | {b}` → anyOf,
+ * which trpc-cli's flag derivation flattens with incompatible-pair warnings). Intersections are already merged into
+ * plain objects by `flattenIntersection` before this check runs.
+ */
+const isObjectLikeSchema = (schema: unknown): boolean => {
+  if (isObjectSchema(schema)) return true
+  const {anyOf} = (schema || {}) as {anyOf?: unknown[]}
+  return Array.isArray(anyOf) && anyOf.length > 0 && anyOf.every(sub => isObjectLikeSchema(sub))
+}
 
 const primitivePositionalTypes = new Set(['string', 'number', 'boolean', 'integer'])
 
@@ -542,8 +553,9 @@ const parseParams = (functionName: string, paramList: string): ExtractedParam[] 
       .trim()
 
     if (nameText.startsWith('...')) {
+      const annotation = colon === -1 ? 'string[]' : paramList.slice(colon + 1, segment.end).trim()
       throw new Error(
-        `Parameter "${nameText}" of "${functionName}" is a rest parameter, which isn't supported. Use an explicitly-typed array parameter (e.g. \`${nameText.slice(3)}: string[]\`, which becomes a variadic positional argument), or move it into a trailing options object.`,
+        `Parameter "${nameText}" of "${functionName}" is a rest parameter, which isn't supported. Use an explicitly-typed array parameter (e.g. \`${nameText.slice(3)}: ${annotation}\`, which becomes a variadic positional argument), or move it into a trailing options object.`,
       )
     }
     const destructured = nameText.startsWith('{') || nameText.startsWith('[')
