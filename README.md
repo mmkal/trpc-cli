@@ -388,7 +388,9 @@ const router = t.router({
 
 #### Complex Inputs with JSON
 
-Procedures with inputs that cannot be cleanly mapped to positional arguments and CLI options are automatically configured to accept a JSON string via the `--input` option. This ensures that every procedure in your router is accessible via the CLI, even those with complex input types.
+Procedures with inputs that cannot be cleanly mapped to positional arguments and CLI options are automatically configured to accept a JSON string via the `--json` option. This ensures that every procedure in your router is accessible via the CLI, even those with complex input types.
+
+>Note: in previous versions this option was called `--input` - it was renamed to `--json` (a breaking change, while trpc-cli is at major version 0).
 
 ```ts
 const router = t.router({
@@ -402,12 +404,34 @@ const router = t.router({
 const cli = createCli({router})
 
 // Even though the input isn't ideal for CLI, you can still use it:
-// mycli foo --input '["first", {"abc": "middle"}, "last"]'
+// mycli foo --json '["first", {"abc": "middle"}, "last"]'
 ```
 
 Rather than ignoring these procedures, trpc-cli makes them available through JSON input, allowing you to pass complex data structures that wouldn't work well with traditional CLI arguments.
 
 You can also explicitly opt into this behavior for any procedure by setting `jsonInput: true` in its meta, regardless of whether its input could be mapped to CLI arguments.
+
+##### Global JSON input
+
+You can make *every* command accept `--json` as an alternative to its regular flags and positional arguments with `createCli({jsonInput: true})`:
+
+```ts
+const router = t.router({
+  add: t.procedure
+    .input(z.object({left: z.number(), right: z.number()}))
+    .query(({input}) => input.left + input.right),
+})
+
+const cli = createCli({router, jsonInput: true})
+
+// Both of these work:
+// mycli add --left 1 --right 2
+// mycli add --json '{"left": 1, "right": 2}'
+```
+
+When `--json` is passed, it must supply the *complete* procedure input - schema-derived flags and positional arguments are unavailable, so something like `mycli add --left 1 --json '{"right": 2}'` results in an unknown option error. The JSON payload still goes through the procedure's own input validation. This can be useful for machine-generated invocations (e.g. an LLM calling your CLI), where serialising one JSON blob is more reliable than building up an argv.
+
+Individual procedures can opt out by setting `jsonInput: false` in their meta - they will always be built from their schema and won't accept `--json`.
 
 #### Advanced Meta Configuration
 
@@ -430,7 +454,7 @@ const router = t.router({
 
 You can use any validator that [trpc supports](https://trpc.io/docs/server/validators), but for inputs to be converted into CLI arguments/options, they must be JSON schema compatible. The following validators are supported so far. Contributions are welcome for other validators - the requirement is that they must have a helper function that converts them into a JSON schema representation.
 
-Note that JSON schema representations are not in general perfect 1-1 mappings with every validator library's API, so some procedures may default to use the JSON `--input` option instead.
+Note that JSON schema representations are not in general perfect 1-1 mappings with every validator library's API, so some procedures may default to use the JSON `--json` option instead.
 
 ### zod
 
@@ -483,7 +507,7 @@ cli.run() // e.g. `mycli add --left 1 --right 2`
 ```
 
 - Note: you will need to install `arktype` as a dependency separately
-- Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` option to pass in a JSON string. Check your CLI help text to see if this is the case. See https://github.com/arktypeio/arktype/issues/1379 for more info.
+- Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--json` option to pass in a JSON string. Check your CLI help text to see if this is the case. See https://github.com/arktypeio/arktype/issues/1379 for more info.
 
 ### valibot
 

@@ -7,7 +7,7 @@ size: medium
 
 ## Status Summary
 
-Spec committed, implementation not started. This is the alternate, much simpler design for what PR #199 (`json-mode` branch, now back in draft) implements with a Commander subclass and conflict wiring. Decisions below were made in discussion with the owner on 2026-06-10/11.
+Implementation complete. The `--input` → `--json` rename, global `createCli({jsonInput: true})` with argv-sniffing, the cosmetic help-only `--json` option, tests (test/json-input.test.ts plus updated snapshots across the suite), README docs and the type test are all done. This is the alternate, much simpler design for what PR #199 (`json-mode` branch, now back in draft) implements with a Commander subclass and conflict wiring. Decisions below were made in discussion with the owner on 2026-06-10/11.
 
 ## Goal
 
@@ -40,23 +40,23 @@ A token activates JSON mode iff it is exactly `--json` or starts with `--json=`,
 
 ## Checklist
 
-- [ ] Rename the JSON option in `jsonProcedureInputs` (`src/parse-router.ts`) from `input` to `json`, including `getPojoInput` and the description. Update all existing tests/snapshots that reference `--input` JSON fallback usage.
-- [ ] Add `jsonInput?: boolean` to `TrpcCliParams` (`src/types.ts`) with a jsdoc explaining the global hybrid behavior.
-- [ ] Implement argv detection in `buildProgram` (`src/index.ts`) per the detection rule above, and thread "JSON mode active" into command construction (use `jsonProcedureInputs` for leaves; respect `meta.jsonInput: false` opt-out).
-- [ ] In flags mode under global `jsonInput`, add the cosmetic `--json <json>` help-only option to leaf commands (skip opted-out procedures).
-- [ ] Tests (new `test/json-input.test.ts`; copy/adapt from the `json-mode` branch where appropriate — malformed JSON, payload-goes-through-validation, variadic cases carry over with adjusted expectations):
-  - [ ] `--json '{...}'` works as complete input for object, tuple-with-options, and positional-meta schemas
-  - [ ] `--json` + another flag → unknown option error (replaces #199's conflicts test)
-  - [ ] malformed JSON errors usefully
-  - [ ] payload still validated by the procedure's schema (Zod issue surfaces in CliValidationError)
-  - [ ] `--json='{...}'` equals-form activates JSON mode
-  - [ ] literal `--json` after `--` terminator does NOT activate JSON mode
-  - [ ] explicit `run({argv})` is sniffed, not `process.argv`
-  - [ ] help in flags mode shows `--json` on leaf commands; JSON-mode help shows only `--json`
-  - [ ] `meta.jsonInput: false` opt-out under global mode
-  - [ ] `meta.jsonInput: true` procedures use `--json` (renamed from `--input`)
-- [ ] README: rename `--input` references, document `createCli({jsonInput: true})`, note the v0 breaking change prominently.
-- [ ] Type test: `TrpcCliParams` has `jsonInput?: boolean`.
+- [x] Rename the JSON option in `jsonProcedureInputs` (`src/parse-router.ts`) from `input` to `json`, including `getPojoInput` and the description. Update all existing tests/snapshots that reference `--input` JSON fallback usage. _done - option key is now `json` and marked `required` so it renders `--json <json>`; snapshots updated in zod3/zod4/arktype/valibot/norpc/orpc tests; test-run.ts heuristic now matches on the "Input formatted as JSON" description since the flags collide with the cosmetic option_
+- [x] Add `jsonInput?: boolean` to `TrpcCliParams` (`src/types.ts`) with a jsdoc explaining the global hybrid behavior. _done, also updated the `TrpcCliMeta.jsonInput` jsdoc to mention `--json` and the `false` opt-out_
+- [x] Implement argv detection in `buildProgram` (`src/index.ts`) per the detection rule above, and thread "JSON mode active" into command construction (use `jsonProcedureInputs` for leaves; respect `meta.jsonInput: false` opt-out). _done via `argvIncludesJsonFlag` helper + `jsonModeActive` const in buildProgram; `run` now calls `buildProgram(runParams || {})` so direct `buildProgram()`/`toJSON()` calls stay in flags mode while `run()` sniffs process.argv_
+- [x] In flags mode under global `jsonInput`, add the cosmetic `--json <json>` help-only option to leaf commands (skip opted-out procedures). _done in configureCommand; skipped when a `--json` option already exists (e.g. unparseable-schema fallback, or a schema property named `json`)_
+- [x] Tests (new `test/json-input.test.ts`; copy/adapt from the `json-mode` branch where appropriate — malformed JSON, payload-goes-through-validation, variadic cases carry over with adjusted expectations):
+  - [x] `--json '{...}'` works as complete input for object, tuple-with-options, and positional-meta schemas _first test in test/json-input.test.ts, includes deeply nested routers_
+  - [x] `--json` + another flag → unknown option error (replaces #199's conflicts test) _`unknown option '--foo'`_
+  - [x] malformed JSON errors usefully _commander InvalidOptionArgumentError with "Malformed JSON" hint_
+  - [x] payload still validated by the procedure's schema (Zod issue surfaces in CliValidationError) _missing-required and wrong-type cases_
+  - [x] `--json='{...}'` equals-form activates JSON mode
+  - [x] literal `--json` after `--` terminator does NOT activate JSON mode _`--json` becomes a positional operand_
+  - [x] explicit `run({argv})` is sniffed, not `process.argv` _sets process.argv to contain --json, runs explicit argv without it, asserts flags mode_
+  - [x] help in flags mode shows `--json` on leaf commands; JSON-mode help shows only `--json` _via `--json '{}' --help`_
+  - [x] `meta.jsonInput: false` opt-out under global mode _flags work, no --json in help, --json is unknown option; sibling procedure unaffected_
+  - [x] `meta.jsonInput: true` procedures use `--json` (renamed from `--input`) _works without the global setting_
+- [x] README: rename `--input` references, document `createCli({jsonInput: true})`, note the v0 breaking change prominently. _new "Global JSON input" subsection under "Complex Inputs with JSON", with a rename note blockquote; remaining `--input` mentions in validators sections renamed_
+- [x] Type test: `TrpcCliParams` has `jsonInput?: boolean`. _added to test/types.test.ts_
 
 ## Open questions / assumptions (made unilaterally, flag in PR if controversial)
 
@@ -71,4 +71,8 @@ A token activates JSON mode iff it is exactly `--json` or starts with `--json=`,
 
 ## Implementation Notes
 
-(log added during implementation)
+- The renamed JSON option is `--json <json>` (value-required) rather than the old `--input [json]` (value-optional). Implemented by adding `required: ['json']` to the options JSON schema in `jsonProcedureInputs` - that flows through the existing option-building logic in index.ts and produces `<json>` brackets without making the option itself mandatory (so procedures with optional inputs can still be invoked with no arguments at all).
+- Detection nuance discovered while reconciling two spec statements ("sniff process.argv when no explicit argv" vs "buildProgram() without runParams builds in flags mode"): `run()` now calls `buildProgram(runParams || {})`, so the run path always sniffs (explicit argv if provided, else process.argv minus the node/script prefix), while user-facing `buildProgram()`/`toJSON()` with no arguments build in flags mode.
+- Commander checks missing mandatory options *before* unknown options, so an opted-out procedure with a required flag invoked with only `--json` errors with "required option ... not specified" rather than "unknown option '--json'". Both are failures, just a message-ordering quirk - the opt-out test uses an optional flag to assert the unknown-option message.
+- The test-run.ts `expectJsonInput` heuristic now matches on the `Input formatted as JSON` description text instead of option flags, because the cosmetic `--json <json>` option (expected in flags-mode help under global jsonInput) has identical flags to the real JSON-only option.
+- Edge case (tested): a schema property literally named `json` under global jsonInput - passing `--json` always activates JSON mode, so the property can only be supplied through the JSON payload. In flags mode the schema-derived `--json <string>` option is shown in help (the cosmetic option is skipped to avoid a duplicate registration); it's unreachable as a flag. Deemed acceptable for an edge case, flagged here for review.
