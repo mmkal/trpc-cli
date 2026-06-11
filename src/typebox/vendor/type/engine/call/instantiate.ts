@@ -1,0 +1,170 @@
+/*--------------------------------------------------------------------------
+
+TypeBox
+
+The MIT License (MIT)
+
+Copyright (c) 2017-2026 Haydn Paterson 
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+---------------------------------------------------------------------------*/
+
+// deno-fmt-ignore-file
+
+import { Guard } from '../../../guard/index.js'
+import { type TSchema } from '../../types/schema.js'
+import { type TParameter } from '../../types/parameter.js'
+import { type TCallConstruct, CallConstruct } from '../../types/call.js'
+import { type TRef, Ref } from '../../types/ref.js'
+import { type TGeneric, IsGeneric } from '../../types/generic.js'
+import { type TProperties } from '../../types/properties.js'
+
+import { type TEvaluateUnion, EvaluateUnion } from '../evaluate/index.js'
+import { type TInstantiateType, InstantiateType } from '../instantiate.js'
+import { type TInstantiateTypes, InstantiateTypes } from '../instantiate.js'
+import { type TState, State } from '../instantiate.js'
+
+// ------------------------------------------------------------------
+// Infrastructure
+// ------------------------------------------------------------------
+import { type TDistributeArguments, DistributeArguments } from './distribute_arguments.js'
+import { type TResolveTarget, ResolveTarget } from './resolve_target.js'
+import { type TResolveArgumentsContext, ResolveArgumentsContext } from './resolve_arguments.js'
+
+// ------------------------------------------------------------------
+// Peek: Top Element in the Stack or Empty
+// ------------------------------------------------------------------
+type TPeek<State extends TState, 
+  Result extends string = State['callstack'] extends [...infer _ extends string[], infer Top extends string] ? Top : ''
+> = Result
+function Peek<State extends TState>(state: State): TPeek<State> {
+  const result = Guard.IsGreaterThan(state.callstack.length, 0) ? state.callstack[state.callstack.length - 1] : ''
+  return result as never
+}
+// ------------------------------------------------------------------
+// IsTailCall
+//
+// Returns true if Name matches the top of the CallStack, indicating
+// the generic is directly self-recursive at the tail position.
+// CallInstantiate will then return a CallDeferred carrying only the
+// InstantiatedArguments, which CallDispatch trampolines on the
+// next iteration rather than recursing immediately.
+//
+// ------------------------------------------------------------------
+type TIsTailCall<State extends TState, Name extends string,
+  Result extends boolean = TPeek<State> extends Name ? true : false
+> = Result
+function IsTailCall<State extends TState, Name extends string>(state: State, name: Name): TIsTailCall<State, Name> {
+  const result = Guard.IsEqual(Peek(state), name)
+  return result as never
+}
+// ------------------------------------------------------------------
+// CallDispatch
+//
+// Binds Arguments to Parameters via ResolveArgumentsContext, then
+// instantiates the Expression under that context with the target
+// pushed onto the CallStack. The resulting ReturnType is either a
+// fully instantiated type or a CallDeferred if IsTailCall fired,
+// which is then re-instantiated under the original Context to
+// resolve any exterior bindings.
+//
+// ------------------------------------------------------------------
+type TCallDispatch<Context extends TProperties, State extends TState, Target extends TRef, Parameters extends TParameter[], Expression extends TSchema, Arguments extends TSchema[],
+  ArgumentsContext extends TProperties = TResolveArgumentsContext<Context, State, Parameters, Arguments>,
+  ReturnType extends TSchema = TInstantiateType<ArgumentsContext, TState<[...State['callstack'], Target['$ref']], State['visited']>, Expression>,
+> = TInstantiateType<ArgumentsContext, TState<[], []>, ReturnType>
+function CallDispatch<Context extends TProperties, State extends TState, Target extends TRef, Parameters extends TParameter[], Expression extends TSchema, Arguments extends TSchema[]>
+  (context: Context, state: State, target: Target, parameters: [...Parameters], expression: Expression, arguments_: [...Arguments]):
+    TCallDispatch<Context, State, Target, Parameters, Expression, Arguments> {
+  const argumentsContext = ResolveArgumentsContext(context, state, parameters, arguments_) as TProperties
+  const returnType = InstantiateType(argumentsContext, State([...state['callstack'], target['$ref']], state['visited']), expression) as TSchema
+  return InstantiateType(argumentsContext, State([], []), returnType) as never
+}
+// ------------------------------------------------------------------
+// CallDistributed
+//
+// Calls CallDispatch once per variant derived from DistributeArguments,
+// accumulating results into a TSchema[]. The logic here is a bit
+// sketchy as we're up against TypeScript's stack depth limits, so we
+// eagerly hoist the ReturnType via `extends infer` before each
+// recursive call. We are stretching stack limits here (review).
+//
+// ------------------------------------------------------------------
+type TCallDistributed<Context extends TProperties, State extends TState, Target extends TRef, Parameters extends TParameter[], Expression extends TSchema, DistributedArguments extends TSchema[][], Result extends TSchema[] = []> = (
+  DistributedArguments extends [infer Arguments extends TSchema[], ...infer DistributedArguments extends TSchema[][]]
+    ? TCallDispatch<Context, State, Target, Parameters, Expression, Arguments> extends infer ReturnType extends TSchema // excessive-stack-depth-prevention
+      ? TCallDistributed<Context, State, Target, Parameters, Expression, DistributedArguments, [...Result, ReturnType]>
+      : never // unreachable - excessive-stack-depth-prevention
+    : Result
+)
+function CallDistributed<Context extends TProperties, State extends TState, Target extends TRef, Parameters extends TParameter[], Expression extends TSchema, DistributedArguments extends TSchema[][]>
+  (context: Context, state: State, target: Target, parameters: [...Parameters], expression: Expression, distributedArguments: [...DistributedArguments]):
+    TCallDistributed<Context, State, Target, Parameters, Expression, DistributedArguments> {
+  return distributedArguments.reduce((result, arguments_) =>
+    [...result, CallDispatch(context, state, target, parameters, expression, arguments_) as never]
+  , []) as never
+}
+// ------------------------------------------------------------------
+// Immediate
+// ------------------------------------------------------------------
+type TCallImmediate<Context extends TProperties, State extends TState, Target extends TRef, Parameters extends TParameter[], Expression extends TSchema, InstantiatedArguments extends TSchema[],
+  DistributedArguments extends TSchema[][] = TDistributeArguments<Parameters, InstantiatedArguments, Expression>,
+  ReturnTypes extends TSchema[] = TCallDistributed<Context, State, Target, Parameters, Expression, DistributedArguments>,
+  Result extends TSchema = ReturnTypes['length'] extends 1 ? ReturnTypes[0] : TEvaluateUnion<ReturnTypes>
+> = Result
+function CallImmediate<Context extends TProperties, State extends TState, Target extends TRef, Parameters extends TParameter[], Expression extends TSchema, InstantiatedArguments extends TSchema[]>
+  (context: Context, state: State, target: Target, parameters: [...Parameters], expression: Expression, arguments_: [...InstantiatedArguments]):
+    TCallImmediate<Context, State, Target, Parameters, Expression, InstantiatedArguments> {
+  const distributedArguments = DistributeArguments(parameters, arguments_, expression) as TSchema[][]
+  const returnTypes = CallDistributed(context, state, target, parameters, expression, distributedArguments) as TSchema[]
+  const result = Guard.IsEqual(returnTypes.length, 1) ? returnTypes[0] : EvaluateUnion(returnTypes)
+  return result as never
+}
+// ------------------------------------------------------------------
+// Instantiate
+// ------------------------------------------------------------------
+export type TCallInstantiate<Context extends TProperties, State extends TState, Target extends TSchema, Arguments extends TSchema[],
+  InstantiatedArguments extends TSchema[] = TInstantiateTypes<Context, State, Arguments>,
+  Resolved extends [string, TSchema] = TResolveTarget<Context, Target, Arguments>,
+  Name extends string = Resolved[0], 
+  Type extends TSchema = Resolved[1],
+  Result extends TSchema = (
+    Type extends TGeneric<infer Parameters extends TParameter[], infer Expression extends TSchema>
+    ? TIsTailCall<State, Name> extends true
+      ? TCallConstruct<TRef<Name>, InstantiatedArguments>
+      : TCallImmediate<Context, State, TRef<Name>, Parameters, Expression, InstantiatedArguments>
+    : TCallConstruct<Target, InstantiatedArguments>
+  )> = Result
+export function CallInstantiate<Context extends TProperties, State extends TState, Target extends TSchema, Arguments extends TSchema[]>
+  (context: Context, state: State, target: Target, arguments_: [...Arguments]):
+  TCallInstantiate<Context, State, Target, Arguments> {
+  const instantiatedArguments = InstantiateTypes(context, state, arguments_) as TSchema[]
+  const resolved = ResolveTarget(context, target, arguments_) as [string, TSchema]
+  const name = resolved[0]
+  const type = resolved[1]
+  const result = (
+    IsGeneric(type)
+      ? IsTailCall(state, name)
+        ? CallConstruct(Ref(name), instantiatedArguments)
+        : CallImmediate(context, state, Ref(name), type.parameters, type.expression, instantiatedArguments)
+      : CallConstruct(target, instantiatedArguments)
+  )
+  return result as never
+}
