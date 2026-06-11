@@ -14,7 +14,9 @@
  */
 
 import type {StandardSchemaV1} from '../standard-schema/contract.js'
-import type {Static} from './vendor/index.js'
+// note: TSchema/TProperties/TEnumValue/TLiteralValue are needed for the interface augmentations
+// below - merged interface declarations must repeat identical type parameter lists.
+import type {Static, TEnumValue, TLiteralValue, TProperties, TSchema} from './vendor/index.js'
 import {Validator} from './vendor/schema/index.js'
 
 export interface StandardJsonSchemaOptions {
@@ -29,23 +31,20 @@ export interface StandardJsonSchemaConverter {
   output: (options: StandardJsonSchemaOptions) => Record<string, unknown>
 }
 
-type TypeboxStatic<Schema> = Schema extends import('./vendor/type/types/schema.js').TSchema
-  ? Static<Schema>
-  : never
+type TypeboxStatic<Schema> = Schema extends import('./vendor/type/types/schema.js').TSchema ? Static<Schema> : never
 
 /**
  * The `~standard` props attached to schemas built via `trpc-cli/typebox` - StandardSchemaV1 plus
  * [Standard JSON Schema](https://standardschema.dev/json-schema).
  *
  * Generic over the *schema* type (not the inferred static type), with an explicit `out` variance
- * annotation. This matters for compile performance: the prop is declared on the base `TSchema`
- * interface below, so it participates in every schema-to-schema assignability check inside the
+ * annotation. This matters for compile performance: the prop is declared on the concrete schema
+ * interfaces below, so it participates in schema-to-schema assignability checks inside the
  * vendored typebox source. The variance annotation lets tsc relate
  * `TypeboxStandardProps<A> extends TypeboxStandardProps<B>` by relating `A extends B` directly
  * (a relation it is usually already computing), instead of structurally expanding
- * `Static<A>`/`Static<B>` - which OOMs tsc at 4GB on the 700-file vendored source.
- * `Static` evaluation is deferred to the points that actually need the inferred type
- * (trpc/orpc/norpc `.input(...)` inference).
+ * `Static<A>`/`Static<B>`. `Static` evaluation is deferred to the points that actually need the
+ * inferred type (trpc/orpc/norpc `.input(...)` inference).
  */
 export interface TypeboxStandardProps<out Schema> {
   readonly version: 1
@@ -55,22 +54,130 @@ export interface TypeboxStandardProps<out Schema> {
   readonly jsonSchema: StandardJsonSchemaConverter
 }
 
-declare module './vendor/type/types/schema.js' {
-  /**
-   * Type-level declaration of the `~standard` prop that the `trpc-cli/typebox` export surface
-   * attaches (lazily, non-enumerably) to schemas returned by its builders. Declared on the base
-   * TSchema interface (using the polymorphic `this` type) so that every builder keeps its exact
-   * vendored signature while the schemas it returns still satisfy StandardSchemaV1 - which is
-   * what lets trpc/orpc/norpc `.input(...)` accept them and infer input types via `Static`.
-   *
-   * Note: at runtime only schemas returned by `trpc-cli/typebox` builders actually carry the
-   * prop - nested sub-schemas don't, which is fine since users pass top-level schemas to
-   * `.input(...)`.
-   */
-  interface TSchema {
+/**
+ * Type-level declaration of the `~standard` prop that the `trpc-cli/typebox` export surface
+ * attaches (lazily, non-enumerably) to schemas returned by its builders. Declared on the
+ * *concrete* schema interfaces (using the polymorphic `this` type) so that every builder keeps
+ * its exact vendored signature while the schemas it returns still satisfy StandardSchemaV1 -
+ * which is what lets trpc/orpc/norpc `.input(...)` accept them and infer input types via
+ * `Static`.
+ *
+ * NOT declared on the base `TSchema` interface: `TSchema` is an empty interface that virtually
+ * every type inside the 700-file vendored source gets structurally related to, and adding a
+ * required member to it sends tsc into multi-minute compiles ending in 4GB OOMs. The concrete
+ * interfaces are only related to each other, which stays cheap.
+ *
+ * Note: at runtime only schemas returned by `trpc-cli/typebox` builders actually carry the
+ * prop - nested sub-schemas don't, which is fine since users pass top-level schemas to
+ * `.input(...)`.
+ */
+/* eslint-disable @typescript-eslint/no-unused-vars -- merged interface declarations must repeat identical type parameter lists, even though the parameters go unused here */
+declare module './vendor/type/types/any.js' {
+  interface TAny {
     readonly '~standard': TypeboxStandardProps<this>
   }
 }
+declare module './vendor/type/types/array.js' {
+  interface TArray<Type extends TSchema = TSchema> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/bigint.js' {
+  interface TBigInt {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/boolean.js' {
+  interface TBoolean {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/enum.js' {
+  interface TEnum<Values extends TEnumValue[] = TEnumValue[]> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/integer.js' {
+  interface TInteger {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/intersect.js' {
+  interface TIntersect<Types extends TSchema[] = TSchema[]> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/literal.js' {
+  interface TLiteral<Value extends TLiteralValue = TLiteralValue> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/never.js' {
+  interface TNever {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/null.js' {
+  interface TNull {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/number.js' {
+  interface TNumber {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/object.js' {
+  interface TObject<Properties extends TProperties = TProperties> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/record.js' {
+  interface TRecord<Key extends string = string, Value extends TSchema = TSchema> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/ref.js' {
+  interface TRef<Ref extends string = string> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/string.js' {
+  interface TString {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/symbol.js' {
+  interface TSymbol {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/tuple.js' {
+  interface TTuple<Types extends TSchema[] = TSchema[]> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/union.js' {
+  interface TUnion<Types extends TSchema[] = TSchema[]> {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/undefined.js' {
+  interface TUndefined {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/unknown.js' {
+  interface TUnknown {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+declare module './vendor/type/types/void.js' {
+  interface TVoid {
+    readonly '~standard': TypeboxStandardProps<this>
+  }
+}
+/* eslint-enable @typescript-eslint/no-unused-vars */
 
 /**
  * Attaches a lazily-built, non-enumerable `~standard` prop (StandardSchemaV1 +

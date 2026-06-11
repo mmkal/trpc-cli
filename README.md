@@ -578,14 +578,18 @@ import Type from 'trpc-cli/typebox'
 const router = t.router({
   hello: t.procedure
     .input(
-      Type.Script(`{
-        /** a message to say hello to new users */
-        greeting: string
-        /** make it loud */
-        shout?: boolean
-      }`),
+      Type.Script(`
+        {
+                /** a message to say hello to new users */
+                greeting: string
+                /** make it loud */
+                shout?: boolean
+              }
+      `),
     )
-    .query(({input}) => (input.shout ? input.greeting.toUpperCase() + '!!!' : input.greeting)),
+    .query(({input}) =>
+      input.shout ? input.greeting.toUpperCase() + '!!!' : input.greeting,
+    ),
 })
 
 const cli = createCli({router})

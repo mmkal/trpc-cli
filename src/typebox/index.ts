@@ -12,7 +12,7 @@
  * import Type from 'trpc-cli/typebox'
  *
  * const Input = Type.Script(`{
- *   // a message to say hello to new users
+ *   /** a message to say hello to new users *\/
  *   greeting: string
  * }`)
  */
@@ -28,7 +28,7 @@ export type {StandardJsonSchemaConverter, StandardJsonSchemaOptions, TypeboxStan
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const wrap = <Fn extends (...args: any[]) => any>(fn: Fn): Fn =>
-  ((...args: never[]) => attachStandardSchema(fn(...args))) as Fn
+  ((...args: never[]) => attachStandardSchema(fn(...args) as unknown)) as Fn
 
 /**
  * The typebox `Type` namespace, with every builder wrapped so that returned schemas carry a
