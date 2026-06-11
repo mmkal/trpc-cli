@@ -30,6 +30,16 @@ THE SOFTWARE.
 // deno-lint-ignore-file
 // auto-generated: design/syntax/syntax.ts
 
+// trpc-cli local modification to upstream typebox@1.2.8
+// (https://github.com/sinclairzx81/typebox @ dfec33e10fd9f3d0dc656f88b45def8e66573ab7, MIT):
+// adds JsDoc/OptionalJsDoc runtime parsers and prepends OptionalJsDoc to the runtime Property
+// parser, so `/** ... */` comments preceding object properties become `description` fields.
+// Runtime only - the type-level parser (TProperty) keeps treating comments as trivia, so
+// static inference is unaffected. Adapted from mmkal's fork:
+// https://github.com/sinclairzx81/typebox/compare/main...mmkal:typebox:codex/script-jsdoc-description
+// (upstream issue: https://github.com/sinclairzx81/typebox/issues/1597).
+// See src/typebox/jsdoc-description.patch for the full local diff.
+
 import * as S from './mapping.js'
 import * as Token from './token/index.js'
 
@@ -178,6 +188,9 @@ export const GenericCallArgumentList = (input: string): [unknown, string] | [] =
 export const GenericCallArguments = (input: string): [unknown, string] | [] => If(If(Token.Const('<', input), ([_0, input]) => If(GenericCallArgumentList(input), ([_1, input]) => If(Token.Const('>', input), ([_2, input]) => [[_0, _1, _2], input]))), ([_0, input]) => [S.GenericCallArgumentsMapping(_0 as [unknown, unknown, unknown]), input])
 export const GenericCall = (input: string): [unknown, string] | [] => If(If(Token.Ident(input), ([_0, input]) => If(GenericCallArguments(input), ([_1, input]) => [[_0, _1], input])), ([_0, input]) => [S.GenericCallMapping(_0 as [unknown, unknown]), input])
 export const OptionalSemiColon = (input: string): [unknown, string] | [] => If(If(If(Token.Const(';', input), ([_0, input]) => [[_0], input]), ([_0, input]) => [_0, input], () => If([[], input], ([_0, input]) => [_0, input], () => [])), ([_0, input]) => [S.OptionalSemiColonMapping(_0 as [unknown] | []), input])
+// trpc-cli local modification: JsDoc parsers (the real change would need to be upstream in parsebox)
+export const JsDoc = (input: string): [unknown, string] | [] => If(Token.JsDoc(input), ([_0, input]) => [S.JsDocMapping(_0 as string), input])
+export const OptionalJsDoc = (input: string): [unknown, string] | [] => If(If(If(JsDoc(input), ([_0, input]) => [[_0], input]), ([_0, input]) => [_0, input], () => If([[], input], ([_0, input]) => [_0, input], () => [])), ([_0, input]) => [S.OptionalJsDocMapping(_0 as [unknown] | []), input])
 export const KeywordString = (input: string): [unknown, string] | [] => If(Token.Const('string', input), ([_0, input]) => [S.KeywordStringMapping(_0 as 'string'), input])
 export const KeywordNumber = (input: string): [unknown, string] | [] => If(Token.Const('number', input), ([_0, input]) => [S.KeywordNumberMapping(_0 as 'number'), input])
 export const KeywordBoolean = (input: string): [unknown, string] | [] => If(Token.Const('boolean', input), ([_0, input]) => [S.KeywordBooleanMapping(_0 as 'boolean'), input])
@@ -225,7 +238,8 @@ export const PropertyKeyIndex = (input: string): [unknown, string] | [] => If(If
 export const PropertyKey = (input: string): [unknown, string] | [] => If(If(PropertyKeyNumber(input), ([_0, input]) => [_0, input], () => If(PropertyKeyIdent(input), ([_0, input]) => [_0, input], () => If(PropertyKeyQuoted(input), ([_0, input]) => [_0, input], () => If(PropertyKeyIndex(input), ([_0, input]) => [_0, input], () => [])))), ([_0, input]) => [S.PropertyKeyMapping(_0 as unknown), input])
 export const Readonly = (input: string): [unknown, string] | [] => If(If(If(Token.Const('readonly', input), ([_0, input]) => [[_0], input]), ([_0, input]) => [_0, input], () => If([[], input], ([_0, input]) => [_0, input], () => [])), ([_0, input]) => [S.ReadonlyMapping(_0 as [unknown] | []), input])
 export const Optional = (input: string): [unknown, string] | [] => If(If(If(Token.Const('?', input), ([_0, input]) => [[_0], input]), ([_0, input]) => [_0, input], () => If([[], input], ([_0, input]) => [_0, input], () => [])), ([_0, input]) => [S.OptionalMapping(_0 as [unknown] | []), input])
-export const Property = (input: string): [unknown, string] | [] => If(If(Readonly(input), ([_0, input]) => If(PropertyKey(input), ([_1, input]) => If(Optional(input), ([_2, input]) => If(Token.Const(':', input), ([_3, input]) => If(Type(input), ([_4, input]) => [[_0, _1, _2, _3, _4], input]))))), ([_0, input]) => [S.PropertyMapping(_0 as [unknown, unknown, unknown, unknown, unknown]), input])
+// trpc-cli local modification: leading OptionalJsDoc captures property descriptions (appended as the 6th tuple element)
+export const Property = (input: string): [unknown, string] | [] => If(If(OptionalJsDoc(input), ([_0, input]) => If(Readonly(input), ([_1, input]) => If(PropertyKey(input), ([_2, input]) => If(Optional(input), ([_3, input]) => If(Token.Const(':', input), ([_4, input]) => If(Type(input), ([_5, input]) => [[_1, _2, _3, _4, _5, _0], input])))))), ([_0, input]) => [S.PropertyMapping(_0 as [unknown, unknown, unknown, unknown, unknown, unknown]), input])
 export const PropertyDelimiter = (input: string): [unknown, string] | [] => If(If(If(Token.Const(',', input), ([_0, input]) => If(Token.Const('\n', input), ([_1, input]) => [[_0, _1], input])), ([_0, input]) => [_0, input], () => If(If(Token.Const(';', input), ([_0, input]) => If(Token.Const('\n', input), ([_1, input]) => [[_0, _1], input])), ([_0, input]) => [_0, input], () => If(If(Token.Const(',', input), ([_0, input]) => [[_0], input]), ([_0, input]) => [_0, input], () => If(If(Token.Const(';', input), ([_0, input]) => [[_0], input]), ([_0, input]) => [_0, input], () => If(If(Token.Const('\n', input), ([_0, input]) => [[_0], input]), ([_0, input]) => [_0, input], () => []))))), ([_0, input]) => [S.PropertyDelimiterMapping(_0 as [unknown, unknown] | [unknown]), input])
 export const PropertyList_0 = (input: string, result: unknown[] = []): [unknown[], string] => If(If(Property(input), ([_0, input]) => If(PropertyDelimiter(input), ([_1, input]) => [[_0, _1], input])), ([_0, input]) => PropertyList_0(input, [...result, _0]), () => [result, input]) as [unknown[], string]
 export const PropertyList = (input: string): [unknown, string] | [] => If(If(PropertyList_0(input), ([_0, input]) => If(If(If(Property(input), ([_0, input]) => [[_0], input]), ([_0, input]) => [_0, input], () => If([[], input], ([_0, input]) => [_0, input], () => [])), ([_1, input]) => [[_0, _1], input])), ([_0, input]) => [S.PropertyListMapping(_0 as [unknown, unknown]), input])

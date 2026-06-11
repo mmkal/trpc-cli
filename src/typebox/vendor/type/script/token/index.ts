@@ -26,10 +26,15 @@ THE SOFTWARE.
 
 ---------------------------------------------------------------------------*/
 
+// trpc-cli local modification to upstream typebox@1.2.8
+// (https://github.com/sinclairzx81/typebox @ dfec33e10fd9f3d0dc656f88b45def8e66573ab7, MIT):
+// re-export the locally-added JsDoc token (see ./jsdoc.ts and src/typebox/jsdoc-description.patch).
+
 export * from './bigint.js'
 export * from './const.js'
 export * from './ident.js'
 export * from './integer.js'
+export * from './jsdoc.js'
 export * from './number.js'
 export * from './rest.js'
 export * from './span.js'

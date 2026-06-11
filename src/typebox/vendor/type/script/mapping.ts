@@ -29,6 +29,16 @@ THE SOFTWARE.
 // deno-fmt-ignore-file
 // deno-lint-ignore-file
 
+// trpc-cli local modification to upstream typebox@1.2.8
+// (https://github.com/sinclairzx81/typebox @ dfec33e10fd9f3d0dc656f88b45def8e66573ab7, MIT):
+// adds JsDocMapping/OptionalJsDocMapping and extends PropertyMapping with an optional 6th
+// tuple element carrying a property's preceding `/** ... */` comment, written to the property
+// schema's `description`. The type-level TPropertyMapping is widened to tolerate the extra
+// element and notes the optional description. Adapted from mmkal's fork:
+// https://github.com/sinclairzx81/typebox/compare/main...mmkal:typebox:codex/script-jsdoc-description
+// (upstream issue: https://github.com/sinclairzx81/typebox/issues/1597).
+// See src/typebox/jsdoc-description.patch for the full local diff.
+
 import { Memory } from '../../system/memory/index.js'
 import { Guard } from '../../guard/index.js'
 import * as T from '../types/index.js'
@@ -252,6 +262,18 @@ export type TOptionalSemiColonMapping<Input extends [unknown] | []>
   = null
 export function OptionalSemiColonMapping(input: [unknown] | []): unknown {
   return null
+}
+// -------------------------------------------------------------------
+// JsDoc: <JsDoc> (trpc-cli local modification)
+// -------------------------------------------------------------------
+export function JsDocMapping(input: string): unknown {
+  return input
+}
+// -------------------------------------------------------------------
+// OptionalJsDoc: [JsDoc] | [] (trpc-cli local modification)
+// -------------------------------------------------------------------
+export function OptionalJsDocMapping(input: [unknown] | []): unknown {
+  return input.length > 0 ? input[0] : null
 }
 // -------------------------------------------------------------------
 // KeywordString: 'string'
@@ -830,10 +852,11 @@ export function OptionalMapping(input: [unknown] | []): unknown {
   return input.length > 0
 }
 // -------------------------------------------------------------------
-// Property: [Readonly, PropertyKey, Optional, ':', Type]
+// Property: [Readonly, PropertyKey, Optional, ':', Type, OptionalJsDoc?]
+// (trpc-cli local modification: optional trailing JsDoc description)
 // -------------------------------------------------------------------
-export type TPropertyMapping<Input extends [unknown, unknown, unknown, unknown, unknown]> = (
-  Input extends [infer IsReadonly extends boolean, infer Key extends string, infer IsOptional extends boolean, string, infer Type extends T.TSchema] ? {
+export type TPropertyMapping<Input extends [unknown, unknown, unknown, unknown, unknown, unknown?]> = (
+  Input extends [infer IsReadonly extends boolean, infer Key extends string, infer IsOptional extends boolean, string, infer Type extends T.TSchema, unknown?] ? {
     [_ in Key]: (
       [IsReadonly, IsOptional] extends [true, true] ? S.TAddReadonlyDeferred<S.TAddOptionalDeferred<Type>> :
       [IsReadonly, IsOptional] extends [true, false] ? S.TAddReadonlyDeferred<Type> :
@@ -842,14 +865,15 @@ export type TPropertyMapping<Input extends [unknown, unknown, unknown, unknown, 
     )
   } : never
 )
-export function PropertyMapping(input: [unknown, unknown, unknown, unknown, unknown]): unknown {
-  const [isReadonly, key, isOptional, _colon, type] = input as [boolean, string, boolean, ':', T.TSchema]
+export function PropertyMapping(input: [unknown, unknown, unknown, unknown, unknown, unknown?]): unknown {
+  const [isReadonly, key, isOptional, _colon, type, description] = input as [boolean, string, boolean, ':', T.TSchema, string | null | undefined]
+  const annotated = Guard.IsString(description) && description.length > 0 ? Memory.Update(type, {}, { description }) as T.TSchema : type
   return {
     [key]: (
-      isReadonly && isOptional ? S.AddReadonlyDeferred(S.AddOptionalDeferred(type)) :
-      isReadonly && !isOptional ? S.AddReadonlyDeferred(type) :
-      !isReadonly && isOptional ? S.AddOptionalDeferred(type) :
-      type
+      isReadonly && isOptional ? S.AddReadonlyDeferred(S.AddOptionalDeferred(annotated)) :
+      isReadonly && !isOptional ? S.AddReadonlyDeferred(annotated) :
+      !isReadonly && isOptional ? S.AddOptionalDeferred(annotated) :
+      annotated
     )
   }
 }
