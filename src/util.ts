@@ -16,3 +16,9 @@ export const looksLikeInstanceof = <T>(value: unknown, target: string | (new (..
   }
   return false
 }
+
+export const kebabCase = (str: string) =>
+  str
+    .replaceAll(/([\da-z])([A-Z])/g, '$1-$2')
+    .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .toLowerCase()

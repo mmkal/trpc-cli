@@ -95,18 +95,6 @@ test('module commands: {source, exports} escape hatch works without file reading
   expect(await runWith(params, ['add', '--help'])).toContain('the name of the package to add')
 })
 
-test('module commands: non-object first parameter errors clearly', async () => {
-  const params = {
-    module: {
-      source: `export function double(n: number) { return n * 2 }`,
-      exports: {double: (n: number) => n * 2},
-    },
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'The first parameter of "double" must be an object type, got `number`. Non-object parameters aren\'t supported yet - wrap the value in an object, e.g. `{value: number}`.',
-  )
-})
-
 test('module commands: missing type annotation errors clearly', async () => {
   const params = {
     module: {
@@ -115,7 +103,7 @@ test('module commands: missing type annotation errors clearly', async () => {
     },
   }
   await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'The first parameter of "greet" has no type annotation. Annotate it with an object type, e.g. `(name: {someFlag: string})`.',
+    'Parameter "name" of "greet" has no type annotation. Annotate it, e.g. `(name: string)` or `(name: {someFlag: string})`.',
   )
 })
 
@@ -127,7 +115,7 @@ test('module commands: unresolvable named type errors clearly', async () => {
     },
   }
   await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'The parameter type for "deploy" references "ImportedFromElsewhere", which couldn\'t be resolved. Declare it as `type X = {...}` or `interface X {...}` in the same file, or inline the object type literal.',
+    'The type of parameter "options" of "deploy" references "ImportedFromElsewhere", which couldn\'t be resolved. Declare it as `type X = {...}` or `interface X {...}` in the same file, or inline the type.',
   )
 })
 
@@ -158,4 +146,143 @@ test('module commands: buildProgram and toJSON are not supported (yet)', async (
   const cli = createCli({module: modulePath})
   expect(() => cli.buildProgram()).toThrowError(/buildProgram is not supported when using `module`/)
   expect(() => cli.toJSON()).toThrowError(/toJSON is not supported when using `module`/)
+})
+
+// multi-parameter functions: leading scalar params -> positional arguments, trailing object param -> flags.
+// fixture: test/fixtures/positional-commands-module.ts
+
+const positionalModulePath = './test/fixtures/positional-commands-module.ts'
+
+test('module positionals: scalar parameters show up as positional arguments in help', async () => {
+  const addHelp = await runWith({module: positionalModulePath, name: 'mypkg'}, ['add', '--help'])
+  expect(addHelp).toMatchInlineSnapshot(`
+    "Usage: mypkg add [options] <left> <right>
+
+    add two numbers
+
+    Arguments:
+      left        number (required)
+      right       number (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
+
+  // copy has a required positional, an optional positional with inline jsdoc, and a named-type options param
+  const copyHelp = await runWith({module: positionalModulePath, name: 'mypkg'}, ['copy', '--help'])
+  expect(copyHelp).toMatchInlineSnapshot(`
+    "Usage: mypkg copy [options] <source> [dest]
+
+    copy a file
+
+    Arguments:
+      source             the file to copy (required)
+      dest               where to copy it (defaults to \`<source>.bak\`)
+
+    Options:
+      --force [boolean]  overwrite the destination if it exists
+      -h, --help         display help for command
+    "
+  `)
+})
+
+test('module positionals: positional arguments are validated and spread back into the function call', async () => {
+  expect(await runWith({module: positionalModulePath}, ['add', '2', '3'])).toMatchInlineSnapshot(`"5"`)
+  expect(await runWith({module: positionalModulePath}, ['double', '4'])).toMatchInlineSnapshot(`"8"`)
+})
+
+test('module positionals: optional positionals can be omitted', async () => {
+  expect(await runWith({module: positionalModulePath}, ['copy', 'a.txt', 'b.txt'])).toMatchInlineSnapshot(
+    `"copied a.txt to b.txt"`,
+  )
+  expect(await runWith({module: positionalModulePath}, ['copy', 'a.txt'])).toMatchInlineSnapshot(
+    `"copied a.txt to a.txt.bak"`,
+  )
+  expect(await runWith({module: positionalModulePath}, ['copy', 'a.txt', 'b.txt', '--force'])).toMatchInlineSnapshot(
+    `"copied a.txt to b.txt (forced)"`,
+  )
+})
+
+test('module positionals: parameter defaults kick in when the positional is omitted', async () => {
+  expect(await runWith({module: positionalModulePath}, ['repeat', 'hi'])).toMatchInlineSnapshot(`"hi hi"`)
+  expect(await runWith({module: positionalModulePath}, ['repeat', 'hi', '3'])).toMatchInlineSnapshot(`"hi hi hi"`)
+})
+
+test('module positionals: array parameters become variadic positionals', async () => {
+  expect(await runWith({module: positionalModulePath}, ['join-words', 'a', 'b', 'c'])).toMatchInlineSnapshot(`"a b c"`)
+  expect(
+    await runWith({module: positionalModulePath}, ['join-words', 'a', 'b', '--separator', '+']),
+  ).toMatchInlineSnapshot(`"a+b"`)
+})
+
+test('module positionals: missing and invalid positionals fail before the function runs', async () => {
+  await expect(runWith({module: positionalModulePath}, ['add', '2'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: missing required argument 'right'
+  `)
+  await expect(runWith({module: positionalModulePath}, ['add', '2', 'banana'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: command-argument value 'banana' is invalid for argument 'right'. Invalid number: banana
+  `)
+})
+
+test('module positionals: rest parameters error clearly', async () => {
+  const params = {
+    module: {
+      source: `export function sum(...numbers: number[]) { return 0 }`,
+      exports: {sum: () => 0},
+    },
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(
+    'Parameter "...numbers" of "sum" is a rest parameter, which isn\'t supported. Use an explicitly-typed array parameter (e.g. `numbers: string[]`, which becomes a variadic positional argument), or move it into a trailing options object.',
+  )
+})
+
+test('module positionals: destructured positional parameters error clearly', async () => {
+  const params = {
+    module: {
+      source: `export function move([x, y]: [number, number], options: {fast?: boolean}) {}`,
+      exports: {move: () => {}},
+    },
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(
+    'Parameter 1 ("[number, number]") of "move" is a destructuring pattern, which isn\'t supported for positional arguments. Give the parameter a name, or move it into a trailing options object.',
+  )
+})
+
+test('module positionals: object parameter in non-final position errors clearly', async () => {
+  const params = {
+    module: {
+      source: `export function deploy(options: {env: string}, target: string) {}`,
+      exports: {deploy: () => {}},
+    },
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(
+    'Parameter 1 ("options") of "deploy" is an object type, but only the *last* parameter can be an object - leading parameters become positional arguments and a trailing object parameter maps to flags. Move it to the end, or flatten it into the trailing options object.',
+  )
+})
+
+test('module positionals: optional array parameter errors clearly', async () => {
+  const params = {
+    module: {
+      source: `export function lint(files?: string[]) {}`,
+      exports: {lint: () => {}},
+    },
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(
+    'Parameter 1 ("files") of "lint" is an optional array. Optional array parameters aren\'t supported as positional arguments - make it required (a variadic positional can already receive zero values when callers pass none), or move it into a trailing options object.',
+  )
+})
+
+test('module positionals: default value without a type annotation errors clearly', async () => {
+  const params = {
+    module: {
+      source: `export function pad(text: string, width = 10) { return text }`,
+      exports: {pad: (text: string) => text},
+    },
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(
+    'Parameter "width" of "pad" has no type annotation. Annotate it, e.g. `(width: string)` or `(width: {someFlag: string})`.',
+  )
 })

@@ -381,7 +381,11 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
         array: looksLikeArray(schema),
         description: schemaDefPropValue(schema, 'description') || '',
         required: !isOptional(schema),
-        type: getSchemaTypes(toRoughJsonSchema7(schema)).join(' | '),
+        // `undefined` appears in unions like typebox's `Type.Union([Type.Number(), Type.Undefined()])` for optional
+        // tuple elements - it conveys optionality (already shown via `[name]` vs `<name>`), not a real input type
+        type: getSchemaTypes(toRoughJsonSchema7(schema))
+          .filter(type => type !== 'undefined')
+          .join(' | '),
       })),
       optionsJsonSchema: flagsSchema && typeof flagsSchema === 'object' ? flagsSchema : {},
       getPojoInput: commandArgs => {
