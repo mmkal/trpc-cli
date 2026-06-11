@@ -131,8 +131,8 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = new Command(params.name)
 
-    // Each leaf command resolves a `jsonInput` mode: `meta.jsonInput || params.jsonInput || 'auto'`. 'always' builds
-    // the command JSON-only; 'never' builds it from its schema. 'auto' (the default) is secretly 'always' with a
+    // Each leaf command resolves a `jsonInput` mode: `meta.jsonInput || params.jsonInput || 'never'`. 'always' builds
+    // the command JSON-only; 'never' (the default) builds it from its schema. 'auto' is secretly 'always' with a
     // pre-parse: the program is built just-in-time per invocation, so we sniff the argv that will actually be parsed
     // (`runParams.argv` when provided, falling back to `process.argv` minus the `node script.js` prefix) for a `--json`
     // token. If it's there, 'auto' commands are built JSON-only (so schema-derived flags/positionals don't exist and
