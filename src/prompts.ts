@@ -63,6 +63,14 @@ const getDefaultSubcommand = (command: Command) => {
   return defaultChild ? command.commands.find(c => c.name() === defaultChild) : undefined
 }
 
+/**
+ * Help-only `--json` option, registered in index.ts when a command's JSON input mode is `'auto'` and `--json` wasn't
+ * supplied. It renders in help output but is unreachable by construction - any argv actually containing `--json`
+ * produces a JSON-only build where it doesn't exist. Declared as a class so the prompt logic below can recognise it
+ * and avoid prompting for a value that can never be parsed.
+ */
+export class CosmeticJsonOption extends Option {}
+
 export const createShadowCommand = (
   command: Command,
   onAnalyze: (params: Analysis) => void | Promise<void>,
@@ -77,6 +85,7 @@ export const createShadowCommand = (
   const optionsMap = new Map<string, Shadowed<Option>>()
 
   command.options.forEach(original => {
+    if (original instanceof CosmeticJsonOption) return
     const id = Date.now().toString() + Math.random().toString().slice(1)
     const shadowOption = new Option(
       original.flags.replace('<', '[').replace('>', ']'),

@@ -2,7 +2,7 @@
 import {test, expectTypeOf} from 'vitest'
 import {z} from 'zod/v4'
 import {EnquirerLike, InquirerPromptsLike, isAgent, Promptable} from '../src/index.js'
-import type {TrpcCliRunParams} from '../src/index.js'
+import type {AnyRouter, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from '../src/index.js'
 
 test('prompt types', async () => {
   expectTypeOf<typeof import('@inquirer/prompts')>().toExtend<InquirerPromptsLike>()
@@ -14,6 +14,13 @@ test('prompt types', async () => {
 
 test('agent-aware prompt disabling type', async () => {
   expectTypeOf({prompts: isAgent({}) ? null : ({} as Promptable)}).toMatchTypeOf<TrpcCliRunParams>()
+})
+
+test('jsonInput createCli param type', async () => {
+  expectTypeOf<TrpcCliParams<AnyRouter>>()
+    .toHaveProperty('jsonInput')
+    .toEqualTypeOf<'never' | 'auto' | 'always' | undefined>()
+  expectTypeOf<TrpcCliMeta>().toHaveProperty('jsonInput').toEqualTypeOf<'never' | 'auto' | 'always' | undefined>()
 })
 
 test('zod meta', async () => {

@@ -20,15 +20,16 @@ import {
   type AnyRouter,
   type CreateCallerFactoryLike,
   getParsedProcedure,
+  jsonProcedureInputs,
   isNorpcRouter,
   isTrpcRouter,
   parseRouter,
   type ProcedureInfo,
 } from './parse-router.js'
-import {promptify} from './prompts.js'
+import {CosmeticJsonOption, promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
-import {TrpcCli, TrpcCliParams, TrpcCliRunParams} from './types.js'
+import {JsonInputMode, ParsedProcedure, TrpcCli, TrpcCliParams, TrpcCliRunParams} from './types.js'
 import {looksLikeInstanceof} from './util.js'
 
 const orpcServerOrError = await import('@orpc/server').catch(String)
@@ -130,6 +131,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = new Command(params.name)
 
+    // Each leaf command resolves a `jsonInput` mode: `meta.jsonInput || params.jsonInput || 'never'`. 'always' builds
+    // the command JSON-only; 'never' (the default) builds it from its schema. 'auto' is secretly 'always' with a
+    // pre-parse: the program is built just-in-time per invocation, so we sniff the argv that will actually be parsed
+    // (`runParams.argv` when provided, falling back to `process.argv` minus the `node script.js` prefix) for a `--json`
+    // token. If it's there, 'auto' commands are built JSON-only (so schema-derived flags/positionals don't exist and
+    // passing them alongside `--json` is an unknown option error); if not, they're built from their schemas as usual,
+    // plus a help-only `--json` option which is unreachable by construction (any argv actually containing `--json`
+    // results in the JSON-only build). Calling `buildProgram()`/`toJSON()` with no runParams at all builds in flags
+    // mode - there's no invocation to sniff. Exception, schema-wins guard: an 'auto' command whose own schema already
+    // derives a `json` option is always built from its schema, so its `--json` flag keeps its schema meaning.
+    const jsonFlagSniffed = runParams !== undefined && argvIncludesJsonFlag(runParams.argv || process.argv.slice(2))
+
     if (params.version) program.version(params.version)
     if (params.description) program.description(params.description)
     if (params.usage) [params.usage].flat().forEach(usage => program.usage(usage))
@@ -155,7 +168,25 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const _process = runParams?.process || process
     const configureCommand = (command: Command, procedurePath: string, info: ProcedureInfo) => {
       const {meta} = info
-      const parsedProcedure = getParsedProcedure(info)
+      const jsonInputMode = resolveJsonInputMode(meta.jsonInput, params.jsonInput)
+      let parsedProcedure: ParsedProcedure
+      let addCosmeticJsonOption = false
+      if (jsonInputMode === 'always') {
+        parsedProcedure = jsonProcedureInputs()
+      } else {
+        const schemaDerived = getParsedProcedure(info)
+        // schema-wins guard: if the schema already derives a `json` option (including the unparseable-schema fallback,
+        // which *is* a real `--json` option), the schema keeps it - no JSON-only build, no cosmetic help option
+        const schemaHasJsonOption = Object.keys(flattenedProperties(schemaDerived.optionsJsonSchema)).some(
+          key => kebabCase(key) === 'json',
+        )
+        if (jsonInputMode === 'auto' && !schemaHasJsonOption && jsonFlagSniffed) {
+          parsedProcedure = jsonProcedureInputs()
+        } else {
+          parsedProcedure = schemaDerived
+          addCosmeticJsonOption = jsonInputMode === 'auto' && !schemaHasJsonOption
+        }
+      }
       const incompatiblePairs = incompatiblePropertyPairs(parsedProcedure.optionsJsonSchema)
       // add meta to the commander command so we can access it in prompt.ts
       Object.assign(command, {__trpcCli: {path: procedurePath, meta, originalInputSchema: info.originalInputSchema}})
@@ -360,6 +391,19 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
 
+      if (addCosmeticJsonOption && !command.options.some(o => o.long === '--json')) {
+        // Help-only `--json` option: shows users JSON input is available, but is unreachable by construction - any
+        // invocation actually passing `--json` results in the JSON-only build (see `jsonFlagSniffed` above).
+        // The duplicate check is belt-and-braces: the schema-wins guard above already skips schemas deriving a `json`
+        // option, but option *aliases* can also produce a `--json` flag.
+        command.addOption(
+          new CosmeticJsonOption(
+            '--json <json>',
+            'Provide the complete procedure input as JSON - other flags and positional arguments are unavailable when using this option',
+          ),
+        )
+      }
+
       const invalidOptionAliases = Object.entries(unusedOptionAliases).map(([option, alias]) => `${option}: ${alias}`)
       if (invalidOptionAliases.length) {
         throw new Error(`Invalid option aliases: ${invalidOptionAliases.join(', ')}`)
@@ -514,7 +558,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     return program
   }
 
-  const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams)) => {
+  const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams || {})) => {
     if (!looksLikeInstanceof<Command>(program, 'Command')) throw new Error(`program is not a Command instance`)
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
     const argv = [...(runParams?.argv || process.argv)]
@@ -579,6 +623,28 @@ export const kebabCase = (str: string) =>
     .replaceAll(/([\da-z])([A-Z])/g, '$1-$2')
     .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
     .toLowerCase()
+
+/**
+ * Resolve the effective `jsonInput` mode for a procedure: meta overrides the CLI-wide param, defaulting to `'never'`.
+ * Booleans (the pre-1.0 form of this setting) are rejected with a migration message.
+ */
+const resolveJsonInputMode = (metaValue: unknown, paramsValue: unknown): JsonInputMode => {
+  for (const value of [metaValue, paramsValue]) {
+    if (typeof value === 'boolean') {
+      throw new Error(`jsonInput: ${value} is no longer supported - use '${value ? 'always' : 'never'}'`)
+    }
+  }
+  return (metaValue || paramsValue || 'never') as JsonInputMode
+}
+
+/** check if argv activates JSON input mode: a token that's exactly `--json` or starts with `--json=`, before any bare `--` terminator */
+const argvIncludesJsonFlag = (argv: string[]) => {
+  for (const token of argv) {
+    if (token === '--') return false
+    if (token === '--json' || token.startsWith('--json=')) return true
+  }
+  return false
+}
 
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
