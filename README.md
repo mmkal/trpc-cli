@@ -643,12 +643,35 @@ import {createCli} from 'trpc-cli'
 void createCli({module: './commands.ts'}).run()
 ```
 
-trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and the first parameter's object type annotation is parsed by the vendored `Type.Script` into a real JSON schema - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`).
+trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and parameter type annotations are parsed by the vendored `Type.Script` into real JSON schemas - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`).
+
+Multi-parameter functions work too: leading string/number/boolean parameters become positional arguments, and a trailing object parameter becomes flags - the same convention as [tuple inputs](#combining-positional-arguments-and-options):
+
+```ts
+// commands.ts
+/** add two numbers */
+export async function add(left: number, right: number) {
+  return left + right // mycli add 2 3
+}
+
+/** copy a file */
+export async function copy(
+  source: string,
+  dest?: string,
+  options?: {force?: boolean},
+) {
+  // mycli copy a.txt b.txt --force
+  // optional parameters (and ones with defaults) become optional positionals: mycli copy a.txt
+}
+```
+
+Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becomes the positional argument's description.
 
 Details and limitations:
 
 - The path is resolved against `process.cwd()`. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
-- The first parameter must be an object type: an inline literal (`{foo: string}`) or a reference to a `type X = {...}`/`interface X {...}` declared in the same file. Functions with no parameters become commands with no arguments.
+- Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file. Functions with no parameters become commands with no arguments.
+- Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
 - Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...`. Re-exports, `export {f}` statements and default exports are not picked up.
 - For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({module: {source: rawSourceText, exports: await import('./commands.js')}})`.
 - `buildProgram`/`toJSON` aren't supported in this mode (module loading is async; those APIs are sync) - use `run`, or build a router yourself.

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: ready-for-review
 size: medium
 branch: typebox-module-positionals
 base: typebox-module-commands
@@ -9,7 +9,7 @@ base: typebox-module-commands
 
 ## Status Summary
 
-Spec written, implementation starting. Stacked on #206 (`createCli({module})`), which is stacked on #205 (vendored typebox). Goal: leading scalar parameters of exported functions map to CLI positional arguments; a trailing object-literal parameter maps to flags, mirroring trpc-cli's existing tuple-input convention.
+Implementation complete; build/lint/tests green locally (356 tests). Stacked on #206 (`createCli({module})`), which is stacked on #205 (vendored typebox). PR: #207. Main pieces: full-parameter-list extractor (`parseParams`) + tuple-script synthesis (`buildPositionalProcedure`) in src/module-commands.ts, a one-line positional type-display fix in src/parse-procedure.ts, `kebabCase` moved to src/util.ts (re-exported from index), new fixture test/fixtures/positional-commands-module.ts + 11 new tests, README section extended. Nothing known missing; deferred items listed at the bottom.
 
 ## Goal
 
@@ -44,14 +44,20 @@ This mirrors the existing tuple-input convention: `(a: number, b: string, opts: 
 
 ## Checklist
 
-- [ ] Extractor: parse the full parameter list (name, optional `?`/default, type annotation text, inline jsdoc per param) instead of just the first param.
-- [ ] Clear errors for unsupported shapes: rest params, destructured params (outside the final-object position), object param in non-final position, missing annotations, optional array params.
-- [ ] Tuple synthesis + runtime spread: `[t1, t2, {...}]` script via `Type.Script`, items mutated with titles/descriptions/minItems, handler calls `fn(...input)`.
-- [ ] Fixture + tests: help snapshots, execution (including omitted optionals and defaults), validation failures, error cases.
-- [ ] `pnpm build`, `pnpm lint`, vitest all green.
-- [ ] README: extend the module-commands section with a positionals example.
+- [x] Extractor: parse the full parameter list (name, optional `?`/default, type annotation text, inline jsdoc per param) instead of just the first param. _`parseParams` in src/module-commands.ts replaces `parseFirstParamType`; `ExtractedCommand.paramType` became `params: ExtractedParam[]`. Reuses the existing `scanSource` comment/string mask and bracket-depth tracking; segments split at top-level commas._
+- [x] Clear errors for unsupported shapes: rest params, destructured params (outside the final-object position), object param in non-final position, missing annotations, optional array params. _Thrown from `parseParams`/`buildPositionalProcedure` with the function and parameter named; each has a test using the `{source, exports}` escape hatch._
+- [x] Tuple synthesis + runtime spread: `[t1, t2, {...}]` script via `Type.Script`, items mutated with titles/descriptions/minItems, handler calls `fn(...input)`. _`buildPositionalProcedure` in src/module-commands.ts. Per-param schemas are parsed individually first (objectness checks + param-named errors), then the joined tuple script is parsed once for the real validating schema._
+- [x] Fixture + tests: help snapshots, execution (including omitted optionals and defaults), validation failures, error cases. _test/fixtures/positional-commands-module.ts + 11 new tests in test/typebox-module-commands.test.ts; two v1 tests updated (single scalar param now works instead of erroring; param-named annotation/ref error messages)._
+- [x] `pnpm build`, `pnpm lint`, vitest all green. _All exit 0 locally; full suite 356 passed._
+- [x] README: extend the module-commands section with a positionals example. _Same section, `add`/`copy` example + updated limitations list._
 
 ## Implementation notes
 
 - 2026-06-11: Task created as a scoped follow-up to #206. Probed Type.Script tuple support first (findings above) - the `[number, number?]` optionality drop means the `| undefined` synthesis route, not tuple `?` syntax. Also confirmed: omitted optional positionals arrive as `undefined` slots in `positionalValues` (commander passes one arg per declared Argument), so the synthesized union schemas validate exactly what the runtime produces.
 - 2026-06-11: A quirk worth knowing: importing src/typebox directly under the tsx loader hit `S.AddOptionalDeferred is not a function` (circular-import initialization artifact under tsx's CJS path); the compiled dist and vitest are unaffected. Not caused by - and not fixable in - this branch; noted for anyone probing src/typebox with tsx directly.
+- 2026-06-11 (wrap-up):
+  - The v1 single-object-param path is preserved exactly (same schema, same `fn(input)` call), so #206's snapshots didn't change. Single *scalar* param functions now go through the tuple path and get one positional instead of the v1 "must be an object type" error.
+  - `kebabCase` moved from src/index.ts to src/util.ts (index re-exports it, public API unchanged) so module-commands can kebab-case positional names without importing the whole entrypoint.
+  - Filtering `undefined` out of the positional type display in `parseTupleInput` had a pleasant side effect: optional number positionals now hit the `param.type === 'number'` check in index.ts, so `mycli add 2 banana` fails fast with commander's "Invalid number: banana" instead of a later schema error.
+  - Booleans work as positionals (`true`/`false` strings via the existing `convertPositional`); literal unions (`'fast' | 'slow'`, inline or via a named `type Mode = ...`) work too (`getSchemaTypes` counts their consts as primitives).
+  - Deferred: rest params as variadic positionals (the tuple machinery could support `...files: string[]` as a trailing array element - erroring for now per scope); optional array params (the `| undefined` wrapping would defeat `looksLikeArray` and silently degrade to JSON input, so they error); native labeled/optional tuple-element support in the vendored Type.Script (would make `?` and labels work without synthesis - owned by the typebox-vendor branch).
