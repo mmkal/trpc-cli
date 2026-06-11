@@ -27,9 +27,7 @@ test('--json accepts complete inputs by default - no configuration needed', asyn
   expect(await run(router, ['object', '--json', '{"foo":"bar","count":2}'])).toMatchInlineSnapshot(
     `"{"foo":"bar","count":2}"`,
   )
-  expect(await run(router, ['tuple', '--json', '["left",{"right":3}]'])).toMatchInlineSnapshot(
-    `"["left",{"right":3}]"`,
-  )
+  expect(await run(router, ['tuple', '--json', '["left",{"right":3}]'])).toMatchInlineSnapshot(`"["left",{"right":3}]"`)
   expect(await run(router, ['positionals', '--json', '{"first":"hi","shout":true}'])).toMatchInlineSnapshot(
     `"{"first":"hi","shout":true}"`,
   )
