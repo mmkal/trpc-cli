@@ -7,7 +7,7 @@ size: medium
 
 ## Status Summary
 
-Implementation complete. The `--input` → `--json` rename, global `createCli({jsonInput: true})` with argv-sniffing, the cosmetic help-only `--json` option, tests (test/json-input.test.ts plus updated snapshots across the suite), README docs and the type test are all done. This is the alternate, much simpler design for what PR #199 (`json-mode` branch, now back in draft) implements with a Commander subclass and conflict wiring. Decisions below were made in discussion with the owner on 2026-06-10/11.
+Revision 2 in progress. The v1 implementation (boolean `jsonInput`, opt-in) is complete and green; Revision 2 below (decided with the owner 2026-06-11) changes the param to a `'never' | 'auto' | 'always'` union, makes `'auto'` the **default** (all CLIs gain `--json` support on upgrade), adds a per-leaf schema-wins guard, and drops boolean values entirely. See "Revision 2" section for the delta checklist.
 
 ## Goal
 
@@ -68,6 +68,27 @@ A token activates JSON mode iff it is exactly `--json` or starts with `--json=`,
 
 - Superseded approach: PR #199 (https://github.com/mmkal/trpc-cli/pull/199) — Commander subclass + conflicts wiring. Its review-round tests are the source for several specs above.
 - Owner discussion: the argv-sniffing trick means "if `--json` is used it's the only allowed way; if it's not used it's not an allowed way", reducing the hybrid problem to help text.
+
+## Revision 2 (2026-06-11): union modes, default-on, schema-wins
+
+Owner decisions after reviewing the v1 design:
+
+- `jsonInput?: 'never' | 'auto' | 'always'` — same union accepted at BOTH levels (`TrpcCliParams` and `TrpcCliMeta`). **No booleans anywhere** (breaking for existing `meta.jsonInput: true` users → they write `'always'`; `false` → `'never'`). Add a build-time runtime check that throws a helpful message if a boolean is passed (e.g. `jsonInput: true is no longer supported - use 'always'`).
+- **Default is `'auto'`** when unset at both levels. Every trpc-cli CLI accepts `--json` out of the box after upgrading. This is the headline feature: agents/scripts can rely on `--json` working on any trpc-cli CLI.
+- Resolution per leaf: `mode = meta.jsonInput || params.jsonInput || 'auto'` (meta overrides global). `'auto'` is *secretly `'always'` with a pre-parse*: sniff argv once per invocation (existing `argvIncludesJsonFlag` rule); effective mode for an `'auto'` leaf is `'always'` when sniffed, else `'never'`-plus-cosmetic-help-option.
+- **Schema-wins guard** (applies to `'auto'` leaves only): if a leaf's derived options already include a `json` property, the schema wins — build normally even when `--json` was sniffed, no cosmetic help option, the user's own `--json` flag keeps its schema meaning. This makes default-on strictly additive for existing CLIs: the only observable change is "unknown option --json" errors becoming working JSON input. Explicit `'always'` needs no guard (no derived flags exist, a `json` property just lives in the payload).
+- Unparseable-schema fallback stays as-is (effectively `'always'`).
+- v1's "no `'only'`/`'also'` union values" assumption is superseded by this revision.
+
+### Revision 2 checklist
+
+- [ ] Change `TrpcCliParams.jsonInput` and `TrpcCliMeta.jsonInput` to the union type; export a `JsonInputMode` type alias; update jsdoc (README codegen follows).
+- [ ] Runtime rejection of booleans with helpful migration message.
+- [ ] Implement per-leaf mode resolution (meta > global > 'auto') and the schema-wins guard.
+- [ ] Default-on behavior: cosmetic `--json` appears in help of all `'auto'` leaves by default (no `jsonInput` param needed); `'never'` removes it; schema-json leaves keep their own flag.
+- [ ] Tests: update v1 tests for the union (no `jsonInput: true` in fixtures); add: default-on works with zero config; `'never'` globally disables; `'always'` globally = JSON-only everywhere; meta `'never'`/`'always'`/`'auto'` override global; schema-wins guard (json-named property command keeps its flag under sniffed argv, sibling commands go JSON-only); boolean rejection error message. Expect widespread snapshot updates: the cosmetic `--json` now appears in help output across the whole suite.
+- [ ] README: rewrite the JSON input docs around default-on (headline: every CLI accepts `--json`), document the union + both breaking changes (`--input` rename, boolean removal).
+- [ ] Update PR #204 body for the new design.
 
 ## Implementation Notes
 
