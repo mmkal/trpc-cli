@@ -648,10 +648,12 @@ trpc-cli reads the module's *source text* and dynamically imports it: each expor
 Details and limitations:
 
 - The path is resolved against `process.cwd()`. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
-- The first parameter must be an object type: an inline literal (`{foo: string}`) or a reference to a `type X = {...}`/`interface X {...}` declared in the same file. Functions with no parameters become commands with no arguments.
+- The first parameter must be an object type: an inline literal (`{foo: string}`) or a reference to a `type X = {...}`/`interface X {...}` declared in the same file (intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags). Functions with no parameters become commands with no arguments.
 - Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...`. Re-exports, `export {f}` statements and default exports are not picked up.
 - For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({module: {source: rawSourceText, exports: await import('./commands.js')}})`.
 - `buildProgram`/`toJSON` aren't supported in this mode (module loading is async; those APIs are sync) - use `run`, or build a router yourself.
+- Don't pass user-controlled strings as `module` - the path is read and dynamically imported, i.e. executed.
+- Bundle-size note: the dynamic import of the module-commands machinery pulls the vendored typebox parser into bundles (~4MB unminified). Irrelevant for the normal Node CLI case; if you're bundling for size, prefer a router with explicit schemas.
 
 ---
 
