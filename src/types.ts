@@ -48,18 +48,23 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
  *
  * // cli.ts
  * import {createCli} from 'trpc-cli'
- * void createCli({module: './commands.ts'}).run()
+ * void createCli({module: new URL('./commands.ts', import.meta.url)}).run()
  * ```
  */
 export interface TrpcCliModuleParams {
   /**
    * @experimental
-   * Either a path to the commands module (resolved against `process.cwd()`, read from disk and dynamically
-   * imported - for `.ts` files, run under tsx/bun/deno/node>=22.18), or - for bundlers/browsers where file reading
-   * and dynamic import aren't available - an explicit pair of the module's raw source text and its live exports:
-   * `{source: rawSourceText, exports: await import('./commands.js')}`.
+   * The commands module. Either:
+   * - a `URL` like `new URL('./commands.ts', import.meta.url)` - resolved relative to the importing file, so the
+   *   CLI works no matter what directory it's run from (use this for anything you distribute)
+   * - a path string - resolved against `process.cwd()`, so only reliable when the CLI is run from a known directory
+   *   (fine for quick scripts)
+   * - for bundlers/browsers where file reading and dynamic import aren't available, an explicit pair of the module's
+   *   raw source text and its live exports: `{source: rawSourceText, exports: await import('./commands.js')}`
+   *
+   * The file forms are read from disk and dynamically imported - for `.ts` files, run under tsx/bun/deno/node>=22.18.
    */
-  module: string | {source: string; exports: Record<string, unknown>}
+  module: string | URL | {source: string; exports: Record<string, unknown>}
   name?: string
   version?: string
   description?: string

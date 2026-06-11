@@ -21,12 +21,14 @@ type AnyFn = (...args: any[]) => any
 
 /**
  * @experimental
- * The `module` option for `createCli`: either a path to a TypeScript/JavaScript module (resolved against
- * `process.cwd()`, read with `node:fs` and dynamically imported - run under tsx/bun/deno/node>=22.18 for `.ts` files),
- * or an explicit `{source, exports}` pair for environments where file reading/dynamic import isn't possible
- * (bundlers, browsers): `{source: rawSourceText, exports: await import('./commands.js')}`.
+ * The `module` option for `createCli`: a `URL` like `new URL('./commands.ts', import.meta.url)` (resolved relative
+ * to the importing file - works no matter what directory the CLI is run from), a path string (resolved against
+ * `process.cwd()` - fine for quick scripts, fragile for distributed CLIs), or an explicit `{source, exports}` pair
+ * for environments where file reading/dynamic import isn't possible (bundlers, browsers):
+ * `{source: rawSourceText, exports: await import('./commands.js')}`. The file forms are read with `node:fs` and
+ * dynamically imported - run under tsx/bun/deno/node>=22.18 for `.ts` files.
  */
-export type CliModuleInput = string | {source: string; exports: Record<string, unknown>}
+export type CliModuleInput = string | URL | {source: string; exports: Record<string, unknown>}
 
 /** A command extracted from module source text. */
 export interface ExtractedCommand {
@@ -39,22 +41,24 @@ export interface ExtractedCommand {
 }
 
 /**
- * @experimental Resolve a `CliModuleInput` to a norpc router. The string form reads the file and dynamically
- * imports it - `node:` modules are imported lazily here so this file stays safe to bundle for non-node targets.
+ * @experimental Resolve a `CliModuleInput` to a norpc router. The string/URL forms read the file and dynamically
+ * import it - `node:` modules are imported lazily here so this file stays safe to bundle for non-node targets.
  */
 export const moduleToRouter = async (moduleInput: CliModuleInput): Promise<NorpcRouterLike> => {
-  const resolved = typeof moduleInput === 'string' ? await loadModuleFromPath(moduleInput) : moduleInput
+  const resolved =
+    typeof moduleInput === 'string' || moduleInput instanceof URL ? await loadModuleFromPath(moduleInput) : moduleInput
   return buildRouterFromModule(resolved)
 }
 
-const loadModuleFromPath = async (filepath: string) => {
+const loadModuleFromPath = async (filepath: string | URL) => {
   const [fs, path, url] = await Promise.all([
     import('node:fs/promises'),
     // eslint-disable-next-line unicorn/import-style -- dynamic import: there's no "default import" syntax to use here
     import('node:path').then(m => m.default),
     import('node:url'),
   ])
-  const fullpath = path.resolve(process.cwd(), filepath)
+  // a URL (`new URL('./commands.ts', import.meta.url)`) pins the module to the importing file; a plain string is cwd-relative
+  const fullpath = typeof filepath === 'string' ? path.resolve(process.cwd(), filepath) : url.fileURLToPath(filepath)
   const source = await fs.readFile(fullpath, 'utf8').catch((e: unknown) => {
     throw new Error(`Could not read module source at ${fullpath}`, {cause: e})
   })
@@ -94,13 +98,15 @@ export const buildRouterFromModule = (resolved: {
   if (unmatched.length > 0) {
     throw new Error(
       `Could not find a parseable declaration for exported function(s) ${unmatched.map(n => JSON.stringify(n)).join(', ')}. ` +
-        `Supported syntaxes (declared directly in the module source): \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\`. ` +
-        `Re-exports, \`export {name}\` statements and default exports aren't supported.`,
+        `Every exported function becomes a command, and must be declared directly in the module source as \`export function name(...)\`, \`export async function name(...)\` or \`export const name = (...) => ...\` - ` +
+        `re-exports like \`export {name}\` or \`export * from './helpers.js'\` can't be parsed. ` +
+        `If these exports aren't meant to be commands, move them to a separate module that the commands module doesn't re-export.`,
     )
   }
   if (Object.keys(procedures).length === 0) {
     throw new Error(
-      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\` or \`export const name = (...) => ...\`.`,
+      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\` or \`export const name = (...) => ...\`. ` +
+        `Note: default exports are ignored - commands must be named exports.`,
     )
   }
   return t.router(procedures)

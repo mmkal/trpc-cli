@@ -3,7 +3,11 @@
  * functions. Note what ISN'T imported by the fixture (test/fixtures/commands-module.ts): no zod, no @trpc/server,
  * no router - jsdoc comments and parameter type annotations in the source text drive descriptions and validation.
  */
+import {execa} from 'execa'
 import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+import {fileURLToPath} from 'url'
 import {expect, test} from 'vitest'
 import {createCli} from '../src/index.js'
 import * as commandsModule from './fixtures/commands-module.js'
@@ -76,6 +80,27 @@ test('module commands: inputs are validated against the schema before the functi
   )
 })
 
+test('module commands: URL module input resolves relative to the referencing file', async () => {
+  const moduleUrl = new URL('fixtures/commands-module.ts', import.meta.url)
+  expect(await runWith({module: moduleUrl}, ['install', '--frozen-lockfile'])).toMatchInlineSnapshot(
+    `"installed dependencies (frozen lockfile)"`,
+  )
+  expect(await runWith({module: moduleUrl}, ['add', '--help'])).toContain('the name of the package to add')
+})
+
+test('module commands: URL module form keeps working when the CLI runs from an unrelated cwd', async () => {
+  // a distributed CLI (e.g. installed globally) can be invoked from anywhere - the fixture CLI uses
+  // `new URL('./commands-module.ts', import.meta.url)` so the module resolves against the CLI file, not the cwd.
+  // a cwd-relative string like './test/fixtures/commands-module.ts' would fail with "Could not read module source" here.
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url))
+  const {all} = await execa(
+    path.join(repoRoot, 'node_modules/.bin/tsx'),
+    [path.join(repoRoot, 'test/fixtures/commands-module-cli.ts'), 'install', '--frozen-lockfile'],
+    {all: true, cwd: os.tmpdir()},
+  )
+  expect(all).toContain('installed dependencies (frozen lockfile)')
+})
+
 test('module commands: missing module file errors clearly', async () => {
   await expect(runWith({module: './nope/does-not-exist.ts'}, ['--help'])).rejects.toThrowError(
     /Could not read module source at .*does-not-exist\.ts/,
@@ -144,6 +169,23 @@ test('module commands: exported function with no parseable declaration errors cl
   )
 })
 
+test('module commands: re-export barrels fail loudly with guidance to move helpers out', async () => {
+  const params = {
+    module: {
+      // `export * from './util.js'` puts `helperNotACommand` in the runtime exports, but there's no declaration
+      // in this module's source to parse - rather than silently dropping it, the CLI fails and says what to do
+      source: `
+        export * from './util.js'
+        export function greet(options: {name: string}) { return 'hi ' + options.name }
+      `,
+      exports: {greet: (options: any) => 'hi ' + options.name, helperNotACommand: () => 'not a command'},
+    },
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(
+    /Could not find a parseable declaration for exported function\(s\) "helperNotACommand".*move them to a separate module/s,
+  )
+})
+
 test('module commands: module with no functions errors clearly', async () => {
   const params = {
     module: {
@@ -152,6 +194,18 @@ test('module commands: module with no functions errors clearly', async () => {
     },
   }
   await expect(runWith(params, ['--help'])).rejects.toThrowError(/No commands found in module/)
+})
+
+test('module commands: default-export-only module errors mentioning default exports are ignored', async () => {
+  const params = {
+    module: {
+      source: `export default function main(options: {x: string}) { return options.x }`,
+      exports: {default: (options: any) => options.x},
+    },
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(
+    /No commands found in module.*default exports are ignored/s,
+  )
 })
 
 test('module commands: buildProgram and toJSON are not supported (yet)', async () => {
