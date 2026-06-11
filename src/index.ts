@@ -26,7 +26,7 @@ import {
   parseRouter,
   type ProcedureInfo,
 } from './parse-router.js'
-import {promptify} from './prompts.js'
+import {CosmeticJsonOption, promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {JsonInputMode, ParsedProcedure, TrpcCli, TrpcCliParams, TrpcCliRunParams} from './types.js'
@@ -396,13 +396,12 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         // invocation actually passing `--json` results in the JSON-only build (see `jsonFlagSniffed` above).
         // The duplicate check is belt-and-braces: the schema-wins guard above already skips schemas deriving a `json`
         // option, but option *aliases* can also produce a `--json` flag.
-        const cosmeticOption = new BaseOption(
-          '--json <json>',
-          'Provide the complete procedure input as JSON - other flags and positional arguments are unavailable when using this option',
+        command.addOption(
+          new CosmeticJsonOption(
+            '--json <json>',
+            'Provide the complete procedure input as JSON - other flags and positional arguments are unavailable when using this option',
+          ),
         )
-        // marker so prompts.ts knows not to prompt for this option - it's help-only (see above)
-        Object.assign(cosmeticOption, {__cosmeticJsonOption: true})
-        command.addOption(cosmeticOption)
       }
 
       const invalidOptionAliases = Object.entries(unusedOptionAliases).map(([option, alias]) => `${option}: ${alias}`)
