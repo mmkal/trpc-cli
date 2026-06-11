@@ -11,14 +11,14 @@ const t = initTRPC.meta<TrpcCliMeta>().create()
 test('script with jsdoc comments', async () => {
   const Input = Type.Script(`
     {
-        /** a message to say hello to new users */
-        greeting: string
-        /**
-         * how many times to repeat the
-         * greeting
-         */
-        repeat?: number
-      }
+      /** a message to say hello to new users */
+      greeting: string
+      /**
+       * how many times to repeat the
+       * greeting
+       */
+      repeat?: number
+    }
   `)
 
   expect(Input).toMatchObject({
@@ -46,12 +46,12 @@ test('script with jsdoc comments', async () => {
 test('jsdoc on nested properties', () => {
   const Input = Script(`
     {
-        /** outer doc */
-        config: {
-          /** inner doc */
-          verbose: boolean
-        }
+      /** outer doc */
+      config: {
+        /** inner doc */
+        verbose: boolean
       }
+    }
   `)
 
   expect(Input).toMatchObject({
@@ -67,13 +67,27 @@ test('jsdoc on nested properties', () => {
 test('jsdoc-like text inside string literal types is not treated as a comment', () => {
   const Input = Script(`
     {
-        weird: '/** not a doc */',
-        real: string
-      }
+      weird: '/** not a doc */',
+      real: string
+    }
   `)
 
   expect(Input.properties.weird).toMatchObject({const: '/** not a doc */'})
   expect(Input.properties.real).not.toHaveProperty('description')
+})
+
+test("// line comments don't attach as descriptions", () => {
+  // known limitation of the jsdoc patch: only `/** ... */` jsdoc comments become descriptions.
+  // `//` line comments are treated as trivia, same as upstream.
+  const Input = Script(`
+    {
+      // this is a regular comment, not a jsdoc
+      name: string
+    }
+  `)
+
+  expect(Input.properties.name).toMatchObject({type: 'string'})
+  expect(Input.properties.name).not.toHaveProperty('description')
 })
 
 test('~standard validate', () => {

@@ -8,6 +8,12 @@ set -euo pipefail
 # local modifications. Those modifications live in src/typebox/jsdoc-description.patch, which
 # this script applies as its final step. To upgrade typebox: bump the version in package.json
 # devDependencies, run this script, fix up the patch if it no longer applies, commit.
+#
+# ALSO on upgrade: if the new version adds any NEW concrete schema interfaces (look for new files
+# in src/typebox/vendor/type/types/), each one needs a matching `declare module` entry in
+# src/typebox/standard.ts. Runtime `~standard` comes for free (the export-surface wrapper covers
+# every builder), but without the declare-module entry, schemas of the new kind silently won't
+# have `~standard` at the *type* level.
 
 # Find the version from package.json (devDependencies or dependencies)
 VERSION=$(jq -r '.devDependencies["typebox"] // .dependencies["typebox"]' package.json)

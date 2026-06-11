@@ -14,22 +14,13 @@
  */
 
 import type {StandardSchemaV1} from '../standard-schema/contract.js'
+import type {StandardJsonSchemaConverter} from '../standard-schema/json-schema.js'
 // note: TSchema/TProperties/TEnumValue/TLiteralValue are needed for the interface augmentations
 // below - merged interface declarations must repeat identical type parameter lists.
 import type {Static, TEnumValue, TLiteralValue, TProperties, TSchema} from './vendor/index.js'
 import {Validator} from './vendor/schema/index.js'
 
-export interface StandardJsonSchemaOptions {
-  /** The target version of the generated JSON Schema. typebox schemas *are* JSON schemas, compatible with draft-07 and later drafts for the keyword subset typebox emits, so this is accepted but not acted on. */
-  target: 'draft-2020-12' | 'draft-07' | 'openapi-3.0' | ({} & string)
-  libraryOptions?: Record<string, unknown> | undefined
-}
-
-/** The [Standard JSON Schema](https://standardschema.dev/json-schema) converter interface. */
-export interface StandardJsonSchemaConverter {
-  input: (options: StandardJsonSchemaOptions) => Record<string, unknown>
-  output: (options: StandardJsonSchemaOptions) => Record<string, unknown>
-}
+export type {StandardJsonSchemaConverter, StandardJsonSchemaOptions} from '../standard-schema/json-schema.js'
 
 type TypeboxStatic<Schema> = Schema extends import('./vendor/type/types/schema.js').TSchema ? Static<Schema> : never
 
@@ -51,6 +42,7 @@ export interface TypeboxStandardProps<out Schema> {
   readonly vendor: 'typebox'
   readonly validate: (value: unknown) => StandardSchemaV1.Result<TypeboxStatic<Schema>>
   readonly types?: {readonly input: TypeboxStatic<Schema>; readonly output: TypeboxStatic<Schema>} | undefined
+  /** [Standard JSON Schema](https://standardschema.dev/json-schema) converter. typebox schemas *are* JSON schemas, compatible with draft-07 and later drafts for the keyword subset typebox emits, so the `target` option is accepted but not acted on. */
   readonly jsonSchema: StandardJsonSchemaConverter
 }
 
