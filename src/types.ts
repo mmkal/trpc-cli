@@ -20,6 +20,15 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** The `@trpc/server` module to use for calling procedures. Required when using trpc v10. */
   // createCallerFactory?: CreateCallerFactoryLike
   trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
+
+  /**
+   * If true, every command accepts a `--json <json>` option supplying the complete procedure input as JSON.
+   * When `--json` is passed, it must be the *only* input - schema-derived flags and positional arguments are unavailable
+   * (combining them results in an unknown option error). When `--json` is not passed, commands work as normal, with
+   * schema-derived flags and positional arguments.
+   * Individual procedures can opt out with `jsonInput: false` in their meta.
+   */
+  jsonInput?: boolean
 }
 
 /** Rough shape of the `@trpc/server` (v10) module. Needed to pass in to `createCli` when using trpc v10. */
@@ -53,7 +62,10 @@ export interface TrpcCliMeta {
     /** Aliases for the options. Note: take care to avoid conflicts with other options. An error will be thrown if an alias is defined for a non-existent option. */
     options?: Record<string, string>
   }
-  /** If true, will use a single CLI option expect the entire input to be parsed in as JSON, e.g. `--input '{"foo": "bar"}`. Can be useful to opt out of the default mapping of input schemas to CLI options. */
+  /**
+   * If true, will use a single CLI option expecting the entire input to be passed in as JSON, e.g. `--json '{"foo": "bar"}'`. Can be useful to opt out of the default mapping of input schemas to CLI options.
+   * If false, opts this procedure out of a CLI-wide `createCli({jsonInput: true})` setting - it will always be built from its schema and won't accept `--json`.
+   */
   jsonInput?: boolean
   /** Sub-property for the CLI meta. If present, will take precedence over the top-level meta, to avoid conflicts with other tools. */
   cliMeta?: TrpcCliMeta

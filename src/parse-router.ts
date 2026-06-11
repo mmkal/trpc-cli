@@ -270,8 +270,8 @@ const parseOrpcRouter = ({router, ...dependencies}: {router: OrpcRouterLike<any>
   return entries
 }
 
-/** helper to create a "ParsedProcedure" that just accepts a JSON string - for when we failed to parse the input schema or the use set jsonInput: true */
-const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
+/** helper to create a "ParsedProcedure" that just accepts a JSON string - for when we failed to parse the input schema or jsonInput is enabled */
+export const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
   let description = `Input formatted as JSON`
   if (reason) description += ` (${reason})`
   return {
@@ -279,10 +279,11 @@ const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
     optionsJsonSchema: {
       type: 'object',
       properties: {
-        input: {description}, // omit `type` - this is json input, it could be anything
+        json: {description}, // omit `type` - this is json input, it could be anything
       },
+      required: ['json'],
     },
-    getPojoInput: parsedCliParams => parsedCliParams.options.input,
+    getPojoInput: parsedCliParams => parsedCliParams.options.json,
   }
 }
 

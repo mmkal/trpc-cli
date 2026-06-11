@@ -20,6 +20,7 @@ import {
   type AnyRouter,
   type CreateCallerFactoryLike,
   getParsedProcedure,
+  jsonProcedureInputs,
   isNorpcRouter,
   isTrpcRouter,
   parseRouter,
@@ -130,6 +131,18 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
     const program = new Command(params.name)
 
+    // When the CLI-wide `jsonInput` setting is on, the program is built differently depending on whether `--json` was
+    // passed: if it was, commands are built JSON-only (so schema-derived flags/positionals don't exist and passing them
+    // alongside `--json` is an unknown option error); if it wasn't, commands are built from their schemas as usual,
+    // plus a help-only `--json` option which is unreachable by construction (any argv actually containing `--json`
+    // results in the JSON-only build). Sniff the argv that will actually be parsed: `runParams.argv` when provided,
+    // falling back to `process.argv` (minus the `node script.js` prefix). Calling `buildProgram()`/`toJSON()` with no
+    // runParams at all builds in flags mode - there's no invocation to sniff.
+    const jsonModeActive =
+      params.jsonInput === true &&
+      runParams !== undefined &&
+      argvIncludesJsonFlag(runParams.argv || process.argv.slice(2))
+
     if (params.version) program.version(params.version)
     if (params.description) program.description(params.description)
     if (params.usage) [params.usage].flat().forEach(usage => program.usage(usage))
@@ -155,7 +168,9 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     const _process = runParams?.process || process
     const configureCommand = (command: Command, procedurePath: string, info: ProcedureInfo) => {
       const {meta} = info
-      const parsedProcedure = getParsedProcedure(info)
+      const optedOutOfGlobalJsonInput = meta.jsonInput === false
+      const parsedProcedure =
+        jsonModeActive && !optedOutOfGlobalJsonInput ? jsonProcedureInputs() : getParsedProcedure(info)
       const incompatiblePairs = incompatiblePropertyPairs(parsedProcedure.optionsJsonSchema)
       // add meta to the commander command so we can access it in prompt.ts
       Object.assign(command, {__trpcCli: {path: procedurePath, meta, originalInputSchema: info.originalInputSchema}})
@@ -360,6 +375,22 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
 
+      if (params.jsonInput === true && !jsonModeActive && !optedOutOfGlobalJsonInput) {
+        // Help-only `--json` option: shows users JSON input is available, but is unreachable by construction - any
+        // invocation actually passing `--json` results in the JSON-only build (see `jsonModeActive` above).
+        // Skip if there's already a `--json` option (e.g. the procedure's schema couldn't be parsed, so it fell back to
+        // the real JSON-only `--json` option already).
+        const alreadyHasJsonOption = command.options.some(o => o.long === '--json')
+        if (!alreadyHasJsonOption) {
+          command.addOption(
+            new BaseOption(
+              '--json <json>',
+              'Provide the complete procedure input as JSON - other flags and positional arguments are unavailable when using this option',
+            ),
+          )
+        }
+      }
+
       const invalidOptionAliases = Object.entries(unusedOptionAliases).map(([option, alias]) => `${option}: ${alias}`)
       if (invalidOptionAliases.length) {
         throw new Error(`Invalid option aliases: ${invalidOptionAliases.join(', ')}`)
@@ -514,7 +545,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     return program
   }
 
-  const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams)) => {
+  const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams || {})) => {
     if (!looksLikeInstanceof<Command>(program, 'Command')) throw new Error(`program is not a Command instance`)
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
     const argv = [...(runParams?.argv || process.argv)]
@@ -579,6 +610,15 @@ export const kebabCase = (str: string) =>
     .replaceAll(/([\da-z])([A-Z])/g, '$1-$2')
     .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
     .toLowerCase()
+
+/** check if argv activates JSON input mode: a token that's exactly `--json` or starts with `--json=`, before any bare `--` terminator */
+const argvIncludesJsonFlag = (argv: string[]) => {
+  for (const token of argv) {
+    if (token === '--') return false
+    if (token === '--json' || token.startsWith('--json=')) return true
+  }
+  return false
+}
 
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli

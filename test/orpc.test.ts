@@ -139,14 +139,14 @@ test('orpc unjsonifiable schema', async () => {
     "Usage: program hello [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type { '$schema':
-                      'https://json-schema.org/draft/2020-12/schema' }, expected
-                      object or tuple.)
-      -h, --help      display help for command
+      --json <json>  Input formatted as JSON (procedure's schema couldn't be
+                     converted to CLI arguments: Invalid input type { '$schema':
+                     'https://json-schema.org/draft/2020-12/schema' }, expected
+                     object or tuple.)
+      -h, --help     display help for command
     "
   `)
-  expect(await run(router, ['hello', '--input', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
+  expect(await run(router, ['hello', '--json', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
     `"foo is world and bar is 42"`,
   )
 })
@@ -163,11 +163,11 @@ test('orpc json input via meta', async () => {
     "Usage: program hello [options]
 
     Options:
-      --input [json]  Input formatted as JSON
-      -h, --help      display help for command
+      --json <json>  Input formatted as JSON
+      -h, --help     display help for command
     "
   `)
-  expect(await run(router, ['hello', '--input', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
+  expect(await run(router, ['hello', '--json', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
     `"foo is world and bar is 42"`,
   )
 })

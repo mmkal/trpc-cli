@@ -405,14 +405,14 @@ test('string array then number input (downgrades to json input)', async () => {
     "Usage: program test [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Array positional parameters must
-                      be at the end of the input.)
-      -h, --help      display help for command
+      --json <json>  Input formatted as JSON (procedure's schema couldn't be
+                     converted to CLI arguments: Array positional parameters must be
+                     at the end of the input.)
+      -h, --help     display help for command
     "
   `)
   expect(
-    await run(router, ['test', '--input', '[["hello","world"], 123]'], {expectJsonInput: true}),
+    await run(router, ['test', '--json', '[["hello","world"], 123]'], {expectJsonInput: true}),
   ).toMatchInlineSnapshot(`"list: [["hello","world"],123]"`)
 })
 
@@ -429,15 +429,15 @@ test('record input', async () => {
     "Usage: program test [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Inputs with additional properties
-                      are not currently supported)
-      -h, --help      display help for command
+      --json <json>  Input formatted as JSON (procedure's schema couldn't be
+                     converted to CLI arguments: Inputs with additional properties
+                     are not currently supported)
+      -h, --help     display help for command
     "
   `)
   expect(await run(router, ['test'])).toMatchInlineSnapshot(`"input: undefined"`)
-  expect(await run(router, ['test', '--input', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
-  await expect(run(router, ['test', '--input', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
+  expect(await run(router, ['test', '--json', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
+  await expect(run(router, ['test', '--json', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: foo must be a number (was a string)
   `)
@@ -455,23 +455,23 @@ test("nullable array inputs aren't supported", async () => {
     "Usage: program test1 [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type Array<string |
-                      null>. Nullable arrays are not supported.)
-      -h, --help      display help for command
+      --json <json>  Input formatted as JSON (procedure's schema couldn't be
+                     converted to CLI arguments: Invalid input type Array<string |
+                     null>. Nullable arrays are not supported.)
+      -h, --help     display help for command
     "
   `)
-  const result = await run(router, ['test1', '--input', JSON.stringify(['a', null, 'b'])], {expectJsonInput: true})
+  const result = await run(router, ['test1', '--json', JSON.stringify(['a', null, 'b'])], {expectJsonInput: true})
   expect(result).toMatchInlineSnapshot(`"list: ["a",null,"b"]"`)
 
   await expect(run(router, ['test2', '--help'], {expectJsonInput: true})).resolves.toMatchInlineSnapshot(`
     "Usage: program test2 [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type Array<number |
-                      string | boolean | null>. Nullable arrays are not supported.)
-      -h, --help      display help for command
+      --json <json>  Input formatted as JSON (procedure's schema couldn't be
+                     converted to CLI arguments: Invalid input type Array<number |
+                     string | boolean | null>. Nullable arrays are not supported.)
+      -h, --help     display help for command
     "
   `)
 })
