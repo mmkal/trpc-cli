@@ -9,7 +9,7 @@ base: typebox-vendor
 
 ## Status Summary
 
-Spec committed, implementation not started. Stacked on `typebox-vendor` (PR #205) — depends on the vendored `Type.Script` with jsdoc parsing.
+Implementation in progress. Design probes done against the vendored `Type.Script` (see notes at the bottom); now building `src/module-commands.ts` (extractor + router builder) and the `createCli({module})` branch.
 
 ## Goal
 
@@ -72,3 +72,14 @@ This is an experiment — mark the API `experimental_` or document it as experim
 ## Implementation notes
 
 - 2026-06-11: Task created as the stacked half of the bedtime TypeBox work. The user's prompt sketched `createCli({module: './commands.ts'})` with inline-jsdoc'd destructured params; the destructured-with-inline-types syntax in the prompt was pseudocode — real TS requires a separate type annotation, which is what the extractor targets.
+- 2026-06-11 (implementation): Probed the vendored `Type.Script` before writing code. Findings that shaped the design:
+  - Multi-declaration scripts (`type A = {...}\ntype B = {...}`) return a *record* keyed by declaration name, cross-references resolve in either order, and `interface X extends Y {...}` works. But one unparseable declaration poisons the whole joined script (returns garbage like `{$ref: 'type'}`), so the builder parses the joined script first, validates every expected name came back, and falls back to iterative per-declaration parsing (passing the accumulated record as context, repeated to resolve chains) if not.
+  - `Type.Script(context, expr)` resolves named refs from a context record - that's how `fn(opts: Options)` works without the TS compiler.
+  - Unknown refs don't throw; they come back as `{$ref: 'TheName'}` embedded in the schema, so the builder walks the result for `$ref`s and errors with a "declare it in the same file or inline the literal" message.
+  - Unparseable expressions also don't throw - they return `{not: {}}` (Never), which the builder detects and reports.
+  - Known limitation (vendored jsdoc patch, not fixable here): a jsdoc comment on a *property* whose type is a named reference (`/** doc */ opts: AddOptions`) is dropped during instantiation. jsdoc on properties with inline types works fine.
+- 2026-06-11 (decisions):
+  - Async boundary: `createCli` stays sync. With `module`, the returned `TrpcCli`'s `run()` lazily (a) dynamic-imports `./module-commands.js`, (b) reads/imports the module, (c) builds the norpc router, then delegates to the regular `createCli({router, ...})`. `buildProgram`/`toJSON` throw a clear "not supported with module (experimental) - pass a router" error, since they're sync APIs and module resolution is inherently async. Recorded as an experimental limitation rather than making everything async.
+  - Browser safety: no separate entrypoint needed. `node:fs/promises`/`node:path`/`node:url` are dynamic-imported inside the string-path branch only, and `./module-commands.js` itself is dynamic-imported from `createCli`, so the main entrypoint has no new unconditional `node:` imports (`util`/`node:stream` were already there). Verified with `bun build --target=browser`.
+  - Command driver: extracted source declarations (in source order) are matched against runtime exports. Extracted-but-not-a-function exports are skipped silently (the extractor regexes can false-positive on e.g. `export const x = (2 + 3)`); function exports with no parseable declaration throw, listing the supported syntaxes. `default` exports are ignored (documented).
+  - First-param slicing terminates at a top-level `,` or `=`; `<`/`>` are tracked as brackets except `=>`'s `>`. Multi-arg generic refs without braces (e.g. a bare `Record<string, number>` annotation) mis-slice and produce the unparseable-type error - acceptable for v1, the error names the offending text.
