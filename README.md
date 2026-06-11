@@ -38,6 +38,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [valibot](#valibot)
    - [effect](#effect)
    - [typebox](#typebox)
+   - [CLI from a plain TypeScript module — Experimental](#cli-from-a-plain-typescript-module--experimental)
 - [Examples](#examples)
    - [Calculator Example](#calculator-example)
    - [Migrator Example](#migrator-example)
@@ -605,6 +606,52 @@ Schemas built via `trpc-cli/typebox` are plain TypeBox JSON Schema objects, but 
 Since the example above uses the built-in norpc router (`t` from `trpc-cli` itself), it's a fully working CLI with **zero peer dependencies installed** - no zod, no `@trpc/server`, no `@orpc/server`.
 
 The vendored copy lives in `src/typebox/vendor` (pinned via `typebox` in devDependencies, upgraded with `cp-typebox.sh`) - all other `Type.*` builders, `Compile`, `Value` etc. work as documented upstream.
+
+### CLI from a plain TypeScript module — Experimental
+
+> **Note:** This API is experimental and may change in a future release.
+
+Going one step further than the vendored typebox: you can skip schemas *and* routers entirely and derive a CLI from a plain TypeScript module of exported functions:
+
+```ts
+// commands.ts
+/** install dependencies from the lockfile */
+export async function install(options: {
+  /** fail if the lockfile is out of date */
+  frozenLockfile?: boolean
+}) {
+  // do install stuff here
+}
+
+type AddOptions = {
+  /** the name of the package to add */
+  packageName: string
+  /** add to devDependencies instead of dependencies */
+  dev?: boolean
+}
+
+/** add a package to the dependencies */
+export async function add(options: AddOptions) {
+  return {added: options.packageName} // returned values are logged
+}
+```
+
+```ts
+// cli.ts
+import {createCli} from 'trpc-cli'
+
+void createCli({module: './commands.ts'}).run()
+```
+
+trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and the first parameter's object type annotation is parsed by the vendored `Type.Script` into a real JSON schema - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`).
+
+Details and limitations:
+
+- The path is resolved against `process.cwd()`. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+- The first parameter must be an object type: an inline literal (`{foo: string}`) or a reference to a `type X = {...}`/`interface X {...}` declared in the same file. Functions with no parameters become commands with no arguments.
+- Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...`. Re-exports, `export {f}` statements and default exports are not picked up.
+- For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({module: {source: rawSourceText, exports: await import('./commands.js')}})`.
+- `buildProgram`/`toJSON` aren't supported in this mode (module loading is async; those APIs are sync) - use `run`, or build a router yourself.
 
 ---
 
@@ -1450,17 +1497,18 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L127)
+#### [createCli](./src/index.ts#L143)
 
 Run a trpc router as a CLI.
 
 ##### Params
 
-|name      |description                                                                              |
-|----------|-----------------------------------------------------------------------------------------|
-|router    |A trpc router                                                                            |
-|context   |The context to use when calling the procedures - needed if your router requires a context|
-|trpcServer|The trpc server module to use. Only needed if using trpc v10.                            |
+|name      |description                                                                                                                                  |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------|
+|router    |A trpc router                                                                                                                                |
+|context   |The context to use when calling the procedures - needed if your router requires a context                                                    |
+|trpcServer|The trpc server module to use. Only needed if using trpc v10.                                                                                |
+|module    |(experimental) instead of `router`: a path to a plain TypeScript module of exported functions (or `{source, exports}`) to derive the CLI from|
 
 ##### Returns
 

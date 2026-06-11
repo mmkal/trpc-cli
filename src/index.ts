@@ -29,7 +29,7 @@ import {
 import {CosmeticJsonOption, promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
-import {JsonInputMode, ParsedProcedure, TrpcCli, TrpcCliParams, TrpcCliRunParams} from './types.js'
+import {JsonInputMode, ParsedProcedure, TrpcCli, TrpcCliModuleParams, TrpcCliParams, TrpcCliRunParams} from './types.js'
 import {looksLikeInstanceof} from './util.js'
 
 const orpcServerOrError = await import('@orpc/server').catch(String)
@@ -124,7 +124,48 @@ export {deepHelp} from './json.js'
  * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
-export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
+export function createCli<R extends AnyRouter>(params: TrpcCliParams<R>): TrpcCli
+/**
+ * @experimental Run a plain TypeScript module of exported functions as a CLI - no schema library, no router.
+ * See {@linkcode TrpcCliModuleParams} for details. Note: `buildProgram` and `toJSON` aren't supported in this mode
+ * (module loading is async, those APIs are sync) - use `run`, or build a router yourself.
+ */
+export function createCli(params: TrpcCliModuleParams): TrpcCli
+/**
+ * Run a trpc router as a CLI.
+ *
+ * @param router A trpc router
+ * @param context The context to use when calling the procedures - needed if your router requires a context
+ * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
+ * @param module (experimental) instead of `router`: a path to a plain TypeScript module of exported functions (or `{source, exports}`) to derive the CLI from
+ * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+ */
+export function createCli<R extends AnyRouter>(allParams: TrpcCliParams<R> | TrpcCliModuleParams): TrpcCli {
+  if ('module' in allParams) {
+    const {module: moduleInput, ...params} = allParams
+    let cliPromise: Promise<TrpcCli> | undefined
+    const getCli = () => {
+      // node:fs / dynamic import / the vendored typebox parser are only needed (and only loaded) in this mode
+      cliPromise ||= import('./module-commands.js')
+        .then(mc => mc.moduleToRouter(moduleInput))
+        .then(router => createCli({router, ...params}))
+      return cliPromise
+    }
+    const unsupported = (method: string) =>
+      new Error(
+        `${method} is not supported when using \`module\` (experimental) - loading the module is async and ${method} is sync. Use \`run\`, or build a router and pass it to createCli instead.`,
+      )
+    return {
+      run: async (runParams, program) => (await getCli()).run(runParams, program),
+      buildProgram: () => {
+        throw unsupported('buildProgram')
+      },
+      toJSON: () => {
+        throw unsupported('toJSON')
+      },
+    }
+  }
+  const {router, ...params} = allParams
   const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {

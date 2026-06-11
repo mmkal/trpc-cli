@@ -9,7 +9,7 @@ base: typebox-vendor
 
 ## Status Summary
 
-Implementation in progress. Design probes done against the vendored `Type.Script` (see notes at the bottom); now building `src/module-commands.ts` (extractor + router builder) and the `createCli({module})` branch.
+Implementation complete; build/lint/tests green locally and the bun browser-target bundle of the main entrypoint verified. Main pieces: `src/module-commands.ts` (source extractor + norpc router builder), the `createCli({module})` overload in `src/index.ts`, `TrpcCliModuleParams` in `src/types.ts`, e2e tests in `test/typebox-module-commands.test.ts` with a fixture at `test/fixtures/commands-module.ts`, and a README section. Known v1 limitations are documented (no `buildProgram`/`toJSON` in module mode, no `export {f}`/default exports, jsdoc dropped on properties typed by named refs).
 
 ## Goal
 
@@ -55,13 +55,13 @@ This is an experiment — mark the API `experimental_` or document it as experim
 
 ## Checklist
 
-- [ ] Source extractor: exported function declarations, jsdoc, first-param type literal text (balanced-brace slicing, string/comment-safe).
-- [ ] Build norpc router from extracted commands: kebab-case command names from function names per existing trpc-cli conventions; function jsdoc → command description.
-- [ ] `createCli({module: ...})` API accepting a path string and the `{source, exports}` escape hatch.
-- [ ] Browser-target safety: bun build of the main entrypoint stays clean (no unconditional `fs`/`node:` imports).
-- [ ] Tests: e2e — write a fixture commands module, run it through `createCli`, snapshot `--help` (descriptions from jsdoc visible) and invoke commands with flags; error cases (missing module, unparseable parameter, flag validation failure).
-- [ ] README: short experimental section with the example above.
-- [ ] `pnpm build`, `pnpm lint`, `pnpm test` green.
+- [x] Source extractor: exported function declarations, jsdoc, first-param type literal text (balanced-brace slicing, string/comment-safe). _`extractModuleCommands` + `scanSource`/`findBalancedEnd`/`parseFirstParamType` in src/module-commands.ts. Handles `export function`/`export async function`/`export const f = (...) =>`, destructured params, optional markers, default values, and named type refs via `buildDeclarationContext`._
+- [x] Build norpc router from extracted commands: kebab-case command names from function names per existing trpc-cli conventions; function jsdoc → command description. _`buildRouterFromModule`/`buildProcedure` in src/module-commands.ts - procedures keep the camelCase export name, the existing `kebabCase` in src/index.ts does the rest. jsdoc → `meta.description`._
+- [x] `createCli({module: ...})` API accepting a path string and the `{source, exports}` escape hatch. _Overload on `createCli` in src/index.ts; `TrpcCliModuleParams` in src/types.ts. `run()` lazily dynamic-imports module-commands.js; `buildProgram`/`toJSON` throw a clear experimental-limitation error._
+- [x] Browser-target safety: bun build of the main entrypoint stays clean (no unconditional `fs`/`node:` imports). _`node:fs/promises`/`node:path`/`node:url` only dynamic-imported inside the path-string branch; verified `bun build` (browser target) of a CLI importing dist/index.js exits 0._
+- [x] Tests: e2e — write a fixture commands module, run it through `createCli`, snapshot `--help` (descriptions from jsdoc visible) and invoke commands with flags; error cases (missing module, unparseable parameter, flag validation failure). _test/typebox-module-commands.test.ts (12 tests) + test/fixtures/commands-module.ts. Also verified manually under tsx and plain node 26 (native strip-types imports the .ts fixture)._
+- [x] README: short experimental section with the example above. _"CLI from a plain TypeScript module — Experimental" section after the typebox validator section; `createCli` API-docs codegen block regenerated with the new `module` param._
+- [x] `pnpm build`, `pnpm lint`, `pnpm test` green. _All exit 0 locally after merging origin/typebox-vendor (which fixed the tsc OOM)._
 
 ## Reference
 
@@ -83,3 +83,7 @@ This is an experiment — mark the API `experimental_` or document it as experim
   - Browser safety: no separate entrypoint needed. `node:fs/promises`/`node:path`/`node:url` are dynamic-imported inside the string-path branch only, and `./module-commands.js` itself is dynamic-imported from `createCli`, so the main entrypoint has no new unconditional `node:` imports (`util`/`node:stream` were already there). Verified with `bun build --target=browser`.
   - Command driver: extracted source declarations (in source order) are matched against runtime exports. Extracted-but-not-a-function exports are skipped silently (the extractor regexes can false-positive on e.g. `export const x = (2 + 3)`); function exports with no parseable declaration throw, listing the supported syntaxes. `default` exports are ignored (documented).
   - First-param slicing terminates at a top-level `,` or `=`; `<`/`>` are tracked as brackets except `=>`'s `>`. Multi-arg generic refs without braces (e.g. a bare `Record<string, number>` annotation) mis-slice and produce the unparseable-type error - acceptable for v1, the error names the offending text.
+- 2026-06-11 (wrap-up):
+  - Test harness tweak: `test/test-run.ts` now JSON-stringifies object results on the success path (was `String(e.cause)` → `[object Object]`), mirroring what the default line-by-line logger does for users. No existing snapshots relied on the old behavior. Also widened `runWith` to accept `TrpcCliModuleParams`.
+  - Deliberately deferred follow-ups: `buildProgram`/`toJSON` support in module mode (would need an async variant or eager loading); `export {f}`/`export default` declarations; positional arguments (a `positional` marker has no jsdoc-comment syntax yet - everything is a flag); generic command functions with function-type constraints; multi-parameter functions (extra params are just `undefined` at call time); the named-ref-property jsdoc drop (needs a fix in the vendored jsdoc patch, owned by the typebox-vendor branch).
+  - `bun build` browser-target bundle of the main entrypoint grows to ~3.9MB because the dynamic `import('./module-commands.js')` (and through it the vendored typebox parser) gets inlined by bundlers. It still builds and runs fine; if size matters later, the feature could move to a `trpc-cli/module` entrypoint.

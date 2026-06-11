@@ -34,6 +34,41 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
 }
 
 /**
+ * @experimental Derive a CLI from a plain TypeScript module of exported functions instead of a router.
+ * Exported functions become commands: the jsdoc above each function becomes the command description, and the first
+ * parameter's object type annotation (parsed from the module's *source text* via the vendored `trpc-cli/typebox`
+ * `Type.Script`) becomes the input schema - property jsdoc comments become flag descriptions, and inputs are
+ * validated against the schema before the function runs.
+ *
+ * @example
+ * ```ts
+ * // commands.ts
+ * //   /** install dependencies from the lockfile *\/
+ * //   export async function install(options: {frozenLockfile?: boolean}) { ... }
+ *
+ * // cli.ts
+ * import {createCli} from 'trpc-cli'
+ * void createCli({module: './commands.ts'}).run()
+ * ```
+ */
+export interface TrpcCliModuleParams {
+  /**
+   * @experimental
+   * Either a path to the commands module (resolved against `process.cwd()`, read from disk and dynamically
+   * imported - for `.ts` files, run under tsx/bun/deno/node>=22.18), or - for bundlers/browsers where file reading
+   * and dynamic import aren't available - an explicit pair of the module's raw source text and its live exports:
+   * `{source: rawSourceText, exports: await import('./commands.js')}`.
+   */
+  module: string | {source: string; exports: Record<string, unknown>}
+  name?: string
+  version?: string
+  description?: string
+  usage?: string | string[]
+  /** See {@linkcode TrpcCliParams.jsonInput} */
+  jsonInput?: JsonInputMode
+}
+
+/**
  * Mode for the `jsonInput` setting (CLI-wide via `createCli({jsonInput: ...})` or per-procedure via meta):
  * - `'never'` (default): the command doesn't accept `--json` at all
  * - `'auto'`: the command accepts `--json <json>` as an alternative to its schema-derived flags/positional arguments

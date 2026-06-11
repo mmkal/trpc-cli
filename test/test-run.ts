@@ -1,18 +1,19 @@
 globalThis.require = require
 
 import {expect} from 'vitest'
-import {AnyRouter, FailedToExitError, TrpcCliParams, createCli} from '../src/index.js'
+import {AnyRouter, FailedToExitError, TrpcCliModuleParams, TrpcCliParams, createCli} from '../src/index.js'
 import {looksLikeInstanceof} from '../src/util.js'
 
 export const run = <R extends AnyRouter>(router: R, argv: string[], {expectJsonInput = false} = {}) => {
   return runWith({router}, argv, {expectJsonInput})
 }
 export const runWith = async <R extends AnyRouter>(
-  params: TrpcCliParams<R>,
+  params: TrpcCliParams<R> | TrpcCliModuleParams,
   argv: string[],
   {expectJsonInput = false} = {},
 ): Promise<string> => {
-  const cli = createCli(params)
+  // the ternary looks redundant but narrows the union so the right createCli overload is picked
+  const cli = 'module' in params ? createCli(params) : createCli(params)
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   const result: string = await cli
@@ -25,6 +26,8 @@ export const runWith = async <R extends AnyRouter>(
     .catch(async e => {
       if (e instanceof FailedToExitError) {
         if (e.exitCode === 0 && (e.cause as any).message === '(outputHelp)') return logs[0][0] as string // should be the help text
+        // object results get JSON.stringified by the default line-by-line logger - mirror that so tests see what users see
+        if (e.exitCode === 0 && typeof e.cause === 'object' && e.cause !== null) return JSON.stringify(e.cause, null, 2)
         if (e.exitCode === 0) return String(e.cause)
         // eslint-disable-next-line promise/no-nesting
         const help = argv.includes('--help') ? '' : await runWith(params, argv.concat(['--help'])).catch(String)
