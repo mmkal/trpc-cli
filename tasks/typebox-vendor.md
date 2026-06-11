@@ -8,7 +8,7 @@ branch: typebox-vendor
 
 ## Status Summary
 
-Spec committed, implementation not started. This is the "broader rethink" promised when PR #202 was closed.
+Mostly done. Vendored source + jsdoc patch + `trpc-cli/typebox` wrapper + restored Standard JSON Schema detection + tests + README are all in. Remaining: confirm a cold `pnpm build` memory issue (tsc OOM'd once at the default 4GB heap on a clean dist), attw verification on a packed tarball, and CI green. This is the "broader rethink" promised when PR #202 was closed.
 
 ## Goal
 
@@ -74,5 +74,7 @@ Combined with norpc (`src/norpc.ts`, the built-in dependency-free router), this 
 - Upstream standard adapter example: https://github.com/sinclairzx81/typebox/tree/main/example/standard
 
 ## Implementation notes
+
+- 2026-06-11 19:20 ⚠️ COORDINATION: multiple concurrent claude instances are active on this same worktree (a second session has been live since 18:24 and is currently bisecting a tsc memory blow-up apparently caused by the `declare module` TSchema `~standard` augmentation in `src/typebox/standard.ts` — cold compiles OOM at node's default ~4GB heap). This instance is leaving `src/typebox/standard.ts` uncommitted/hands-off for that session and has committed only additive files (README section, compile-script heap bump, this note). Whoever resolves the augmentation cost: make sure the `static inference flows into procedures` expectTypeOf assertions in test/typebox.test.ts still pass — replacing the generic with `unknown` would silently break input inference. Remaining checklist after that: attw esm-only check on a packed tarball, deep-import smoke test, CI green, PR #205 body update.
 
 - 2026-06-11: Task fleshed out from `tasks/typebox-vendored.ignoreme.md` (local draft) plus research into upstream issue #1597, discussion #1152, the e9c8057/c4fffb2 add/revert history, and CI's `test_tgz` bun browser-target constraint. Follow-up experiment (`createCli({module: './commands.ts'})` parsing plain TS functions via `Type.Script`) is a separate stacked task: `tasks/typebox-module-commands.md` on branch `typebox-module-commands`.

@@ -37,6 +37,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [arktype](#arktype)
    - [valibot](#valibot)
    - [effect](#effect)
+   - [typebox](#typebox)
 - [Examples](#examples)
    - [Calculator Example](#calculator-example)
    - [Migrator Example](#migrator-example)
@@ -565,6 +566,41 @@ const cli = createCli({router, trpcServer: import('@trpc/server')})
 
 cli.run() // e.g. `mycli add 1 2`
 ```
+
+### typebox
+
+[TypeBox](https://github.com/sinclairzx81/typebox) is vendored into trpc-cli, so unlike the other validators it requires **no extra dependencies** - import it from `trpc-cli/typebox`:
+
+```ts
+import {createCli, t} from 'trpc-cli'
+import Type from 'trpc-cli/typebox'
+
+const router = t.router({
+  hello: t.procedure
+    .input(
+      Type.Script(`{
+        /** a message to say hello to new users */
+        greeting: string
+        /** make it loud */
+        shout?: boolean
+      }`),
+    )
+    .query(({input}) => (input.shout ? input.greeting.toUpperCase() + '!!!' : input.greeting)),
+})
+
+const cli = createCli({router})
+
+cli.run() // e.g. `mycli hello --greeting hi --shout`
+```
+
+Schemas built via `trpc-cli/typebox` are plain TypeBox JSON Schema objects, but with two additions over the upstream package:
+
+1. They carry a (lazily-built, non-enumerable) `~standard` prop implementing [standard-schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema), so they can be passed straight to trpc/orpc/norpc `.input(...)` with no adapter. Upstream TypeBox [won't implement `~standard` natively](https://github.com/sinclairzx81/typebox/discussions/1152) on separation-of-concerns grounds - vendoring lets trpc-cli take that opinion on itself.
+2. The vendored `Type.Script` parses `/** jsdoc comments */` preceding object properties into JSON Schema `description` fields (which become help text for flags, as in the example above). Upstream [treats comments as whitespace](https://github.com/sinclairzx81/typebox/issues/1597) for parser-performance reasons. Static type inference is unaffected - the type-level parser keeps ignoring comments.
+
+Since the example above uses the built-in norpc router (`t` from `trpc-cli` itself), it's a fully working CLI with **zero peer dependencies installed** - no zod, no `@trpc/server`, no `@orpc/server`.
+
+The vendored copy lives in `src/typebox/vendor` (pinned via `typebox` in devDependencies, upgraded with `cp-typebox.sh`) - all other `Type.*` builders, `Compile`, `Value` etc. work as documented upstream.
 
 ---
 
