@@ -1,0 +1,69 @@
+/*--------------------------------------------------------------------------
+
+TypeBox
+
+The MIT License (MIT)
+
+Copyright (c) 2017-2026 Haydn Paterson 
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+---------------------------------------------------------------------------*/
+
+// deno-fmt-ignore-file
+
+import { type TSchema } from '../types/schema.js'
+import { type TProperties } from '../types/properties.js'
+import { type TCyclic, IsCyclic } from '../types/cyclic.js'
+import { type TUnknown, Unknown } from '../types/unknown.js'
+import { type TUnsafe, IsUnsafe } from '../types/unsafe.js'
+import { type TExtendsLeft, ExtendsLeft } from './extends_left.js'
+import { type TCyclicExtends, CyclicExtends } from '../engine/cyclic/index.js'
+
+// ------------------------------------------------------------------
+// Canonical: Preflight
+// ------------------------------------------------------------------
+type TCanonical<Type extends TSchema> = (
+  Type extends TCyclic ? TCyclicExtends<Type> : 
+  Type extends TUnsafe ? TUnknown : 
+  Type
+)
+function Canonical<Type extends TSchema>(type: Type): TCanonical<Type> {
+  return (
+    IsCyclic(type) ? CyclicExtends(type) : 
+    IsUnsafe(type) ? Unknown() : 
+    type
+  ) as never
+}
+// ------------------------------------------------------------------
+// Extends
+// ------------------------------------------------------------------
+/** Performs a structural extends check on left and right types and yields inferred types on right if specified. */
+export type TExtends<Inferred extends TProperties, Left extends TSchema, Right extends TSchema,
+  CanonicalLeft extends TSchema = TCanonical<Left>,
+  CanonicalRight extends TSchema = TCanonical<Right>
+> = TExtendsLeft<Inferred, CanonicalLeft, CanonicalRight>
+/** Performs a structural extends check on left and right types and yields inferred types on right if specified. */
+export function Extends<Inferred extends TProperties, Left extends TSchema, Right extends TSchema>
+  (inferred: Inferred, left: Left, right: Right): 
+    TExtends<Inferred, Left, Right> {
+  const canonicalLeft = Canonical(left)
+  const canonicalRight = Canonical(right)
+  return ExtendsLeft(inferred, canonicalLeft, canonicalRight)
+}

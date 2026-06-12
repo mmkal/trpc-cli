@@ -25,7 +25,7 @@ export const runWith = async <R extends AnyRouter>(
     .catch(async e => {
       if (e instanceof FailedToExitError) {
         if (e.exitCode === 0 && (e.cause as any).message === '(outputHelp)') return logs[0][0] as string // should be the help text
-        if (e.exitCode === 0) return e.cause as string
+        if (e.exitCode === 0) return String(e.cause)
         // eslint-disable-next-line promise/no-nesting
         const help = argv.includes('--help') ? '' : await runWith(params, argv.concat(['--help'])).catch(String)
         const print = (obj: Record<string, string>) => {

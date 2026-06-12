@@ -5,6 +5,11 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./typebox": "./dist/typebox/index.js",
+    "./*": "./*"
+  },
   "bin": "dist/bin.js",
   "files": [
     "dist"
@@ -15,6 +20,7 @@
   "packageManager": "pnpm@10.12.4",
   "scripts": {
     "ztjs": "./cp-zod-to-json-schema.sh",
+    "typebox": "./cp-typebox.sh",
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
@@ -98,6 +104,7 @@
     "trpcserver10": "npm:@trpc/server@^10.45.2",
     "trpcserver11": "npm:@trpc/server@^11.1.1",
     "tsx": "4.20.3",
+    "typebox": "1.2.8",
     "typescript": "5.8.3",
     "valibot": "1.2.0",
     "vitest": "3.2.4",
