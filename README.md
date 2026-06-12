@@ -38,6 +38,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [valibot](#valibot)
    - [effect](#effect)
    - [typebox](#typebox)
+   - [CLI from a plain TypeScript module — Experimental](#cli-from-a-plain-typescript-module--experimental)
 - [Examples](#examples)
    - [Calculator Example](#calculator-example)
    - [Migrator Example](#migrator-example)
@@ -605,6 +606,78 @@ Schemas built via `trpc-cli/typebox` are plain TypeBox JSON Schema objects, but 
 Since the example above uses the built-in norpc router (`t` from `trpc-cli` itself), it's a fully working CLI with **zero peer dependencies installed** - no zod, no `@trpc/server`, no `@orpc/server`.
 
 The vendored copy lives in `src/typebox/vendor` (pinned via `typebox` in devDependencies, upgraded with `cp-typebox.sh`) - all other `Type.*` builders, `Compile`, `Value` etc. work as documented upstream.
+
+### CLI from a plain TypeScript module — Experimental
+
+> **Note:** This API is experimental and may change in a future release.
+
+Going one step further than the vendored typebox: you can skip schemas *and* routers entirely and derive a CLI from a plain TypeScript module of exported functions:
+
+```ts
+// commands.ts
+/** install dependencies from the lockfile */
+export async function install(options: {
+  /** fail if the lockfile is out of date */
+  frozenLockfile?: boolean
+}) {
+  // do install stuff here
+}
+
+type AddOptions = {
+  /** the name of the package to add */
+  packageName: string
+  /** add to devDependencies instead of dependencies */
+  dev?: boolean
+}
+
+/** add a package to the dependencies */
+export async function add(options: AddOptions) {
+  return {added: options.packageName} // returned values are logged
+}
+```
+
+```ts
+// cli.ts
+import {createCli} from 'trpc-cli'
+
+void createCli({module: new URL('commands.ts', import.meta.url)}).run()
+```
+
+trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and parameter type annotations are parsed by the vendored `Type.Script` into real JSON schemas - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`).
+
+Multi-parameter functions work too: leading string/number/boolean parameters become positional arguments, and a trailing object parameter becomes flags - the same convention as [tuple inputs](#combining-positional-arguments-and-options):
+
+```ts
+// commands.ts
+/** add two numbers */
+export async function add(left: number, right: number) {
+  return left + right // mycli add 2 3
+}
+
+/** copy a file */
+export async function copy(
+  source: string,
+  dest?: string,
+  options?: {force?: boolean},
+) {
+  // mycli copy a.txt b.txt --force
+  // optional parameters (and ones with defaults) become optional positionals: mycli copy a.txt
+}
+```
+
+Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becomes the positional argument's description.
+
+Details and limitations:
+
+- `module` accepts a `URL` (`new URL('./commands.ts', import.meta.url)` resolves relative to the importing file, so the CLI works from any directory - use this for anything you distribute) or a path string (resolved against `process.cwd()` - fine for quick scripts run from a known directory, broken the moment a globally-installed CLI runs somewhere else). For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+- Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file (intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags). Functions with no parameters become commands with no arguments.
+- Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
+- Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed). The module must export *only* commands: any other exported function - an `export {f}` statement, a re-export barrel like `export * from './helpers.ts'`, or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module. Default exports are ignored.
+- Overloaded functions work, with a simple rule: only the *first* overload signature is used; later overloads and the implementation signature are ignored. TypeScript resolves calls against overload signatures in order, so the first one is the primary documented shape - and a CLI can only present one calling convention.
+- For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({module: {source: rawSourceText, exports: await import('./commands.js')}})`.
+- `buildProgram`/`toJSON` aren't supported in this mode (module loading is async; those APIs are sync) - use `run`, or build a router yourself.
+- Don't pass user-controlled strings as `module` - the path is read and dynamically imported, i.e. executed.
+- Bundle-size note: the dynamic import of the module-commands machinery pulls the vendored typebox parser into bundles (~4MB unminified). Irrelevant for the normal Node CLI case; if you're bundling for size, prefer a router with explicit schemas.
 
 ---
 
@@ -1450,17 +1523,18 @@ Note - in the above example `src/your-router.ts` will be imported, and then its 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L127)
+#### [createCli](./src/index.ts#L143)
 
 Run a trpc router as a CLI.
 
 ##### Params
 
-|name      |description                                                                              |
-|----------|-----------------------------------------------------------------------------------------|
-|router    |A trpc router                                                                            |
-|context   |The context to use when calling the procedures - needed if your router requires a context|
-|trpcServer|The trpc server module to use. Only needed if using trpc v10.                            |
+|name      |description                                                                                                                                                                                                              |
+|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|router    |A trpc router                                                                                                                                                                                                            |
+|context   |The context to use when calling the procedures - needed if your router requires a context                                                                                                                                |
+|trpcServer|The trpc server module to use. Only needed if using trpc v10.                                                                                                                                                            |
+|module    |(experimental) instead of `router`: a plain TypeScript module of exported functions to derive the CLI from - a `URL` like `new URL('./commands.ts', import.meta.url)`, a cwd-relative path string, or `{source, exports}`|
 
 ##### Returns
 
