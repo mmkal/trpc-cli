@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 size: large
 branch: typebox-vendor
 ---

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 size: medium
 branch: typebox-module-commands
 base: typebox-vendor
