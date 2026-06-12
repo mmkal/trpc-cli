@@ -30,7 +30,7 @@ import {CosmeticJsonOption, promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {JsonInputMode, ParsedProcedure, TrpcCli, TrpcCliModuleParams, TrpcCliParams, TrpcCliRunParams} from './types.js'
-import {looksLikeInstanceof} from './util.js'
+import {kebabCase, looksLikeInstanceof} from './util.js'
 
 const orpcServerOrError = await import('@orpc/server').catch(String)
 const getOrpcServerModule = () => {
@@ -659,11 +659,7 @@ export function createCli<R extends AnyRouter>(allParams: TrpcCliParams<R> | Trp
   return {run, buildProgram, toJSON: (program = buildProgram()) => commandToJSON(program as Command)}
 }
 
-export const kebabCase = (str: string) =>
-  str
-    .replaceAll(/([\da-z])([A-Z])/g, '$1-$2')
-    .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
-    .toLowerCase()
+export {kebabCase} from './util.js'
 
 /**
  * Resolve the effective `jsonInput` mode for a procedure: meta overrides the CLI-wide param, defaulting to `'never'`.

@@ -1,6 +1,7 @@
 import {JSONSchema7} from 'json-schema'
 import type {StandardJsonSchemaConverter} from './standard-schema/json-schema.js'
 import {Dependencies, Result} from './types.js'
+import {getSchemaTypes} from './util.js'
 import {zodToJsonSchema as zodV3ToJsonSchema} from './zod-to-json-schema/index.js'
 
 const [valibotOrError, valibotToJsonSchemaOrError, effectOrError, zod4CoreOrError] = await Promise.all([
@@ -151,30 +152,7 @@ export const getDescription = (v: JSONSchema7, depth = 0): string => {
   return parts.join('; ') || ''
 }
 
-export const getSchemaTypes = (
-  propertyValue: JSONSchema7,
-): Array<'string' | 'boolean' | 'number' | 'integer' | (string & {})> => {
-  const array: string[] = []
-  if ('type' in propertyValue) {
-    array.push(...[propertyValue.type!].flat())
-  }
-  if ('enum' in propertyValue && Array.isArray(propertyValue.enum)) {
-    array.push(...propertyValue.enum.flatMap(s => typeof s))
-  }
-  if ('const' in propertyValue && propertyValue.const === null) {
-    array.push('null')
-  } else if ('const' in propertyValue) {
-    array.push(typeof propertyValue.const)
-  }
-  if ('oneOf' in propertyValue) {
-    array.push(...(propertyValue.oneOf as JSONSchema7[]).flatMap(getSchemaTypes))
-  }
-  if ('anyOf' in propertyValue) {
-    array.push(...(propertyValue.anyOf as JSONSchema7[]).flatMap(getSchemaTypes))
-  }
-
-  return [...new Set(array)]
-}
+export {getSchemaTypes} from './util.js'
 
 /** Returns a list of all allowed subschemas. If the schema is not a union, returns a list with a single item. */
 export const getAllowedSchemas = (schema: JSONSchema7): JSONSchema7[] => {

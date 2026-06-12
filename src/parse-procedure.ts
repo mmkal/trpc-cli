@@ -381,7 +381,11 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
         array: looksLikeArray(schema),
         description: schemaDefPropValue(schema, 'description') || '',
         required: !isOptional(schema),
-        type: getSchemaTypes(toRoughJsonSchema7(schema)).join(' | '),
+        // `undefined` appears in unions like typebox's `Type.Union([Type.Number(), Type.Undefined()])` for optional
+        // tuple elements - it conveys optionality (already shown via `[name]` vs `<name>`), not a real input type
+        type: getSchemaTypes(toRoughJsonSchema7(schema))
+          .filter(type => type !== 'undefined')
+          .join(' | '),
       })),
       optionsJsonSchema: flagsSchema && typeof flagsSchema === 'object' ? flagsSchema : {},
       getPojoInput: commandArgs => {
@@ -482,7 +486,8 @@ const parameterName = (s: JSONSchema7Definition, position: number): string => {
   if (looksLikeArray(s)) return `[${name}...]`
 
   // commander requiremenets: no special characters in positional parameters; `<name>` for required and `[name]` for optional parameters
-  name = name.replaceAll(/\W+/g, ' ').trim()
+  // dashes are allowed though, so kebab-case names (e.g. from module-commands parameter names) display as `<the-number>`
+  name = name.replaceAll(/[^\w-]+/g, ' ').trim()
   return isOptional(s) ? `[${name}]` : `<${name}>`
 }
 
