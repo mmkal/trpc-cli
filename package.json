@@ -101,7 +101,7 @@
     "valibot": "1.2.0",
     "vitest": "4.0.18",
     "zod3": "npm:zod@3.25.76",
-    "zod": "4.3.6",
+    "zod": "4.4.3",
     "zod-to-json-schema": "3.25.1"
   }
 }
