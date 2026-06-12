@@ -10,7 +10,14 @@
     "./typebox": "./dist/typebox/index.js",
     "./*": "./*"
   },
-  "bin": "dist/bin.js",
+  "bin": {
+    "trpc-cli": "./src/bin.ts"
+  },
+  "publishConfig": {
+    "bin": {
+      "trpc-cli": "./dist/bin.js"
+    }
+  },
   "files": [
     "dist"
   ],

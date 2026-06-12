@@ -17,7 +17,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ oRPC support
 - ✅ Standalone mode (experimental) - build CLIs without `@trpc/server` or `@orpc/server`
-- ✅ No configuration required. Run on an existing router with `npx trpc-cli src/your-router.ts`
+- ✅ No configuration required. Run a plain module of exported functions with `npx trpc-cli ./commands.ts`
 
 ---
 
@@ -54,7 +54,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [Completions](#completions)
    - [`.toJSON()`](#tojson)
    - [`deepHelp(program)`](#deephelpprogram)
-   - [Using Existing Routers](#using-existing-routers)
+   - [Running a file directly](#running-a-file-directly)
 - [Reference](#reference)
    - [API docs](#api-docs)
    - [Features and Limitations](#features-and-limitations)
@@ -1504,19 +1504,28 @@ const docsRouter = t.router({
 })
 ```
 
-### Using Existing Routers
+### Running a file directly
 
-🚧 This feature is usable but likely to change. Right now, the trpc-cli bin script will import `tsx` before running your CLI in order to import routers written in typescript. This might change in future to allow for more ways of running typescript files (possibly checking if [`importx`](https://github.com/antfu-collective/importx) instead of tsx) 🚧
+🚧 Experimental - this rides on the [plain TypeScript module](#cli-from-a-plain-typescript-module--experimental) feature and may change with it 🚧
 
-If you already have a trpc router (say, for a regular server rather), you can invoke it as a CLI without writing any additional code - just use the built in bin script:
+The `trpc-cli` bin script turns a plain module of exported functions into a CLI, with zero code and zero dependencies:
+
+```ts
+// commands.ts
+/** add a package to the dependencies */
+export async function add(packageName: string, options?: {dev?: boolean}) {
+  return {added: packageName, dev: options?.dev || false}
+}
+```
 
 ```
-npx trpc-cli src/your-router.ts
-npx trpc-cli src/your-router.ts --help
-npx trpc-cli src/your-router.ts yourprocedure --foo bar
+npx trpc-cli ./commands.ts --help
+npx trpc-cli ./commands.ts add left-pad --dev
 ```
 
-Note - in the above example `src/your-router.ts` will be imported, and then its exports will be checked to see if they match the shape of a tRPC router. If no routers or more than one router is found, an error will be thrown.
+The bin script runs with opinionated defaults: [`jsonInput: 'auto'`](#json-input) (every command also accepts its full input as `--json '{...}'`) and the yaml table logger for output. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+
+Note: the bin script no longer accepts files exporting trpc/orpc routers - if you have a router, create a CLI entrypoint with `createCli({router}).run()` instead (see [Quick Start](#quick-start)).
 
 ## Reference
 
