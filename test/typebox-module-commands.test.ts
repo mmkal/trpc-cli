@@ -481,6 +481,114 @@ test('module positionals: boolean and literal-union positionals', async () => {
   await expect(runWith(params, ['set', 'nope', 'true'])).rejects.toThrowError(/nope/)
 })
 
+test('module commands: overloaded functions use the first overload signature', async () => {
+  const params = {
+    module: {
+      // TS overloads extract once per declaration. The *implementation* signature is typically widened
+      // (`options: any`) - using it would produce a misleading error. TS resolves calls against the overload
+      // signatures in order, so the FIRST signature is the primary documented shape and becomes the command's
+      // calling convention; the implementation and later overloads are ignored.
+      source: `
+        export function f(options: {mode: 'a'}): string
+        export function f(options: {mode: 'b'}): number
+        export function f(options: any) { return options.mode }
+      `,
+      exports: {f: (options: any) => options.mode},
+    },
+  }
+  expect(await runWith(params, ['f', '--mode', 'a'])).toMatchInlineSnapshot(`"a"`)
+  // the second overload is ignored, so 'b' is rejected - the CLI presents exactly one calling convention
+  await expect(runWith(params, ['f', '--mode', 'b'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Error: Invalid input: ✖ must be equal to constant → at mode
+  `)
+})
+
+test('module positionals: overloaded multi-parameter functions use the first overload signature', async () => {
+  const params = {
+    module: {
+      source: `
+        /** greet someone */
+        export function greet(name: string, options?: {shout?: boolean}): string
+        export function greet(name: string): string
+        export function greet(name: any, options?: any) {
+          const greeting = 'hello ' + name
+          return options?.shout ? greeting.toUpperCase() : greeting
+        }
+      `,
+      exports: {
+        greet: (name: any, options?: any) => {
+          const greeting = 'hello ' + name
+          return options?.shout ? greeting.toUpperCase() : greeting
+        },
+      },
+    },
+  }
+  // the first signature drives everything: the positional, the flags object, and (via its jsdoc) the description
+  const help = await runWith(params, ['greet', '--help'])
+  expect(help).toContain('<name>')
+  expect(help).toContain('--shout')
+  expect(help).toContain('greet someone')
+  expect(await runWith(params, ['greet', 'world'])).toMatchInlineSnapshot(`"hello world"`)
+  expect(await runWith(params, ['greet', 'world', '--shout'])).toMatchInlineSnapshot(`"HELLO WORLD"`)
+})
+
+test('module commands: async const arrow with explicit param type', async () => {
+  const params = {
+    module: {
+      source: `
+        export const install = async (params: {name: string; dev?: boolean; exact?: boolean}) => {
+          return 'installing ' + params.name + (params.dev ? ' (dev)' : '') + (params.exact ? ' (exact)' : '')
+        }
+      `,
+      exports: {
+        install: async (options: any) =>
+          'installing ' + options.name + (options.dev ? ' (dev)' : '') + (options.exact ? ' (exact)' : ''),
+      },
+    },
+  }
+  expect(await runWith(params, ['install', '--name', 'left-pad', '--dev'])).toMatchInlineSnapshot(
+    `"installing left-pad (dev)"`,
+  )
+})
+
+test('module commands: async const arrow with destructured param', async () => {
+  const params = {
+    module: {
+      // destructuring is fine in the options-object position - only *positional* params must be named
+      source: `
+        export const install = async ({name, dev, exact}: {name: string; dev?: boolean; exact?: boolean}) => {
+          return 'installing ' + name + (dev ? ' (dev)' : '') + (exact ? ' (exact)' : '')
+        }
+      `,
+      exports: {
+        install: async ({name, dev, exact}: any) =>
+          'installing ' + name + (dev ? ' (dev)' : '') + (exact ? ' (exact)' : ''),
+      },
+    },
+  }
+  expect(await runWith(params, ['install', '--name', 'left-pad', '--exact'])).toMatchInlineSnapshot(
+    `"installing left-pad (exact)"`,
+  )
+})
+
+test('module commands: type-annotated const declarations error with parseable-declaration guidance', async () => {
+  const params = {
+    module: {
+      // `export const f: SomeType = ...` isn't parsed (the annotation would be the source of truth, and it can
+      // reference imported types the extractor can't see) - the existing actionable error applies
+      source: `
+        type Cmd = (options: {name: string}) => string
+        export const greet: Cmd = (options) => 'hi ' + options.name
+      `,
+      exports: {greet: (options: any) => 'hi ' + options.name},
+    },
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(
+    /Could not find a parseable declaration for exported function\(s\) "greet"/,
+  )
+})
+
 test('module positionals: destructured trailing options object works', async () => {
   const params = {
     module: {

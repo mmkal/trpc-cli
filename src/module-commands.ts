@@ -472,17 +472,28 @@ const cleanJsdoc = (text: string): string | undefined => {
 /**
  * @experimental Extract exported function declarations from module source text: name, preceding jsdoc, and the full
  * parameter list (names, optionality, type annotation text, inline jsdoc). Supports `export function f(...)`,
- * `export async function f(...)` and `export const f = (...) => ...` (parenthesized arrows only).
+ * `export async function f(...)` and `export const f = (...) => ...` (parenthesized arrows only). Returns one
+ * command per export name: TS function overloads extract once per declaration, and the first overload *signature*
+ * wins (see the dedupe note inline).
  */
 export const extractModuleCommands = (source: string): ExtractedCommand[] => {
   const scan = scanSource(source)
-  const commands: Array<ExtractedCommand & {position: number}> = []
+  const declarations: Array<{
+    name: string
+    position: number
+    /** false for a body-less TS overload signature (`export function f(...): R` with no `{...}` after it) */
+    hasBody: boolean
+    paramList: string
+    description: string | undefined
+  }> = []
 
   const declarationPatterns = [
-    /(?<![.\w$])export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*/g,
-    /(?<![.\w$])export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?=\()/g,
+    // `function` declarations can be body-less overload signatures - detect which, for the dedupe below
+    {pattern: /(?<![.\w$])export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*/g, canBeSignature: true},
+    // a `const` initializer is always an implementation - overload syntax doesn't exist for arrow functions
+    {pattern: /(?<![.\w$])export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?=\()/g, canBeSignature: false},
   ]
-  for (const pattern of declarationPatterns) {
+  for (const {pattern, canBeSignature} of declarationPatterns) {
     for (const match of source.matchAll(pattern)) {
       if (scan.masked[match.index]) continue
       const name = match[1]
@@ -491,17 +502,90 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
       if (source[parenIndex] !== '(') continue // not a function shape after all, e.g. `export function` matched inside something weird
       const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
-      const paramList = source.slice(parenIndex + 1, parenEnd - 1)
-      commands.push({
+      declarations.push({
         name,
-        description: jsdocBefore(source, scan, match.index),
-        params: parseParams(name, paramList),
         position: match.index,
+        hasBody: canBeSignature ? hasFunctionBody(source, scan, parenEnd) : true,
+        paramList: source.slice(parenIndex + 1, parenEnd - 1),
+        description: jsdocBefore(source, scan, match.index),
       })
     }
   }
   // matchAll over two patterns can't interleave, so restore source order - it determines command order in --help
-  return commands.sort((a, b) => a.position - b.position).map(({position: _, ...command}) => command)
+  declarations.sort((a, b) => a.position - b.position)
+
+  // One command per name, first extraction wins - with one twist for TS function overloads. Overloads extract once
+  // per declaration: the body-less *signatures* come first and the *implementation* (whose params are typically
+  // widened, e.g. `options: any`) last. TS resolves calls against the signatures in order, so the FIRST signature
+  // is the primary documented shape - it becomes the command, and the implementation signature and later overloads
+  // are ignored (a CLI can only present one calling convention; a union of all signatures was considered and
+  // rejected, since it would advertise flag combinations no single overload accepts). The `hasBody` preference only
+  // matters if an implementation somehow precedes a signature - in valid TS, first-wins already picks the first
+  // signature. Params are parsed only for the winners, so an unannotated implementation (`function f(options) {`)
+  // can't poison a command whose signatures are fine.
+  const winners = new Map<string, (typeof declarations)[number]>()
+  for (const declaration of declarations) {
+    const existing = winners.get(declaration.name)
+    if (!existing || (existing.hasBody && !declaration.hasBody)) winners.set(declaration.name, declaration)
+  }
+  return [...winners.values()].map(({name, description, paramList}) => ({
+    name,
+    description,
+    params: parseParams(name, paramList),
+  }))
+}
+
+/**
+ * Determine whether a `function` declaration whose parameter list closes at `parenEnd` has a `{...}` body, or is a
+ * body-less TS overload signature (`export function f(...): R` ending at a newline or semicolon). An optional
+ * return-type annotation is scanned through with bracket-depth tracking; a depth-0 `{` is the body unless it sits
+ * where an object type literal can start (after `:`, `|`, `&`, `?`, or the `>` of `=>`). Pragmatic rather than a
+ * full type parser - an exotic depth-0 return type (e.g. a conditional type with a bare `extends {...}`) could
+ * misclassify, which only matters when the same name is declared more than once.
+ */
+const hasFunctionBody = (source: string, scan: SourceScan, parenEnd: number): boolean => {
+  const isComment = (i: number) => scan.comments.some(c => i >= c.start && i < c.end)
+  const nextSignificant = (from: number): string => {
+    for (let j = from; j < source.length; j++) {
+      if (/\s/.test(source[j])) continue
+      if (scan.masked[j] && isComment(j)) continue
+      return source[j]
+    }
+    return ''
+  }
+  let depth = 0
+  let lastSignificant = ')'
+  let prevSignificant = ''
+  for (let i = parenEnd; i < source.length; i++) {
+    const ch = source[i]
+    if (scan.masked[i]) {
+      if (!isComment(i)) {
+        // string/template contents (e.g. a template-literal return type) - significant, but never an operator
+        prevSignificant = lastSignificant
+        lastSignificant = '"'
+      }
+      continue
+    }
+    if (depth === 0) {
+      if (ch === ';') return false
+      if (ch === '\n') {
+        // same statement-end logic as findTypeAliasEnd, plus `{` on the next line for Allman-style bodies
+        const continues = /[:=|&]/.test(lastSignificant) || /[{|&]/.test(nextSignificant(i + 1))
+        if (!continues) return false
+      }
+      if (ch === '{' && !/[:|&?]/.test(lastSignificant) && !(lastSignificant === '>' && prevSignificant === '=')) {
+        return true
+      }
+    }
+    if (ch === '{' || ch === '[' || ch === '(' || ch === '<') depth++
+    else if (ch === '}' || ch === ']' || ch === ')') depth--
+    else if (ch === '>' && source[i - 1] !== '=') depth--
+    if (!/\s/.test(ch)) {
+      prevSignificant = lastSignificant
+      lastSignificant = ch
+    }
+  }
+  return false
 }
 
 /**
