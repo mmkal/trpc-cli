@@ -681,7 +681,7 @@ Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becom
 Details and limitations:
 
 - `filename` accepts an absolute path (robust - works from any directory), `import.meta` (when the call lives in the commands file itself), or a `URL` like `new URL('./commands.ts', import.meta.url)` (resolves relative to the importing file, so a distributed CLI works wherever it's invoked). A *relative* path string is resolved against `process.cwd()`, so it's only reliable when the CLI is run from a known directory - fine for quick scripts, but it breaks the moment a globally-installed CLI runs somewhere else, so prefer `import.meta`/`URL` for anything you distribute. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
-- `createCli(import.meta)` re-imports the commands file to read its exports, so when the call lives in that same file it's a *self-import*. That's fine as long as the call is at the **bottom** of the file (so all `export const` arrow functions above it are initialized) and is **not** top-level-`await`ed - `void createCli(import.meta).run()` is the safe form. A top-level `await createCli(import.meta).run()` would deadlock (the await suspends the module before the self-import can resolve).
+- `createCli(import.meta)` re-imports the commands file to read its exports, so when the call lives in that same file it's a *self-import*. That's fine as long as the call is at the **bottom** of the file (so all `export const` arrow functions above it are initialized) and is **not** top-level-`await`ed - `void createCli(import.meta).run()` is the safe form. A top-level `await createCli(import.meta).run()` would deadlock (the await suspends the module before the self-import can resolve). When another module imports this file, the `.run()` call is a no-op, so the exported command functions remain importable as plain functions.
 - Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file (intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags). Functions with no parameters become commands with no arguments.
 - Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
 - Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed). The module must export *only* commands: any other exported function - an `export {f}` statement, a re-export barrel like `export * from './helpers.ts'`, or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module. Default exports are ignored.
@@ -1544,7 +1544,7 @@ Note: the bin script no longer accepts files exporting trpc/orpc routers - if yo
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L153)
+#### [createCli](./src/index.ts#L183)
 
 Run a trpc router as a CLI.
 

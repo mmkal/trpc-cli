@@ -132,6 +132,16 @@ test('module commands: createCli(import.meta).run() works as a self-contained si
   expect(all.trim()).toBe('5')
 })
 
+test('module commands: importing a self-contained CLI module does not run it', async () => {
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url))
+  const {all} = await execa(
+    path.join(repoRoot, 'node_modules/.bin/tsx'),
+    [path.join(repoRoot, 'test/fixtures/self-cli-importer.ts')],
+    {all: true},
+  )
+  expect(all.trim()).toBe('importer survived')
+})
+
 test('module commands: missing module file errors clearly', async () => {
   await expect(runWith({filename: './nope/does-not-exist.ts'}, ['--help'])).rejects.toThrowError(
     /Could not read module source at .*does-not-exist\.ts/,

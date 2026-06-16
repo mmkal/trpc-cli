@@ -67,6 +67,8 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
  * self-import, which is fine **as long as** the call is at the bottom of the file (so all `export const` arrow
  * functions above it are initialized) and is **not** top-level-`await`ed (a top-level `await` would suspend the
  * module before the self-import can resolve, deadlocking). `void createCli(import.meta).run()` is the safe form.
+ * If another module imports this file, the `.run()` call is a no-op, so the exported command functions remain
+ * importable as plain functions.
  */
 export interface TrpcCliModuleParams {
   /**

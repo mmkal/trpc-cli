@@ -49,6 +49,34 @@ const getOrpcServerModule = () => {
   return orpcServerOrError
 }
 
+type ImportMetaModuleParams = TrpcCliModuleParams & {main?: boolean; resolve?: unknown}
+
+const getModuleRunGuard = (params: ImportMetaModuleParams, moduleInput: CliModuleInput) => {
+  if (typeof params.main === 'boolean') return () => params.main
+  if (typeof params.resolve === 'function') return () => isMainModuleInput(moduleInput)
+  return () => true
+}
+
+const isMainModuleInput = async (moduleInput: CliModuleInput) => {
+  if (typeof moduleInput !== 'string' && !(moduleInput instanceof URL)) return true
+  if (typeof process === 'undefined' || !process.argv[1]) return false
+  const [fs, path, url] = await Promise.all([
+    import('node:fs/promises'),
+    // eslint-disable-next-line unicorn/import-style -- dynamic import: there's no "default import" syntax to use here
+    import('node:path').then(m => m.default),
+    import('node:url'),
+  ])
+  try {
+    const modulePath =
+      typeof moduleInput === 'string' ? path.resolve(process.cwd(), moduleInput) : url.fileURLToPath(moduleInput)
+    const argvPath = path.resolve(process.cwd(), process.argv[1])
+    const [moduleRealpath, argvRealpath] = await Promise.all([fs.realpath(modulePath), fs.realpath(argvPath)])
+    return moduleRealpath === argvRealpath
+  } catch {
+    return true
+  }
+}
+
 // @ts-ignore zod is an optional peer dependency so might not be installed. oh well, you still get this one interface
 declare module 'zod/v4' {
   export interface GlobalMeta {
@@ -160,6 +188,7 @@ export function createCli<R extends AnyRouter>(
     // the `{source, exports}` escape hatch wins; otherwise prefer an explicit filename and fall back to
     // import.meta.url (e.g. node 18, where import.meta.filename is absent)
     const moduleInput: CliModuleInput = source ? {source, exports: exports || {}} : filename || new URL(url as string)
+    const shouldRun = getModuleRunGuard(allParams, moduleInput)
     let cliPromise: Promise<TrpcCli> | undefined
     const getCli = () => {
       // node:fs / dynamic import / the vendored typebox parser are only needed (and only loaded) in this mode
@@ -170,7 +199,10 @@ export function createCli<R extends AnyRouter>(
     }
     // module loading is async, so this mode's buildProgram/toJSON are async wrappers around the resolved router CLI
     return {
-      run: async (runParams, program) => (await getCli()).run(runParams, program),
+      run: async (runParams, program) => {
+        if (!(await shouldRun())) return
+        return (await getCli()).run(runParams, program)
+      },
       buildProgram: async runParams => (await getCli()).buildProgram(runParams),
       toJSON: async program => (await getCli()).toJSON(program),
     }
