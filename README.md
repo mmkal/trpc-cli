@@ -651,7 +651,7 @@ Or keep commands in their own file and point at it from an entrypoint:
 // cli.ts
 import {createCli} from 'trpc-cli'
 
-void createCli({filename: new URL('commands.ts', import.meta.url)}).run()
+void createCli({filename: '/path/to/commands.ts'}).run()
 ```
 
 trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and parameter type annotations are parsed by the vendored `Type.Script` into real JSON schemas - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`).
@@ -680,7 +680,7 @@ Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becom
 
 Details and limitations:
 
-- Pass `import.meta` (when the call lives in the commands file itself), a `URL` (`new URL('./commands.ts', import.meta.url)` resolves relative to the importing file, so the CLI works from any directory - use this for anything you distribute), or a `filename` path string (resolved against `process.cwd()` - fine for quick scripts run from a known directory, broken the moment a globally-installed CLI runs somewhere else). For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+- `filename` accepts an absolute path (robust - works from any directory), `import.meta` (when the call lives in the commands file itself), or a `URL` like `new URL('./commands.ts', import.meta.url)` (resolves relative to the importing file, so a distributed CLI works wherever it's invoked). A *relative* path string is resolved against `process.cwd()`, so it's only reliable when the CLI is run from a known directory - fine for quick scripts, but it breaks the moment a globally-installed CLI runs somewhere else, so prefer `import.meta`/`URL` for anything you distribute. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
 - `createCli(import.meta)` re-imports the commands file to read its exports, so when the call lives in that same file it's a *self-import*. That's fine as long as the call is at the **bottom** of the file (so all `export const` arrow functions above it are initialized) and is **not** top-level-`await`ed - `void createCli(import.meta).run()` is the safe form. A top-level `await createCli(import.meta).run()` would deadlock (the await suspends the module before the self-import can resolve).
 - Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file (intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags). Functions with no parameters become commands with no arguments.
 - Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.

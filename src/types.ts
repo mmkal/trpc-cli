@@ -59,7 +59,7 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
  * @example
  * ```ts
  * import {createCli} from 'trpc-cli'
- * void createCli({filename: new URL('./commands.ts', import.meta.url)}).run()
+ * void createCli({filename: '/path/to/commands.ts'}).run()
  * ```
  *
  * Note on `createCli(import.meta)`: because trpc-cli only receives the file's location (not its exports), it
