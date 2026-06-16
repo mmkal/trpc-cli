@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import {createCli} from './index.js'
+import {createBuiltInPrompts, createCli, isAgent} from './index.js'
 import * as path from 'path'
 import {yamlTableConsoleLogger} from './logging.js'
 
@@ -38,4 +38,8 @@ const cli = createCli({
   jsonInput: 'auto',
 })
 
-void cli.run({argv, logger: yamlTableConsoleLogger})
+void cli.run({
+  argv,
+  logger: yamlTableConsoleLogger,
+  prompts: isAgent() ? undefined : createBuiltInPrompts(),
+})
