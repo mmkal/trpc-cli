@@ -13,7 +13,7 @@ export const runWith = async <R extends AnyRouter>(
   {expectJsonInput = false} = {},
 ): Promise<string> => {
   // the ternary looks redundant but narrows the union so the right createCli overload is picked
-  const cli = 'module' in params ? createCli(params) : createCli(params)
+  const cli = 'router' in params ? createCli(params) : createCli(params)
   const logs = [] as unknown[][]
   const addLogs = (...args: unknown[]) => logs.push(args)
   const result: string = await cli

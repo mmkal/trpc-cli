@@ -1,5 +1,5 @@
 /**
- * Fixture for positional arguments via `createCli({module: ...})`: multi-parameter exported functions. Leading
+ * Fixture for positional arguments via `createCli({filename: ...})`: multi-parameter exported functions. Leading
  * scalar parameters become positional arguments; a trailing object parameter becomes flags. Like
  * commands-module.ts, this file is imported *natively* in the path-based tests, so it must stick to erasable-only
  * TypeScript syntax (no enums, no parameter properties).

@@ -33,7 +33,7 @@ if (!filepath || filepath === '--help' || filepath === '-h') {
 }
 
 const cli = createCli({
-  module: filepath,
+  filename: filepath,
   name: path.basename(filepath).replace(/\.[^.]+$/, ''),
   jsonInput: 'auto',
 })

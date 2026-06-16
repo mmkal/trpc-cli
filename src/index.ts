@@ -16,6 +16,7 @@ import {
 } from './json-schema.js'
 import {commandToJSON} from './json.js'
 import {lineByLineConsoleLogger} from './logging.js'
+import type {CliModuleInput} from './module-commands.js'
 import {
   type AnyRouter,
   type CreateCallerFactoryLike,
@@ -137,12 +138,17 @@ export function createCli(params: TrpcCliModuleParams): TrpcCli
  * @param router A trpc router
  * @param context The context to use when calling the procedures - needed if your router requires a context
  * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
- * @param module (experimental) instead of `router`: a plain TypeScript module of exported functions to derive the CLI from - a `URL` like `new URL('./commands.ts', import.meta.url)`, a cwd-relative path string, or `{source, exports}`
+ * @param filename (experimental) instead of `router`: derive the CLI from a plain TypeScript module of exported functions. Pass `import.meta`, a `URL`, an absolute/cwd-relative path string, or the `{source, exports}` escape hatch. See {@linkcode TrpcCliModuleParams}.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
 export function createCli<R extends AnyRouter>(allParams: TrpcCliParams<R> | TrpcCliModuleParams): TrpcCli {
-  if ('module' in allParams) {
-    const {module: moduleInput, ...params} = allParams
+  // module mode is detected by any of its location keys - `filename`/`url` (also present on a passed-in `import.meta`)
+  // or the `{source, exports}` escape hatch. A router params object has none of these.
+  if ('filename' in allParams || 'url' in allParams || 'source' in allParams) {
+    const {filename, url, source, exports, ...params} = allParams
+    // the `{source, exports}` escape hatch wins; otherwise prefer an explicit filename and fall back to
+    // import.meta.url (e.g. node 18, where import.meta.filename is absent)
+    const moduleInput: CliModuleInput = source ? {source, exports: exports || {}} : filename || new URL(url as string)
     let cliPromise: Promise<TrpcCli> | undefined
     const getCli = () => {
       // node:fs / dynamic import / the vendored typebox parser are only needed (and only loaded) in this mode
@@ -153,7 +159,7 @@ export function createCli<R extends AnyRouter>(allParams: TrpcCliParams<R> | Trp
     }
     const unsupported = (method: string) =>
       new Error(
-        `${method} is not supported when using \`module\` (experimental) - loading the module is async and ${method} is sync. Use \`run\`, or build a router and pass it to createCli instead.`,
+        `${method} is not supported when deriving a CLI from a module (experimental) - loading the module is async and ${method} is sync. Use \`run\`, or build a router and pass it to createCli instead.`,
       )
     return {
       run: async (runParams, program) => (await getCli()).run(runParams, program),
@@ -165,7 +171,9 @@ export function createCli<R extends AnyRouter>(allParams: TrpcCliParams<R> | Trp
       },
     }
   }
-  const {router, ...params} = allParams
+  // the module branch above returns, so this is the router case. The params keys are all optional, so TS can't
+  // narrow the union by their absence - assert the router shape explicitly.
+  const {router, ...params} = allParams as TrpcCliParams<R>
   const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {

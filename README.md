@@ -636,11 +636,22 @@ export async function add(options: AddOptions) {
 }
 ```
 
+The simplest setup is to call `createCli` from the bottom of the commands file itself, passing `import.meta`:
+
+```ts
+// commands.ts (continued)
+import {createCli} from 'trpc-cli'
+
+void createCli(import.meta).run() // <- at the bottom of the file; don't `await` it (see below)
+```
+
+Or keep commands in their own file and point at it from an entrypoint:
+
 ```ts
 // cli.ts
 import {createCli} from 'trpc-cli'
 
-void createCli({module: new URL('commands.ts', import.meta.url)}).run()
+void createCli({filename: new URL('commands.ts', import.meta.url)}).run()
 ```
 
 trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and parameter type annotations are parsed by the vendored `Type.Script` into real JSON schemas - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`).
@@ -669,14 +680,15 @@ Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becom
 
 Details and limitations:
 
-- `module` accepts a `URL` (`new URL('./commands.ts', import.meta.url)` resolves relative to the importing file, so the CLI works from any directory - use this for anything you distribute) or a path string (resolved against `process.cwd()` - fine for quick scripts run from a known directory, broken the moment a globally-installed CLI runs somewhere else). For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+- Pass `import.meta` (when the call lives in the commands file itself), a `URL` (`new URL('./commands.ts', import.meta.url)` resolves relative to the importing file, so the CLI works from any directory - use this for anything you distribute), or a `filename` path string (resolved against `process.cwd()` - fine for quick scripts run from a known directory, broken the moment a globally-installed CLI runs somewhere else). For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+- `createCli(import.meta)` re-imports the commands file to read its exports, so when the call lives in that same file it's a *self-import*. That's fine as long as the call is at the **bottom** of the file (so all `export const` arrow functions above it are initialized) and is **not** top-level-`await`ed - `void createCli(import.meta).run()` is the safe form. A top-level `await createCli(import.meta).run()` would deadlock (the await suspends the module before the self-import can resolve).
 - Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file (intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags). Functions with no parameters become commands with no arguments.
 - Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
 - Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed). The module must export *only* commands: any other exported function - an `export {f}` statement, a re-export barrel like `export * from './helpers.ts'`, or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module. Default exports are ignored.
 - Overloaded functions work, with a simple rule: only the *first* overload signature is used; later overloads and the implementation signature are ignored. TypeScript resolves calls against overload signatures in order, so the first one is the primary documented shape - and a CLI can only present one calling convention.
-- For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({module: {source: rawSourceText, exports: await import('./commands.js')}})`.
+- For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({source: rawSourceText, exports: await import('./commands.js')})`.
 - `buildProgram`/`toJSON` aren't supported in this mode (module loading is async; those APIs are sync) - use `run`, or build a router yourself.
-- Don't pass user-controlled strings as `module` - the path is read and dynamically imported, i.e. executed.
+- Don't pass user-controlled strings as `filename` - the path is read and dynamically imported, i.e. executed.
 - Bundle-size note: the dynamic import of the module-commands machinery pulls the vendored typebox parser into bundles (~4MB unminified). Irrelevant for the normal Node CLI case; if you're bundling for size, prefer a router with explicit schemas.
 
 ---
@@ -1532,18 +1544,18 @@ Note: the bin script no longer accepts files exporting trpc/orpc routers - if yo
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L143)
+#### [createCli](./src/index.ts#L144)
 
 Run a trpc router as a CLI.
 
 ##### Params
 
-|name      |description                                                                                                                                                                                                              |
-|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|router    |A trpc router                                                                                                                                                                                                            |
-|context   |The context to use when calling the procedures - needed if your router requires a context                                                                                                                                |
-|trpcServer|The trpc server module to use. Only needed if using trpc v10.                                                                                                                                                            |
-|module    |(experimental) instead of `router`: a plain TypeScript module of exported functions to derive the CLI from - a `URL` like `new URL('./commands.ts', import.meta.url)`, a cwd-relative path string, or `{source, exports}`|
+|name      |description                                                                                                                                                                                                                                              |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|router    |A trpc router                                                                                                                                                                                                                                            |
+|context   |The context to use when calling the procedures - needed if your router requires a context                                                                                                                                                                |
+|trpcServer|The trpc server module to use. Only needed if using trpc v10.                                                                                                                                                                                            |
+|filename  |(experimental) instead of `router`: derive the CLI from a plain TypeScript module of exported functions. Pass `import.meta`, a `URL`, an absolute/cwd-relative path string, or the `{source, exports}` escape hatch. See {@linkcode TrpcCliModuleParams}.|
 
 ##### Returns
 

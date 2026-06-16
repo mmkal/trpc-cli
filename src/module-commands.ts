@@ -24,12 +24,15 @@ type AnyFn = (...args: any[]) => any
 
 /**
  * @experimental
- * The `module` option for `createCli`: a `URL` like `new URL('./commands.ts', import.meta.url)` (resolved relative
- * to the importing file - works no matter what directory the CLI is run from), a path string (resolved against
- * `process.cwd()` - fine for quick scripts, fragile for distributed CLIs), or an explicit `{source, exports}` pair
- * for environments where file reading/dynamic import isn't possible (bundlers, browsers):
- * `{source: rawSourceText, exports: await import('./commands.js')}`. The file forms are read with `node:fs` and
- * dynamically imported - run under tsx/bun/deno/node>=22.18 for `.ts` files.
+ * The resolved commands-module input handed to {@linkcode moduleToRouter}: a `URL` like
+ * `new URL('./commands.ts', import.meta.url)` (resolved relative to the importing file - works no matter what
+ * directory the CLI is run from), a path string (resolved against `process.cwd()` - fine for quick scripts, fragile
+ * for distributed CLIs), or an explicit `{source, exports}` pair for environments where file reading/dynamic import
+ * isn't possible (bundlers, browsers): `{source: rawSourceText, exports: await import('./commands.js')}`. The file
+ * forms are read with `node:fs` and dynamically imported - run under tsx/bun/deno/node>=22.18 for `.ts` files.
+ *
+ * Note: `createCli` accepts the friendlier `{filename}`/`import.meta`/`{source, exports}` shape
+ * ({@linkcode TrpcCliModuleParams}) and normalizes it to this type.
  */
 export type CliModuleInput = string | URL | {source: string; exports: Record<string, unknown>}
 

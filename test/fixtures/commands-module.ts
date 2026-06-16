@@ -1,5 +1,5 @@
 /**
- * Fixture for the experimental `createCli({module: ...})` feature: a plain TypeScript module of exported functions.
+ * Fixture for the experimental `createCli({filename: ...})` feature: a plain TypeScript module of exported functions.
  * No trpc-cli imports, no schema library - the CLI is derived from this file's source text + live exports.
  * Note: this file is imported *natively* (not via vite/vitest transforms) in the path-based tests, so it must stick
  * to erasable-only TypeScript syntax (no enums, no parameter properties).
