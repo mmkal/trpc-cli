@@ -67,5 +67,9 @@ const binRaw = (args: string[]) => {
     all: true,
     reject: false,
     cwd: path.join(__dirname, '..'),
+    // the bin only prompts for missing input when NOT in an agent environment; force agent mode so these
+    // non-interactive runs fail fast instead of hanging on a prompt (and so the suite doesn't depend on whether
+    // CLAUDECODE etc. happen to be set in the runner's environment)
+    env: {CLAUDECODE: '1'},
   })
 }
