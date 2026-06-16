@@ -213,10 +213,14 @@ test('module commands: default-export-only module errors mentioning default expo
   )
 })
 
-test('module commands: buildProgram and toJSON are not supported (yet)', async () => {
+test('module commands: buildProgram and toJSON are async (module loading is async)', async () => {
   const cli = createCli({filename: modulePath})
-  expect(() => cli.buildProgram()).toThrowError(/buildProgram is not supported when deriving a CLI from a module/)
-  expect(() => cli.toJSON()).toThrowError(/toJSON is not supported when deriving a CLI from a module/)
+
+  const program = await cli.buildProgram()
+  expect(program.commands?.map(c => c.name())).toEqual(expect.arrayContaining(['install', 'add', 'list-versions']))
+
+  const json = await cli.toJSON()
+  expect(json.commands?.map(c => c.name)).toEqual(expect.arrayContaining(['install', 'add', 'list-versions']))
 })
 
 // multi-parameter functions: leading scalar params -> positional arguments, trailing object param -> flags.

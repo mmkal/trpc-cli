@@ -687,7 +687,7 @@ Details and limitations:
 - Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed). The module must export *only* commands: any other exported function - an `export {f}` statement, a re-export barrel like `export * from './helpers.ts'`, or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module. Default exports are ignored.
 - Overloaded functions work, with a simple rule: only the *first* overload signature is used; later overloads and the implementation signature are ignored. TypeScript resolves calls against overload signatures in order, so the first one is the primary documented shape - and a CLI can only present one calling convention.
 - For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({source: rawSourceText, exports: await import('./commands.js')})`.
-- `buildProgram`/`toJSON` aren't supported in this mode (module loading is async; those APIs are sync) - use `run`, or build a router yourself.
+- In this mode `run`/`buildProgram`/`toJSON` are all **async** (the module is loaded asynchronously): `const program = await createCli(import.meta).buildProgram()`. With a router, `buildProgram`/`toJSON` are synchronous.
 - Don't pass user-controlled strings as `filename` - the path is read and dynamically imported, i.e. executed.
 - Bundle-size note: the dynamic import of the module-commands machinery pulls the vendored typebox parser into bundles (~4MB unminified). Irrelevant for the normal Node CLI case; if you're bundling for size, prefer a router with explicit schemas.
 
@@ -1544,7 +1544,7 @@ Note: the bin script no longer accepts files exporting trpc/orpc routers - if yo
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L144)
+#### [createCli](./src/index.ts#L153)
 
 Run a trpc router as a CLI.
 
