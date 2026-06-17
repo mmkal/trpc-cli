@@ -213,14 +213,56 @@ test('module commands: module with no functions errors clearly', async () => {
   await expect(runWith(params, ['--help'])).rejects.toThrowError(/No commands found in module/)
 })
 
-test('module commands: default-export-only module errors mentioning default exports are ignored', async () => {
+test('module commands: default export becomes the default command', async () => {
   const params = {
-    source: `export default function main(options: {x: string}) { return options.x }`,
-    exports: {default: (options: any) => options.x},
+    source: `
+      /** send a greeting */
+      export default function hola(options: {foo: string}) {
+        return 'this is a message ' + options.foo
+      }
+    `,
+    exports: {default: (options: any) => 'this is a message ' + options.foo},
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    /No commands found in module.*default exports are ignored/s,
-  )
+  expect(await runWith(params, ['--foo', 'abc'])).toMatchInlineSnapshot(`"this is a message abc"`)
+  expect(await runWith(params, ['hola', '--foo', 'abc'])).toMatchInlineSnapshot(`"this is a message abc"`)
+  expect(await runWith(params, ['--help'])).toContain('hola')
+})
+
+test('module commands: anonymous default export becomes the default command', async () => {
+  const params = {
+    source: `export default function (options: {foo: string}) { return options.foo }`,
+    exports: {default: (options: any) => options.foo},
+  }
+  expect(await runWith(params, ['--foo', 'abc'])).toMatchInlineSnapshot(`"abc"`)
+})
+
+test('module commands: default export can coexist with named commands', async () => {
+  const params = {
+    source: `
+      export default function hola(options: {foo: string}) {
+        return 'default ' + options.foo
+      }
+
+      export function named(options: {bar: string}) {
+        return 'named ' + options.bar
+      }
+    `,
+    exports: {
+      default: (options: any) => 'default ' + options.foo,
+      named: (options: any) => 'named ' + options.bar,
+    },
+  }
+  expect(await runWith(params, ['--foo', 'abc'])).toMatchInlineSnapshot(`"default abc"`)
+  expect(await runWith(params, ['named', '--bar', 'xyz'])).toMatchInlineSnapshot(`"named xyz"`)
+  expect(await runWith(params, ['--help'])).toContain('named')
+})
+
+test('module commands: default-export-only module with non-function export still errors clearly', async () => {
+  const params = {
+    source: `export default 'not a command'`,
+    exports: {default: 'not a command'},
+  }
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(/No commands found in module.*Export functions with/s)
 })
 
 test('module commands: buildProgram and toJSON are async (module loading is async)', async () => {

@@ -40,6 +40,10 @@ export type CliModuleInput = string | URL | {source: string; exports: Record<str
 export interface ExtractedCommand {
   /** the export name, e.g. `installPackages` - becomes the (kebab-cased) command name */
   name: string
+  /** the runtime module export to call; differs from `name` for `export default function named(...)` */
+  exportName: string
+  /** true for a default export, which becomes the CLI's default command */
+  default: boolean
   /** cleaned jsdoc text from the comment immediately preceding the export - becomes the command description */
   description: string | undefined
   /** the function's parameters, in declaration order. Empty = command with no args */
@@ -108,13 +112,16 @@ export const buildRouterFromModule = (resolved: {
 
   const procedures: Record<string, NorpcProcedureLike> = {}
   for (const command of commands) {
-    const fn = exports[command.name]
+    const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
     procedures[command.name] = buildProcedure(command, fn as AnyFn, context)
   }
 
   const unmatched = Object.entries(exports)
-    .filter(([name, value]) => typeof value === 'function' && name !== 'default' && !(name in procedures))
+    .filter(
+      ([name, value]) =>
+        typeof value === 'function' && !commands.some(command => command.exportName === name) && !(name in procedures),
+    )
     .map(([name]) => name)
   if (unmatched.length > 0) {
     throw new Error(
@@ -126,15 +133,18 @@ export const buildRouterFromModule = (resolved: {
   }
   if (Object.keys(procedures).length === 0) {
     throw new Error(
-      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\` or \`export const name = (...) => ...\`. ` +
-        `Note: default exports are ignored - commands must be named exports.`,
+      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`.`,
     )
   }
   return t.router(procedures)
 }
 
 const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<string, unknown>): NorpcProcedureLike => {
-  const builder = command.description ? t.procedure.meta({description: command.description}) : t.procedure
+  const meta = {
+    ...(command.description ? {description: command.description} : {}),
+    ...(command.default ? {default: true} : {}),
+  }
+  const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
   if (command.params.length === 0) {
     return builder.handler(() => fn())
   }
@@ -475,14 +485,17 @@ const cleanJsdoc = (text: string): string | undefined => {
 /**
  * @experimental Extract exported function declarations from module source text: name, preceding jsdoc, and the full
  * parameter list (names, optionality, type annotation text, inline jsdoc). Supports `export function f(...)`,
- * `export async function f(...)` and `export const f = (...) => ...` (parenthesized arrows only). Returns one
- * command per export name: TS function overloads extract once per declaration, and the first overload *signature*
- * wins (see the dedupe note inline).
+ * `export async function f(...)`, `export const f = (...) => ...` (parenthesized arrows only), and
+ * `export default function f(...)` (or an anonymous default function, which becomes a command named `default`).
+ * Returns one command per export name: TS function overloads extract once per declaration, and the first overload
+ * *signature* wins (see the dedupe note inline).
  */
 export const extractModuleCommands = (source: string): ExtractedCommand[] => {
   const scan = scanSource(source)
   const declarations: Array<{
     name: string
+    exportName: string
+    default: boolean
     position: number
     /** false for a body-less TS overload signature (`export function f(...): R` with no `{...}` after it) */
     hasBody: boolean
@@ -492,14 +505,27 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
 
   const declarationPatterns = [
     // `function` declarations can be body-less overload signatures - detect which, for the dedupe below
-    {pattern: /(?<![.\w$])export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*/g, canBeSignature: true},
+    {
+      pattern: /(?<![.\w$])export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*/g,
+      canBeSignature: true,
+      default: false,
+    },
+    {
+      pattern: /(?<![.\w$])export\s+default\s+(?:async\s+)?function(?:\s+([A-Za-z_$][\w$]*))?\s*/g,
+      canBeSignature: true,
+      default: true,
+    },
     // a `const` initializer is always an implementation - overload syntax doesn't exist for arrow functions
-    {pattern: /(?<![.\w$])export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?=\()/g, canBeSignature: false},
+    {
+      pattern: /(?<![.\w$])export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?=\()/g,
+      canBeSignature: false,
+      default: false,
+    },
   ]
-  for (const {pattern, canBeSignature} of declarationPatterns) {
+  for (const {pattern, canBeSignature, default: defaultExport} of declarationPatterns) {
     for (const match of source.matchAll(pattern)) {
       if (scan.masked[match.index]) continue
-      const name = match[1]
+      const name = match[1] || 'default'
       let parenIndex = match.index + match[0].length
       if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>') // skip generic type params
       while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
@@ -507,6 +533,8 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
       declarations.push({
         name,
+        exportName: defaultExport ? 'default' : name,
+        default: defaultExport,
         position: match.index,
         hasBody: canBeSignature ? hasFunctionBody(source, scan, parenEnd) : true,
         paramList: source.slice(parenIndex + 1, parenEnd - 1),
@@ -531,8 +559,10 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
     const existing = winners.get(declaration.name)
     if (!existing || (existing.hasBody && !declaration.hasBody)) winners.set(declaration.name, declaration)
   }
-  return [...winners.values()].map(({name, description, paramList}) => ({
+  return [...winners.values()].map(({name, exportName, default: defaultExport, description, paramList}) => ({
     name,
+    exportName,
+    default: defaultExport,
     description,
     params: parseParams(name, paramList),
   }))

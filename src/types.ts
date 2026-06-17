@@ -38,7 +38,8 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
  * Exported functions become commands: the jsdoc above each function becomes the command description, and the first
  * parameter's object type annotation (parsed from the module's *source text* via the vendored `trpc-cli/typebox`
  * `Type.Script`) becomes the input schema - property jsdoc comments become flag descriptions, and inputs are
- * validated against the schema before the function runs.
+ * validated against the schema before the function runs. A default-exported function becomes the default command,
+ * equivalent to `{default: true}` in procedure meta.
  *
  * `import.meta` satisfies this shape (it carries `filename`/`url`), so the simplest setup is to call `createCli`
  * from the bottom of the commands file itself:
