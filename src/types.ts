@@ -39,7 +39,9 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
  * parameter's object type annotation (parsed from the module's *source text* via the vendored `trpc-cli/typebox`
  * `Type.Script`) becomes the input schema - property jsdoc comments become flag descriptions, and inputs are
  * validated against the schema before the function runs. A default-exported function becomes the default command,
- * equivalent to `{default: true}` in procedure meta.
+ * equivalent to `{default: true}` in procedure meta. In file-backed module mode, `export * as foo from './foo'`
+ * becomes a nested sub-router named `foo`, and `export * from './foo'` merges that module's named commands into the
+ * current router level.
  *
  * `import.meta` satisfies this shape (it carries `filename`/`url`), so the simplest setup is to call `createCli`
  * from the bottom of the commands file itself:
@@ -82,6 +84,7 @@ export interface TrpcCliModuleParams {
    *   `process.cwd()`, so it's only reliable when the CLI is run from a known directory (fine for quick scripts)
    *
    * The file is read from disk and dynamically imported - for `.ts` files, run under tsx/bun/deno/node>=22.18.
+   * Re-exported command modules are resolved relative to this file.
    */
   filename?: string | URL
   /**
@@ -92,6 +95,7 @@ export interface TrpcCliModuleParams {
   url?: string
   /**
    * @experimental Bundler/browser escape hatch (no filesystem, no dynamic import): the module's raw source text.
+   * Re-exported command modules are not supported in this form.
    * Pass alongside {@linkcode TrpcCliModuleParams.exports}, e.g. `{source: rawSourceText, exports: await import('./commands.js')}`.
    */
   source?: string

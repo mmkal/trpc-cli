@@ -16,6 +16,7 @@ import {runWith, snapshotSerializer} from './test-run.js'
 expect.addSnapshotSerializer(snapshotSerializer)
 
 const modulePath = './test/fixtures/commands-module.ts' // resolved against process.cwd(), which vitest sets to the repo root
+const reexportModulePath = './test/fixtures/reexport-barrel.ts'
 
 test('module commands: --help lists commands with jsdoc descriptions', async () => {
   const help = await runWith({filename: modulePath, name: 'mypkg'}, ['--help'])
@@ -190,10 +191,45 @@ test('module commands: exported function with no parseable declaration errors cl
   )
 })
 
-test('module commands: re-export barrels fail loudly with guidance to move helpers out', async () => {
+test('module commands: export * merges child module commands at the root', async () => {
+  expect(await runWith({filename: reexportModulePath}, ['root-thing', '--value', 'abc'])).toMatchInlineSnapshot(
+    `"root abc"`,
+  )
+  expect(await runWith({filename: reexportModulePath}, ['root-arrow', '--flag'])).toMatchInlineSnapshot(`"arrow on"`)
+  expect(await runWith({filename: reexportModulePath}, ['local-thing', '--name', 'Ada'])).toMatchInlineSnapshot(
+    `"local Ada"`,
+  )
+
+  const help = await runWith({filename: reexportModulePath}, ['--help'])
+  expect(help).toContain('root-thing')
+  expect(help).toContain('root-arrow')
+  expect(help).not.toContain('hidden-default')
+})
+
+test('module commands: export * as namespace builds a nested sub-router', async () => {
+  expect(await runWith({filename: reexportModulePath}, ['admin', 'invite', '--email', 'ada@example.com']))
+    .toMatchInlineSnapshot(`
+      "invite ada@example.com"
+    `)
+  expect(await runWith({filename: reexportModulePath}, ['admin', '--user', 'Ada'])).toMatchInlineSnapshot(
+    `"dashboard Ada"`,
+  )
+  expect(await runWith({filename: reexportModulePath}, ['admin', 'dashboard', '--user', 'Ada'])).toMatchInlineSnapshot(
+    `"dashboard Ada"`,
+  )
+
+  const rootHelp = await runWith({filename: reexportModulePath}, ['--help'])
+  expect(rootHelp).toContain('admin')
+})
+
+test('module commands: re-exported module resolution supports exact well-known extensions', async () => {
+  expect(await runWith({filename: reexportModulePath}, ['extra', 'ping', '--name', 'Ada'])).toMatchInlineSnapshot(
+    `"pong Ada"`,
+  )
+})
+
+test('module commands: {source, exports} rejects re-export module composition', async () => {
   const params = {
-    // `export * from './util.js'` puts `helperNotACommand` in the runtime exports, but there's no declaration
-    // in this module's source to parse - rather than silently dropping it, the CLI fails and says what to do
     source: `
       export * from './util.js'
       export function greet(options: {name: string}) { return 'hi ' + options.name }
@@ -201,7 +237,7 @@ test('module commands: re-export barrels fail loudly with guidance to move helpe
     exports: {greet: (options: any) => 'hi ' + options.name, helperNotACommand: () => 'not a command'},
   }
   await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    /Could not find a parseable declaration for exported function\(s\) "helperNotACommand".*move them to a separate module/s,
+    /Re-exported command modules are only supported with file-backed module mode/,
   )
 })
 
