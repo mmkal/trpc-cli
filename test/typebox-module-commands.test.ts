@@ -16,7 +16,6 @@ import {runWith, snapshotSerializer} from './test-run.js'
 expect.addSnapshotSerializer(snapshotSerializer)
 
 const modulePath = './test/fixtures/commands-module.ts' // resolved against process.cwd(), which vitest sets to the repo root
-const reexportModulePath = './test/fixtures/reexport-barrel.ts'
 
 test('module commands: --help lists commands with jsdoc descriptions', async () => {
   const help = await runWith({filename: modulePath, name: 'mypkg'}, ['--help'])
@@ -192,38 +191,37 @@ test('module commands: exported function with no parseable declaration errors cl
 })
 
 test('module commands: export * merges child module commands at the root', async () => {
-  expect(await runWith({filename: reexportModulePath}, ['root-thing', '--value', 'abc'])).toMatchInlineSnapshot(
-    `"root abc"`,
-  )
-  expect(await runWith({filename: reexportModulePath}, ['root-arrow', '--flag'])).toMatchInlineSnapshot(`"arrow on"`)
-  expect(await runWith({filename: reexportModulePath}, ['local-thing', '--name', 'Ada'])).toMatchInlineSnapshot(
-    `"local Ada"`,
-  )
+  using fixture = createReexportFixture()
+  const params = {filename: fixture.barrelPath}
 
-  const help = await runWith({filename: reexportModulePath}, ['--help'])
+  expect(await runWith(params, ['root-thing', '--value', 'abc'])).toMatchInlineSnapshot(`"root abc"`)
+  expect(await runWith(params, ['root-arrow', '--flag'])).toMatchInlineSnapshot(`"arrow on"`)
+  expect(await runWith(params, ['local-thing', '--name', 'Ada'])).toMatchInlineSnapshot(`"local Ada"`)
+
+  const help = await runWith(params, ['--help'])
   expect(help).toContain('root-thing')
   expect(help).toContain('root-arrow')
   expect(help).not.toContain('hidden-default')
 })
 
 test('module commands: export * as namespace builds a nested sub-router', async () => {
-  expect(await runWith({filename: reexportModulePath}, ['admin', 'invite', '--email', 'ada@example.com']))
-    .toMatchInlineSnapshot(`
-      "invite ada@example.com"
-    `)
-  expect(await runWith({filename: reexportModulePath}, ['admin', '--user', 'Ada'])).toMatchInlineSnapshot(
-    `"dashboard Ada"`,
-  )
-  expect(await runWith({filename: reexportModulePath}, ['admin', 'dashboard', '--user', 'Ada'])).toMatchInlineSnapshot(
-    `"dashboard Ada"`,
-  )
+  using fixture = createReexportFixture()
+  const params = {filename: fixture.barrelPath}
 
-  const rootHelp = await runWith({filename: reexportModulePath}, ['--help'])
+  expect(await runWith(params, ['admin', 'invite', '--email', 'ada@example.com'])).toMatchInlineSnapshot(`
+    "invite ada@example.com"
+  `)
+  expect(await runWith(params, ['admin', '--user', 'Ada'])).toMatchInlineSnapshot(`"dashboard Ada"`)
+  expect(await runWith(params, ['admin', 'dashboard', '--user', 'Ada'])).toMatchInlineSnapshot(`"dashboard Ada"`)
+
+  const rootHelp = await runWith(params, ['--help'])
   expect(rootHelp).toContain('admin')
 })
 
 test('module commands: re-exported module resolution supports exact well-known extensions', async () => {
-  expect(await runWith({filename: reexportModulePath}, ['extra', 'ping', '--name', 'Ada'])).toMatchInlineSnapshot(
+  using fixture = createReexportFixture()
+
+  expect(await runWith({filename: fixture.barrelPath}, ['extra', 'ping', '--name', 'Ada'])).toMatchInlineSnapshot(
     `"pong Ada"`,
   )
 })
@@ -680,3 +678,66 @@ test('module positionals: destructured trailing options object works', async () 
   }
   expect(await runWith(params, ['build', 'web', '--minify'])).toMatchInlineSnapshot(`"built web (minified)"`)
 })
+
+const createReexportFixture = () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trpc-cli-reexport-'))
+  const write = (filename: string, source: string) => fs.writeFileSync(path.join(dir, filename), source, 'utf8')
+
+  write(
+    'barrel.ts',
+    `
+      export * from './root'
+      export * as admin from './admin'
+      export * as extra from './extra.mts'
+
+      export function localThing(options: {name: string}) {
+        return \`local \${options.name}\`
+      }
+    `,
+  )
+  write(
+    'root.ts',
+    `
+      /** command merged into the barrel root */
+      export function rootThing(options: {value: string}) {
+        return \`root \${options.value}\`
+      }
+
+      export const rootArrow = (options: {flag?: boolean}) => {
+        return \`arrow \${options.flag === true ? 'on' : 'off'}\`
+      }
+
+      export default function hiddenDefault(options: {value: string}) {
+        return \`hidden \${options.value}\`
+      }
+    `,
+  )
+  write(
+    'admin.ts',
+    `
+      /** open the admin dashboard */
+      export default function dashboard(options: {user: string}) {
+        return \`dashboard \${options.user}\`
+      }
+
+      export function invite(options: {email: string}) {
+        return \`invite \${options.email}\`
+      }
+    `,
+  )
+  write(
+    'extra.mts',
+    `
+      export function ping(options: {name: string}) {
+        return \`pong \${options.name}\`
+      }
+    `,
+  )
+
+  return {
+    barrelPath: path.join(dir, 'barrel.ts'),
+    [Symbol.dispose]() {
+      fs.rmSync(dir, {recursive: true, force: true})
+    },
+  }
+}
