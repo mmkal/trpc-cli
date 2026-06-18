@@ -16,6 +16,7 @@ import {
 } from './json-schema.js'
 import {commandToJSON} from './json.js'
 import {lineByLineConsoleLogger} from './logging.js'
+import type {CliModuleInput} from './module-commands.js'
 import {
   type AnyRouter,
   type CreateCallerFactoryLike,
@@ -29,7 +30,15 @@ import {
 import {CosmeticJsonOption, promptify} from './prompts.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
-import {JsonInputMode, ParsedProcedure, TrpcCli, TrpcCliModuleParams, TrpcCliParams, TrpcCliRunParams} from './types.js'
+import {
+  JsonInputMode,
+  ParsedProcedure,
+  TrpcCli,
+  TrpcCliAsync,
+  TrpcCliModuleParams,
+  TrpcCliParams,
+  TrpcCliRunParams,
+} from './types.js'
 import {kebabCase, looksLikeInstanceof} from './util.js'
 
 const orpcServerOrError = await import('@orpc/server').catch(String)
@@ -38,6 +47,34 @@ const getOrpcServerModule = () => {
     throw new Error(`@orpc/server must be installed. Error loading: ${orpcServerOrError}`)
   }
   return orpcServerOrError
+}
+
+type ImportMetaModuleParams = TrpcCliModuleParams & {main?: boolean; resolve?: unknown}
+
+const getModuleRunGuard = (params: ImportMetaModuleParams, moduleInput: CliModuleInput) => {
+  if (typeof params.main === 'boolean') return () => params.main
+  if (typeof params.resolve === 'function') return () => isMainModuleInput(moduleInput)
+  return () => true
+}
+
+const isMainModuleInput = async (moduleInput: CliModuleInput) => {
+  if (typeof moduleInput !== 'string' && !(moduleInput instanceof URL)) return true
+  if (typeof process === 'undefined' || !process.argv[1]) return false
+  const [fs, path, url] = await Promise.all([
+    import('node:fs/promises'),
+    // eslint-disable-next-line unicorn/import-style -- dynamic import: there's no "default import" syntax to use here
+    import('node:path').then(m => m.default),
+    import('node:url'),
+  ])
+  try {
+    const modulePath =
+      typeof moduleInput === 'string' ? path.resolve(process.cwd(), moduleInput) : url.fileURLToPath(moduleInput)
+    const argvPath = path.resolve(process.cwd(), process.argv[1])
+    const [moduleRealpath, argvRealpath] = await Promise.all([fs.realpath(modulePath), fs.realpath(argvPath)])
+    return moduleRealpath === argvRealpath
+  } catch {
+    return true
+  }
 }
 
 // @ts-ignore zod is an optional peer dependency so might not be installed. oh well, you still get this one interface
@@ -127,22 +164,31 @@ export {deepHelp} from './json.js'
 export function createCli<R extends AnyRouter>(params: TrpcCliParams<R>): TrpcCli
 /**
  * @experimental Run a plain TypeScript module of exported functions as a CLI - no schema library, no router.
- * See {@linkcode TrpcCliModuleParams} for details. Note: `buildProgram` and `toJSON` aren't supported in this mode
- * (module loading is async, those APIs are sync) - use `run`, or build a router yourself.
+ * See {@linkcode TrpcCliModuleParams} for details. Returns a {@linkcode TrpcCliAsync}: because the module is loaded
+ * asynchronously, `run`/`buildProgram`/`toJSON` all return promises (unlike the synchronous `buildProgram`/`toJSON`
+ * on the router-based {@linkcode TrpcCli}).
  */
-export function createCli(params: TrpcCliModuleParams): TrpcCli
+export function createCli(params: TrpcCliModuleParams): TrpcCliAsync
 /**
  * Run a trpc router as a CLI.
  *
  * @param router A trpc router
  * @param context The context to use when calling the procedures - needed if your router requires a context
  * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
- * @param module (experimental) instead of `router`: a plain TypeScript module of exported functions to derive the CLI from - a `URL` like `new URL('./commands.ts', import.meta.url)`, a cwd-relative path string, or `{source, exports}`
+ * @param filename (experimental) instead of `router`: derive the CLI from a plain TypeScript module of exported functions. Pass `import.meta`, a `URL`, an absolute/cwd-relative path string, or the `{source, exports}` escape hatch. See {@linkcode TrpcCliModuleParams}.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
-export function createCli<R extends AnyRouter>(allParams: TrpcCliParams<R> | TrpcCliModuleParams): TrpcCli {
-  if ('module' in allParams) {
-    const {module: moduleInput, ...params} = allParams
+export function createCli<R extends AnyRouter>(
+  allParams: TrpcCliParams<R> | TrpcCliModuleParams,
+): TrpcCli | TrpcCliAsync {
+  // module mode is detected by any of its location keys - `filename`/`url` (also present on a passed-in `import.meta`)
+  // or the `{source, exports}` escape hatch. A router params object has none of these.
+  if ('filename' in allParams || 'url' in allParams || 'source' in allParams) {
+    const {filename, url, source, exports, ...params} = allParams
+    // the `{source, exports}` escape hatch wins; otherwise prefer an explicit filename and fall back to
+    // import.meta.url (e.g. node 18, where import.meta.filename is absent)
+    const moduleInput: CliModuleInput = source ? {source, exports: exports || {}} : filename || new URL(url as string)
+    const shouldRun = getModuleRunGuard(allParams, moduleInput)
     let cliPromise: Promise<TrpcCli> | undefined
     const getCli = () => {
       // node:fs / dynamic import / the vendored typebox parser are only needed (and only loaded) in this mode
@@ -151,21 +197,19 @@ export function createCli<R extends AnyRouter>(allParams: TrpcCliParams<R> | Trp
         .then(router => createCli({router, ...params}))
       return cliPromise
     }
-    const unsupported = (method: string) =>
-      new Error(
-        `${method} is not supported when using \`module\` (experimental) - loading the module is async and ${method} is sync. Use \`run\`, or build a router and pass it to createCli instead.`,
-      )
+    // module loading is async, so this mode's buildProgram/toJSON are async wrappers around the resolved router CLI
     return {
-      run: async (runParams, program) => (await getCli()).run(runParams, program),
-      buildProgram: () => {
-        throw unsupported('buildProgram')
+      run: async (runParams, program) => {
+        if (!(await shouldRun())) return
+        return (await getCli()).run(runParams, program)
       },
-      toJSON: () => {
-        throw unsupported('toJSON')
-      },
+      buildProgram: async runParams => (await getCli()).buildProgram(runParams),
+      toJSON: async program => (await getCli()).toJSON(program),
     }
   }
-  const {router, ...params} = allParams
+  // the module branch above returns, so this is the router case. The params keys are all optional, so TS can't
+  // narrow the union by their absence - assert the router shape explicitly.
+  const {router, ...params} = allParams as TrpcCliParams<R>
   const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {

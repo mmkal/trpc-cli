@@ -23,7 +23,8 @@ jobs:
       - name: write devDependencies to dist # we're only going to install some devDependencies, this helps ensure we get the right ones
         run: cat package.json | jq .devDependencies > dist/devDependencies.json
       - run: npm pkg delete scripts.prepare
-      - run: npm pack --ignore-scripts
+      # pnpm (not npm) pack, so that publishConfig field overrides (bin -> dist/bin.js) are applied
+      - run: pnpm pack
       - name: rename tgz
         run: mv $(ls | grep .tgz) pkg.tgz
       - name: arethetypeswrong
@@ -154,12 +155,17 @@ jobs:
           ' > input-schema.ts
           fi
 
-          # let's create an equivalent file without using `trpc-cli` imports at all - we'll test the bin script on this
-          # to make sure it's possible to use the package's CLI on an existing trpc router.
-          cat trpc-cli-test.ts | grep -v .run > normal-router-test.ts
+          # a module of plain exported functions, with no imports at all - we'll test the bin script on this
+          # (the bin runs files as experimental "commands modules"; erasable-only TS so node can strip types natively)
+          echo '
+          /** say hello to someone */
+          export function sayHello(name: string, options: {enthusiasm: number}) {
+            return "Hello " + name + "!".repeat(options.enthusiasm)
+          }
+          ' > commands-module-test.ts
 
           cat trpc-cli-test.ts
-          cat normal-router-test.ts
+          cat commands-module-test.ts
       - name: bundle
         working-directory: test-dir
         # tsdown and other bundlers sometimes complain about requires of peerDependencies, let's make sure the output is clean
@@ -205,16 +211,16 @@ jobs:
         if: matrix.node >= 22
         run: |
           echo testing --help
-          ./node_modules/.bin/trpc-cli normal-router-test.ts --help
+          ./node_modules/.bin/trpc-cli commands-module-test.ts --help
 
           echo checking --help output
-          ./node_modules/.bin/trpc-cli normal-router-test.ts --help | grep say-hello
+          ./node_modules/.bin/trpc-cli commands-module-test.ts --help | grep say-hello
 
           echo testing say-hello
-          ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3
+          ./node_modules/.bin/trpc-cli commands-module-test.ts say-hello mmkal --enthusiasm 3
 
           echo checking say-hello output
-          ./node_modules/.bin/trpc-cli normal-router-test.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!'
+          ./node_modules/.bin/trpc-cli commands-module-test.ts say-hello mmkal --enthusiasm 3 | grep 'Hello mmkal!!!'
 
       - name: test bun compiled
         if: matrix.node >= 22
@@ -226,7 +232,7 @@ jobs:
         if: failure()
         working-directory: test-dir
         run: |
-          npx tsx normal-router-test.ts --help
-          npx tsx normal-router-test.ts say-hello mmkal --enthusiasm 3
-      - run: ls -R && cat test-dir/normal-router-test.ts
+          npx tsx node_modules/trpc-cli/dist/bin.js commands-module-test.ts --help
+          npx tsx node_modules/trpc-cli/dist/bin.js commands-module-test.ts say-hello mmkal --enthusiasm 3
+      - run: ls -R && cat test-dir/commands-module-test.ts
         if: always()

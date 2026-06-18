@@ -8,6 +8,8 @@
  * function becomes a norpc procedure, so the rest of trpc-cli treats the module like any other router: leading
  * scalar parameters become positional arguments and a trailing object-literal parameter becomes flags (the same
  * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only.
+ * File-backed modules can re-export other command modules: `export * as group from './group'` creates a nested
+ * router, and `export * from './group'` merges named child commands into the current router.
  *
  * The source "parser" here is deliberately a lightweight hand-rolled extractor, not the TypeScript compiler API:
  * it only needs to find exported function declarations, the jsdoc immediately preceding them, and each parameter's
@@ -22,14 +24,33 @@ import {getSchemaTypes, kebabCase} from './util.js'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = (...args: any[]) => any
 
+type SourceCliModule = {source: string; exports: Record<string, unknown>}
+type FileCliModule = SourceCliModule & {filepath: string}
+
+interface ModuleFileLoader {
+  load: (filepath: string | URL) => Promise<FileCliModule>
+  loadSpecifier: (parentFilepath: string, specifier: string) => Promise<FileCliModule>
+}
+
+interface ModuleReexport {
+  kind: 'all' | 'namespace'
+  specifier: string
+  name: string | undefined
+}
+
+const moduleFileExtensions = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs']
+
 /**
  * @experimental
- * The `module` option for `createCli`: a `URL` like `new URL('./commands.ts', import.meta.url)` (resolved relative
- * to the importing file - works no matter what directory the CLI is run from), a path string (resolved against
- * `process.cwd()` - fine for quick scripts, fragile for distributed CLIs), or an explicit `{source, exports}` pair
- * for environments where file reading/dynamic import isn't possible (bundlers, browsers):
- * `{source: rawSourceText, exports: await import('./commands.js')}`. The file forms are read with `node:fs` and
- * dynamically imported - run under tsx/bun/deno/node>=22.18 for `.ts` files.
+ * The resolved commands-module input handed to {@linkcode moduleToRouter}: a `URL` like
+ * `new URL('./commands.ts', import.meta.url)` (resolved relative to the importing file - works no matter what
+ * directory the CLI is run from), a path string (resolved against `process.cwd()` - fine for quick scripts, fragile
+ * for distributed CLIs), or an explicit `{source, exports}` pair for environments where file reading/dynamic import
+ * isn't possible (bundlers, browsers): `{source: rawSourceText, exports: await import('./commands.js')}`. The file
+ * forms are read with `node:fs` and dynamically imported - run under tsx/bun/deno/node>=22.18 for `.ts` files.
+ *
+ * Note: `createCli` accepts the friendlier `{filename}`/`import.meta`/`{source, exports}` shape
+ * ({@linkcode TrpcCliModuleParams}) and normalizes it to this type.
  */
 export type CliModuleInput = string | URL | {source: string; exports: Record<string, unknown>}
 
@@ -37,6 +58,10 @@ export type CliModuleInput = string | URL | {source: string; exports: Record<str
 export interface ExtractedCommand {
   /** the export name, e.g. `installPackages` - becomes the (kebab-cased) command name */
   name: string
+  /** the runtime module export to call; differs from `name` for `export default function named(...)` */
+  exportName: string
+  /** true for a default export, which becomes the CLI's default command */
+  default: boolean
   /** cleaned jsdoc text from the comment immediately preceding the export - becomes the command description */
   description: string | undefined
   /** the function's parameters, in declaration order. Empty = command with no args */
@@ -62,30 +87,76 @@ export interface ExtractedParam {
  * import it - `node:` modules are imported lazily here so this file stays safe to bundle for non-node targets.
  */
 export const moduleToRouter = async (moduleInput: CliModuleInput): Promise<NorpcRouterLike> => {
-  const resolved =
-    typeof moduleInput === 'string' || moduleInput instanceof URL ? await loadModuleFromPath(moduleInput) : moduleInput
-  return buildRouterFromModule(resolved)
+  if (typeof moduleInput === 'string' || moduleInput instanceof URL) {
+    const loader = await createModuleFileLoader()
+    return buildRouterFromFileModule(await loader.load(moduleInput), loader, [])
+  }
+  return buildRouterFromModule(moduleInput)
 }
 
-const loadModuleFromPath = async (filepath: string | URL) => {
+const createModuleFileLoader = async (): Promise<ModuleFileLoader> => {
   const [fs, path, url] = await Promise.all([
     import('node:fs/promises'),
     // eslint-disable-next-line unicorn/import-style -- dynamic import: there's no "default import" syntax to use here
     import('node:path').then(m => m.default),
     import('node:url'),
   ])
-  // a URL (`new URL('./commands.ts', import.meta.url)`) pins the module to the importing file; a plain string is cwd-relative
-  const fullpath = typeof filepath === 'string' ? path.resolve(process.cwd(), filepath) : url.fileURLToPath(filepath)
-  const source = await fs.readFile(fullpath, 'utf8').catch((e: unknown) => {
-    throw new Error(`Could not read module source at ${fullpath}`, {cause: e})
-  })
-  const exports = (await import(url.pathToFileURL(fullpath).href).catch((e: unknown) => {
+
+  const cache = new Map<string, Promise<FileCliModule>>()
+
+  const loadResolvedPath = (fullpath: string) => {
+    const normalized = path.resolve(fullpath)
+    const cached = cache.get(normalized)
+    if (cached) return cached
+    const promise = (async (): Promise<FileCliModule> => {
+      const source = await fs.readFile(normalized, 'utf8').catch((e: unknown) => {
+        throw new Error(`Could not read module source at ${normalized}`, {cause: e})
+      })
+      const exports = (await import(url.pathToFileURL(normalized).href).catch((e: unknown) => {
+        throw new Error(
+          `Could not import module at ${normalized}. For TypeScript modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).`,
+          {cause: e},
+        )
+      })) as Record<string, unknown>
+      return {source, exports: {...exports}, filepath: normalized}
+    })()
+    cache.set(normalized, promise)
+    return promise
+  }
+
+  const fileExists = async (fullpath: string) =>
+    fs
+      .stat(fullpath)
+      .then(stat => stat.isFile())
+      .catch(() => false)
+
+  const resolveSpecifier = async (parentFilepath: string, specifier: string) => {
+    if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
+      throw new Error(
+        `Could not resolve re-export ${JSON.stringify(specifier)} from ${parentFilepath}. Only relative module specifiers are supported.`,
+      )
+    }
+
+    const exact = path.resolve(path.dirname(parentFilepath), specifier)
+    const candidates = path.extname(exact) ? [exact] : [exact, ...moduleFileExtensions.map(ext => `${exact}${ext}`)]
+    for (const candidate of candidates) {
+      if (await fileExists(candidate)) return candidate
+    }
     throw new Error(
-      `Could not import module at ${fullpath}. For TypeScript modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).`,
-      {cause: e},
+      `Could not resolve re-export ${JSON.stringify(specifier)} from ${parentFilepath}. Tried ${candidates.join(', ')}.`,
     )
-  })) as Record<string, unknown>
-  return {source, exports: {...exports}}
+  }
+
+  return {
+    load: filepath => {
+      // a URL (`new URL('./commands.ts', import.meta.url)`) pins the module to the importing file; a plain string is cwd-relative
+      const fullpath =
+        typeof filepath === 'string' ? path.resolve(process.cwd(), filepath) : url.fileURLToPath(filepath)
+      return loadResolvedPath(fullpath)
+    },
+    loadSpecifier: async (parentFilepath, specifier) =>
+      loadResolvedPath(await resolveSpecifier(parentFilepath, specifier)),
+  }
 }
 
 /**
@@ -99,39 +170,114 @@ export const buildRouterFromModule = (resolved: {
   source: string
   exports: Record<string, unknown>
 }): NorpcRouterLike => {
+  const reexports = extractModuleReexports(resolved.source)
+  if (reexports.length > 0) {
+    throw new Error(
+      `Re-exported command modules are only supported with file-backed module mode. Pass a filename, URL, or import.meta to createCli; the {source, exports} escape hatch cannot resolve ${reexports.map(reexport => JSON.stringify(reexport.specifier)).join(', ')}.`,
+    )
+  }
+
+  const {procedures, claimedExportNames} = buildLocalProcedures(resolved)
+  assertNoUnmatchedFunctionExports(resolved.exports, claimedExportNames)
+  assertHasProcedures(procedures)
+  return t.router(procedures)
+}
+
+const buildRouterFromFileModule = async (
+  resolved: FileCliModule,
+  loader: ModuleFileLoader,
+  ancestors: string[],
+): Promise<NorpcRouterLike> => {
+  if (ancestors.includes(resolved.filepath)) {
+    throw new Error(`Circular module re-export detected: ${[...ancestors, resolved.filepath].join(' -> ')}`)
+  }
+
+  const {procedures, claimedExportNames} = buildLocalProcedures(resolved)
+  const childAncestors = [...ancestors, resolved.filepath]
+  for (const reexport of extractModuleReexports(resolved.source)) {
+    const child = await loader.loadSpecifier(resolved.filepath, reexport.specifier)
+    const childRouter = await buildRouterFromFileModule(child, loader, childAncestors)
+
+    if (reexport.kind === 'namespace') {
+      addProcedureOrRouter(procedures, reexport.name!, childRouter, resolved.filepath, child.filepath)
+      claimedExportNames.add(reexport.name!)
+      continue
+    }
+
+    for (const [name, procedureOrRouter] of Object.entries(childRouter)) {
+      // `export * from` follows ESM semantics: default exports and ambiguous/conflicting star exports are not present
+      // on the parent module namespace, so only merge names that the runtime import actually exposed.
+      if (!(name in resolved.exports)) continue
+      addProcedureOrRouter(procedures, name, procedureOrRouter, resolved.filepath, child.filepath)
+      claimedExportNames.add(name)
+    }
+  }
+
+  assertNoUnmatchedFunctionExports(resolved.exports, claimedExportNames)
+  assertHasProcedures(procedures)
+  return t.router(procedures)
+}
+
+const buildLocalProcedures = (resolved: SourceCliModule) => {
   const {source, exports} = resolved
   const commands = extractModuleCommands(source)
   const context = buildDeclarationContext(source)
 
-  const procedures: Record<string, NorpcProcedureLike> = {}
+  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
+  const claimedExportNames = new Set<string>()
   for (const command of commands) {
-    const fn = exports[command.name]
+    claimedExportNames.add(command.exportName)
+    const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
     procedures[command.name] = buildProcedure(command, fn as AnyFn, context)
   }
 
+  return {procedures, claimedExportNames}
+}
+
+const assertNoUnmatchedFunctionExports = (exports: Record<string, unknown>, claimedExportNames: Set<string>) => {
   const unmatched = Object.entries(exports)
-    .filter(([name, value]) => typeof value === 'function' && name !== 'default' && !(name in procedures))
+    .filter(([name, value]) => typeof value === 'function' && !claimedExportNames.has(name))
     .map(([name]) => name)
   if (unmatched.length > 0) {
     throw new Error(
       `Could not find a parseable declaration for exported function(s) ${unmatched.map(n => JSON.stringify(n)).join(', ')}. ` +
-        `Every exported function becomes a command, and must be declared directly in the module source as \`export function name(...)\`, \`export async function name(...)\` or \`export const name = (...) => ...\` - ` +
-        `re-exports like \`export {name}\` or \`export * from './helpers.js'\` can't be parsed. ` +
+        `Every exported function becomes a command, and must be declared directly in the module source as \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\` - ` +
+        `re-exports like \`export {name} from './helpers.js'\` can't be parsed yet. ` +
         `If these exports aren't meant to be commands, move them to a separate module that the commands module doesn't re-export.`,
     )
   }
+}
+
+const assertHasProcedures = (procedures: Record<string, NorpcProcedureLike | NorpcRouterLike>) => {
   if (Object.keys(procedures).length === 0) {
     throw new Error(
-      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\` or \`export const name = (...) => ...\`. ` +
-        `Note: default exports are ignored - commands must be named exports.`,
+      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`.`,
     )
   }
-  return t.router(procedures)
+}
+
+const addProcedureOrRouter = (
+  procedures: Record<string, NorpcProcedureLike | NorpcRouterLike>,
+  name: string,
+  procedureOrRouter: NorpcProcedureLike | NorpcRouterLike,
+  parentFilepath: string,
+  childFilepath: string,
+) => {
+  if (name in procedures) {
+    throw new Error(
+      `Re-exported command ${JSON.stringify(name)} from ${childFilepath} conflicts with an existing command or sub-router in ${parentFilepath}.`,
+    )
+  }
+  procedures[name] = procedureOrRouter
 }
 
 const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<string, unknown>): NorpcProcedureLike => {
-  const builder = command.description ? t.procedure.meta({description: command.description}) : t.procedure
+  const meta = {
+    ...(command.description ? {description: command.description} : {}),
+    ...(command.default ? {default: true} : {}),
+  }
+  const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
   if (command.params.length === 0) {
     return builder.handler(() => fn())
   }
@@ -469,17 +615,38 @@ const cleanJsdoc = (text: string): string | undefined => {
 // Command extraction
 // ------------------------------------------------------------------
 
+const extractModuleReexports = (source: string): ModuleReexport[] => {
+  const scan = scanSource(source)
+  const reexports: Array<ModuleReexport & {position: number}> = []
+
+  for (const match of source.matchAll(/(?<![.\w$])export\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2/g)) {
+    if (scan.masked[match.index]) continue
+    reexports.push({kind: 'namespace', name: match[1], specifier: match[3], position: match.index})
+  }
+
+  for (const match of source.matchAll(/(?<![.\w$])export\s+\*\s+from\s+(['"])([^'"]+)\1/g)) {
+    if (scan.masked[match.index]) continue
+    reexports.push({kind: 'all', name: undefined, specifier: match[2], position: match.index})
+  }
+
+  reexports.sort((a, b) => a.position - b.position)
+  return reexports.map(({kind, name, specifier}) => ({kind, name, specifier}))
+}
+
 /**
  * @experimental Extract exported function declarations from module source text: name, preceding jsdoc, and the full
  * parameter list (names, optionality, type annotation text, inline jsdoc). Supports `export function f(...)`,
- * `export async function f(...)` and `export const f = (...) => ...` (parenthesized arrows only). Returns one
- * command per export name: TS function overloads extract once per declaration, and the first overload *signature*
- * wins (see the dedupe note inline).
+ * `export async function f(...)`, `export const f = (...) => ...` (parenthesized arrows only), and
+ * `export default function f(...)` (or an anonymous default function, which becomes a command named `default`).
+ * Returns one command per export name: TS function overloads extract once per declaration, and the first overload
+ * *signature* wins (see the dedupe note inline).
  */
 export const extractModuleCommands = (source: string): ExtractedCommand[] => {
   const scan = scanSource(source)
   const declarations: Array<{
     name: string
+    exportName: string
+    default: boolean
     position: number
     /** false for a body-less TS overload signature (`export function f(...): R` with no `{...}` after it) */
     hasBody: boolean
@@ -489,14 +656,27 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
 
   const declarationPatterns = [
     // `function` declarations can be body-less overload signatures - detect which, for the dedupe below
-    {pattern: /(?<![.\w$])export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*/g, canBeSignature: true},
+    {
+      pattern: /(?<![.\w$])export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*/g,
+      canBeSignature: true,
+      default: false,
+    },
+    {
+      pattern: /(?<![.\w$])export\s+default\s+(?:async\s+)?function(?:\s+([A-Za-z_$][\w$]*))?\s*/g,
+      canBeSignature: true,
+      default: true,
+    },
     // a `const` initializer is always an implementation - overload syntax doesn't exist for arrow functions
-    {pattern: /(?<![.\w$])export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?=\()/g, canBeSignature: false},
+    {
+      pattern: /(?<![.\w$])export\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?=\()/g,
+      canBeSignature: false,
+      default: false,
+    },
   ]
-  for (const {pattern, canBeSignature} of declarationPatterns) {
+  for (const {pattern, canBeSignature, default: defaultExport} of declarationPatterns) {
     for (const match of source.matchAll(pattern)) {
       if (scan.masked[match.index]) continue
-      const name = match[1]
+      const name = match[1] || 'default'
       let parenIndex = match.index + match[0].length
       if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>') // skip generic type params
       while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
@@ -504,6 +684,8 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
       declarations.push({
         name,
+        exportName: defaultExport ? 'default' : name,
+        default: defaultExport,
         position: match.index,
         hasBody: canBeSignature ? hasFunctionBody(source, scan, parenEnd) : true,
         paramList: source.slice(parenIndex + 1, parenEnd - 1),
@@ -528,8 +710,10 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
     const existing = winners.get(declaration.name)
     if (!existing || (existing.hasBody && !declaration.hasBody)) winners.set(declaration.name, declaration)
   }
-  return [...winners.values()].map(({name, description, paramList}) => ({
+  return [...winners.values()].map(({name, exportName, default: defaultExport, description, paramList}) => ({
     name,
+    exportName,
+    default: defaultExport,
     description,
     params: parseParams(name, paramList),
   }))

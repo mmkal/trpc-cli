@@ -38,33 +38,69 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
  * Exported functions become commands: the jsdoc above each function becomes the command description, and the first
  * parameter's object type annotation (parsed from the module's *source text* via the vendored `trpc-cli/typebox`
  * `Type.Script`) becomes the input schema - property jsdoc comments become flag descriptions, and inputs are
- * validated against the schema before the function runs.
+ * validated against the schema before the function runs. A default-exported function becomes the default command,
+ * equivalent to `{default: true}` in procedure meta. In file-backed module mode, `export * as foo from './foo'`
+ * becomes a nested sub-router named `foo`, and `export * from './foo'` merges that module's named commands into the
+ * current router level.
+ *
+ * `import.meta` satisfies this shape (it carries `filename`/`url`), so the simplest setup is to call `createCli`
+ * from the bottom of the commands file itself:
  *
  * @example
  * ```ts
  * // commands.ts
- * //   /** install dependencies from the lockfile *\/
- * //   export async function install(options: {frozenLockfile?: boolean}) { ... }
- *
- * // cli.ts
  * import {createCli} from 'trpc-cli'
- * void createCli({module: new URL('./commands.ts', import.meta.url)}).run()
+ *
+ * /** install dependencies from the lockfile *\/
+ * export async function install(options: {frozenLockfile?: boolean}) { ... }
+ *
+ * void createCli(import.meta).run() // <- at the BOTTOM of the file, and don't `await` it (see note below)
  * ```
+ *
+ * Or point at a separate file from an entrypoint:
+ *
+ * @example
+ * ```ts
+ * import {createCli} from 'trpc-cli'
+ * void createCli({filename: '/path/to/commands.ts'}).run()
+ * ```
+ *
+ * Note on `createCli(import.meta)`: because trpc-cli only receives the file's location (not its exports), it
+ * re-imports the file to get the live functions. When the call lives in the commands file itself this is a
+ * self-import, which is fine **as long as** the call is at the bottom of the file (so all `export const` arrow
+ * functions above it are initialized) and is **not** top-level-`await`ed (a top-level `await` would suspend the
+ * module before the self-import can resolve, deadlocking). `void createCli(import.meta).run()` is the safe form.
+ * If another module imports this file, the `.run()` call is a no-op, so the exported command functions remain
+ * importable as plain functions.
  */
 export interface TrpcCliModuleParams {
   /**
    * @experimental
-   * The commands module. Either:
+   * Where to find the commands module:
+   * - pass `import.meta` directly (it has `filename`/`url`) for the zero-config single-file setup
    * - a `URL` like `new URL('./commands.ts', import.meta.url)` - resolved relative to the importing file, so the
    *   CLI works no matter what directory it's run from (use this for anything you distribute)
-   * - a path string - resolved against `process.cwd()`, so only reliable when the CLI is run from a known directory
-   *   (fine for quick scripts)
-   * - for bundlers/browsers where file reading and dynamic import aren't available, an explicit pair of the module's
-   *   raw source text and its live exports: `{source: rawSourceText, exports: await import('./commands.js')}`
+   * - an absolute path (e.g. `import.meta.filename`) or a path string - a relative string is resolved against
+   *   `process.cwd()`, so it's only reliable when the CLI is run from a known directory (fine for quick scripts)
    *
-   * The file forms are read from disk and dynamically imported - for `.ts` files, run under tsx/bun/deno/node>=22.18.
+   * The file is read from disk and dynamically imported - for `.ts` files, run under tsx/bun/deno/node>=22.18.
+   * Re-exported command modules are resolved relative to this file.
    */
-  module: string | URL | {source: string; exports: Record<string, unknown>}
+  filename?: string | URL
+  /**
+   * @experimental `import.meta.url`. Used as a fallback when `filename` isn't populated (e.g. older Node where
+   * `import.meta.filename` doesn't exist, or non-node runtimes), so that passing `import.meta` always works.
+   * Ignored when `filename` is set.
+   */
+  url?: string
+  /**
+   * @experimental Bundler/browser escape hatch (no filesystem, no dynamic import): the module's raw source text.
+   * Re-exported command modules are not supported in this form.
+   * Pass alongside {@linkcode TrpcCliModuleParams.exports}, e.g. `{source: rawSourceText, exports: await import('./commands.js')}`.
+   */
+  source?: string
+  /** @experimental Bundler/browser escape hatch: the module's live exports. Pass alongside {@linkcode TrpcCliModuleParams.source}. */
+  exports?: Record<string, unknown>
   name?: string
   version?: string
   description?: string
@@ -281,6 +317,22 @@ export interface TrpcCli {
    * and each command - to get any extra details you will need to use the `buildProgram` function and walk the tree of commands yourself.
    */
   toJSON: (program?: CommanderProgramLike) => CommandJSON
+}
+
+export type TrpcCliAsync = {
+  /** run the CLI - gets args from `process.argv` by default */
+  run: (params?: TrpcCliRunParams, program?: CommanderProgramLike) => Promise<void>
+  /**
+   * Build a `Commander` program from the CLI - you can use this to manually customise the program before passing it to `.run(...)`.
+   * Note that you will need to cast the return value to `import('commander').Command` to use it as a `Command` instance.
+   */
+  buildProgram: (params?: TrpcCliRunParams) => Promise<CommanderProgramLike>
+  /**
+   * @experimental
+   * Get a JSON representation of the CLI - useful for generating documentation etc. This function returns basic information about the CLI
+   * and each command - to get any extra details you will need to use the `buildProgram` function and walk the tree of commands yourself.
+   */
+  toJSON: (program?: CommanderProgramLike) => Promise<CommandJSON>
 }
 
 // todo: allow these all to be async?
