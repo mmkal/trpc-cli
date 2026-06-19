@@ -656,6 +656,22 @@ void createCli({filename: '/path/to/commands.ts'}).run()
 
 trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and parameter type annotations are parsed by the vendored `Type.Script` into real JSON schemas - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`). A default-exported function becomes the default command, so `export default function hola(...)` can be run as either `mycli ...` or `mycli hola ...`.
 
+Command and option aliases can be added with `@alias` tags in the same jsdoc comments:
+
+```ts
+/** install dependencies
+ * @alias i
+ */
+export function install(options: {
+  /** fail if the lockfile is out of date
+   * @alias f
+   */
+  frozenLockfile?: boolean
+}) {
+  // mycli i -f
+}
+```
+
 File-backed module mode can compose command modules too:
 
 ```ts
@@ -665,6 +681,28 @@ export * as users from './users.ts' // creates a nested `users` sub-router
 ```
 
 Relative re-export specifiers are resolved from the containing file. Exact paths win first (`'./users.ts'`, `'./users.mts'`, etc.); extensionless specifiers then probe common TypeScript/JavaScript extensions such as `.ts`, `.mts`, `.js`, and `.mjs`. `export * from './workspace.ts'` follows ESM semantics and does not merge that module's default export. `export * as users from './users.ts'` keeps the child router intact, including a default export as the default command for `users`.
+
+Same-file subcommand groups can be written as exported classes. The class is not instantiated when help/schema information is built; trpc-cli creates a fresh instance only when one of the class's method commands runs.
+
+```ts
+// commands.ts
+export class Users {
+  /** invite a user */
+  invite(options: {
+    /** address to invite */
+    email: string
+  }) {
+    this.#audit('invite')
+    return `invite ${options.email}` // mycli users invite --email ada@example.com
+  }
+
+  #audit(action: string) {
+    // private implementation detail, not a command
+  }
+}
+```
+
+Class command groups must be direct `export class Name { ... }` declarations with no `extends` and no constructor arguments (no constructor, or `constructor()`, is fine). Public instance methods declared directly in the class body become commands. Static methods, inherited methods, private/protected methods, getters and setters are not commands.
 
 Multi-parameter functions work too: leading string/number/boolean parameters become positional arguments, and a trailing object parameter becomes flags - the same convention as [tuple inputs](#combining-positional-arguments-and-options):
 
@@ -692,9 +730,9 @@ Details and limitations:
 
 - `filename` accepts an absolute path (robust - works from any directory), `import.meta` (when the call lives in the commands file itself), or a `URL` like `new URL('./commands.ts', import.meta.url)` (resolves relative to the importing file, so a distributed CLI works wherever it's invoked). A *relative* path string is resolved against `process.cwd()`, so it's only reliable when the CLI is run from a known directory - fine for quick scripts, but it breaks the moment a globally-installed CLI runs somewhere else, so prefer `import.meta`/`URL` for anything you distribute. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
 - `createCli(import.meta)` re-imports the commands file to read its exports, so when the call lives in that same file it's a *self-import*. That's fine as long as the call is at the **bottom** of the file (so all `export const` arrow functions above it are initialized) and is **not** top-level-`await`ed - `void createCli(import.meta).run()` is the safe form. A top-level `await createCli(import.meta).run()` would deadlock (the await suspends the module before the self-import can resolve). When another module imports this file, the `.run()` call is a no-op, so the exported command functions remain importable as plain functions.
-- Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file (intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags). Functions with no parameters become commands with no arguments.
+- Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`) or references to a `type X = {...}`/`interface X {...}` declared in the same file. Interface `extends` clauses and intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags when possible. Functions with no parameters become commands with no arguments.
 - Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
-- Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed), `export default function f(...)` (anonymous default functions become a command named `default`), `export * as group from './group'`, and `export * from './group'`. The module must export *only* commands: any other exported function - an `export {f}` statement, a re-export form other than `export *`/`export * as`, or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module.
+- Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed), `export default function f(...)` (anonymous default functions become a command named `default`), `export class Group { method(...) {} }`, `export * as group from './group'`, and `export * from './group'`. The module must export *only* commands: any other exported function - an `export {f}` statement, a re-export form other than `export *`/`export * as`, or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module.
 - Overloaded functions work, with a simple rule: only the *first* overload signature is used; later overloads and the implementation signature are ignored. TypeScript resolves calls against overload signatures in order, so the first one is the primary documented shape - and a CLI can only present one calling convention.
 - For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({source: rawSourceText, exports: await import('./commands.js')})`. Re-exported command modules are not supported in this form because trpc-cli has no filesystem location to resolve child modules from.
 - In this mode `run`/`buildProgram`/`toJSON` are all **async** (the module is loaded asynchronously): `const program = await createCli(import.meta).buildProgram()`. With a router, `buildProgram`/`toJSON` are synchronous.

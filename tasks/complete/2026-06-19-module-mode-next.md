@@ -1,11 +1,11 @@
 ---
-status: proposal
+status: complete
 size: medium
 ---
 
 # Module Mode Next
 
-Status summary: proposal ready for review. The grill pass resolved the requested module-mode questions, then follow-up decisions switched same-file subcommands to class groups only and moved explicit norpc exports out of scope for a separate change. The scoped path is now: document existing type/overload behavior, add JSDoc aliases, and add lazy-instantiated class subcommand groups. No implementation has been done yet.
+Status summary: implemented and verified. The scoped work documents current type/overload behavior, adds JSDoc aliases for module-mode commands/options, and adds lazy-instantiated class subcommand groups. Exported norpc procedures remain a separate follow-up.
 
 ## User Ask
 
@@ -172,6 +172,9 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - [x] Propose support rules for aliases, subcommands, and procedure-like exports. _Captured above under the feature-specific proposal sections._
 - [x] Capture open risks, tradeoffs, and follow-up implementation slices. _Captured in "Suggested Implementation Slices", "Guesses And Assumptions", and "Out Of Scope"._
 - [x] Open a draft PR for review. _Opened as #211._
+- [x] Implement JSDoc `@alias` support. _Implemented in `src/module-commands.ts` by stripping `@alias` from JSDoc descriptions and mapping tags onto existing command/option alias metadata._
+- [x] Implement lazy class command groups. _Implemented in `src/module-commands.ts`; direct exported classes with no base class and no constructor args become nested routers, and method handlers instantiate a fresh class instance only when invoked._
+- [x] Update docs and tests. _README module-mode docs updated; behavior covered in `test/typebox-module-commands.test.ts`._
 
 ## Implementation Notes
 
@@ -180,3 +183,4 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - 2026-06-19: Quick local probe against built `dist` confirmed same-file extended interfaces, multiple interface extends, and alias-to-alias intersections currently derive flags as expected.
 - 2026-06-19: Follow-up user decision replaced object-literal groups with class groups only, scoped to no base class/no constructor args and lazy instantiation.
 - 2026-06-19: Follow-up user decision moved support for exported norpc procedures/routers out of scope for this proposal and into a separate change.
+- 2026-06-19: Implemented the scoped feature set. `pnpm exec vitest run test/typebox-module-commands.test.ts`, `pnpm compile`, and `pnpm test` pass. `pnpm lint` is blocked only by the pre-existing unstaged `test/zod4.test.ts` unused-disable warning.

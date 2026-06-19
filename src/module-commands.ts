@@ -1,20 +1,22 @@
 /**
- * @experimental Derive a CLI from a plain TypeScript module of exported functions - no schema library, no router.
+ * @experimental Derive a CLI from a plain TypeScript module of exported functions/classes - no schema library, no router.
  *
  * Runtime functions carry no type information, so this works from two inputs: the module's *source text* (to extract
- * each exported function's parameter types and jsdoc) and its *live exports* (to actually call the functions).
+ * each exported function/class method's parameter types and jsdoc) and its *live exports* (to actually call the functions).
  * The extracted parameter type text is handed to the vendored `Type.Script` (see ./typebox), which turns it into a
  * JSON Schema - including jsdoc comments as property descriptions - with a `~standard` validator attached. Each
  * function becomes a norpc procedure, so the rest of trpc-cli treats the module like any other router: leading
  * scalar parameters become positional arguments and a trailing object-literal parameter becomes flags (the same
- * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only.
+ * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only. Exported classes
+ * with no base class and no constructor arguments become nested command groups whose public instance methods are
+ * invoked on a fresh class instance only when the command runs.
  * File-backed modules can re-export other command modules: `export * as group from './group'` creates a nested
  * router, and `export * from './group'` merges named child commands into the current router.
  *
  * The source "parser" here is deliberately a lightweight hand-rolled extractor, not the TypeScript compiler API:
- * it only needs to find exported function declarations, the jsdoc immediately preceding them, and each parameter's
- * name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type syntax into
- * JSON Schema - is all `Type.Script`.
+ * it only needs to find exported function/class method declarations, the jsdoc immediately preceding them, and each
+ * parameter's name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type
+ * syntax into JSON Schema - is all `Type.Script`.
  */
 import {t} from './norpc.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
@@ -66,6 +68,12 @@ export interface ExtractedCommand {
   description: string | undefined
   /** the function's parameters, in declaration order. Empty = command with no args */
   params: ExtractedParam[]
+}
+
+export interface ExtractedClass {
+  /** the export name, e.g. `Users` - becomes the (kebab-cased) command group name */
+  name: string
+  methods: ExtractedCommand[]
 }
 
 /** A parameter extracted from a function declaration's parameter list. */
@@ -221,6 +229,7 @@ const buildRouterFromFileModule = async (
 const buildLocalProcedures = (resolved: SourceCliModule) => {
   const {source, exports} = resolved
   const commands = extractModuleCommands(source)
+  const classes = extractModuleClasses(source)
   const context = buildDeclarationContext(source)
 
   const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
@@ -230,6 +239,29 @@ const buildLocalProcedures = (resolved: SourceCliModule) => {
     const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
     procedures[command.name] = buildProcedure(command, fn as AnyFn, context)
+  }
+  for (const extractedClass of classes) {
+    claimedExportNames.add(extractedClass.name)
+    const ClassCtor = exports[extractedClass.name]
+    if (typeof ClassCtor !== 'function') continue
+    if (ClassCtor.length > 0) {
+      throw new Error(
+        `Exported class "${extractedClass.name}" has a constructor with parameters, which isn't supported for module-mode command groups. ` +
+          `Class command groups must have no constructor arguments.`,
+      )
+    }
+    const childProcedures: Record<string, NorpcProcedureLike> = {}
+    for (const method of extractedClass.methods) {
+      childProcedures[method.name] = buildProcedure(
+        method,
+        (...args: unknown[]) => {
+          const instance = new (ClassCtor as new () => Record<string, AnyFn>)()
+          return (instance[method.name] as (...args: unknown[]) => unknown)(...args)
+        },
+        context,
+      )
+    }
+    procedures[extractedClass.name] = t.router(childProcedures)
   }
 
   return {procedures, claimedExportNames}
@@ -273,9 +305,11 @@ const addProcedureOrRouter = (
 }
 
 const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<string, unknown>): NorpcProcedureLike => {
+  const commandDoc = parseCliJsdoc(command.description)
   const meta = {
-    ...(command.description ? {description: command.description} : {}),
+    ...(commandDoc.description ? {description: commandDoc.description} : {}),
     ...(command.default ? {default: true} : {}),
+    ...(commandDoc.aliases.length > 0 ? {aliases: {command: commandDoc.aliases}} : {}),
   }
   const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
   if (command.params.length === 0) {
@@ -361,7 +395,8 @@ const buildPositionalProcedure = (
   positionalParams.forEach((param, i) => {
     const item = schema.items![i] as Record<string, unknown>
     item.title = kebabCase(param.name!)
-    if (param.description) item.description = param.description
+    const paramDoc = parseCliJsdoc(param.description)
+    if (paramDoc.description) item.description = paramDoc.description
     if (cliOptional[i]) item.optional = true
   })
   if (lastIsFlagsObject) {
@@ -371,6 +406,7 @@ const buildPositionalProcedure = (
   }
   schema.minItems = cliOptional.includes(true) ? cliOptional.indexOf(true) : params.length
 
+  applySchemaJsdocMetadata(schema)
   return builder.input(schema as never).handler(({input}) => fn(...(input as unknown[])))
 }
 
@@ -394,7 +430,7 @@ const parseParamSchema = (commandName: string, param: ExtractedParam, context: R
         `Declare it as \`type X = {...}\` or \`interface X {...}\` in the same file, or inline the type.`,
     )
   }
-  return flattenIntersection(schema)
+  return applySchemaJsdocMetadata(flattenIntersection(schema))
 }
 
 /**
@@ -611,6 +647,38 @@ const cleanJsdoc = (text: string): string | undefined => {
   return cleaned || undefined
 }
 
+const parseCliJsdoc = (description: string | undefined): {description: string | undefined; aliases: string[]} => {
+  if (!description) return {description: undefined, aliases: []}
+  const aliases: string[] = []
+  const lines: string[] = []
+  for (const line of description.split('\n')) {
+    const match = line.trim().match(/^@alias\s+(.+)$/)
+    if (match) {
+      aliases.push(match[1].trim())
+      continue
+    }
+    lines.push(line)
+  }
+  const cleaned = lines.join('\n').trim()
+  return {description: cleaned || undefined, aliases}
+}
+
+const applySchemaJsdocMetadata = (schema: unknown): unknown => {
+  if (!schema || typeof schema !== 'object') return schema
+  const record = schema as Record<string, unknown>
+  if (typeof record.description === 'string') {
+    const doc = parseCliJsdoc(record.description)
+    if (doc.description) record.description = doc.description
+    else delete record.description
+    if (doc.aliases.length > 0) record.alias = doc.aliases[0]
+  }
+  for (const value of Object.values(record)) {
+    if (Array.isArray(value)) value.forEach(applySchemaJsdocMetadata)
+    else applySchemaJsdocMetadata(value)
+  }
+  return schema
+}
+
 // ------------------------------------------------------------------
 // Command extraction
 // ------------------------------------------------------------------
@@ -717,6 +785,134 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
     description,
     params: parseParams(name, paramList),
   }))
+}
+
+export const extractModuleClasses = (source: string): ExtractedClass[] => {
+  const scan = scanSource(source)
+  const classes: ExtractedClass[] = []
+
+  for (const match of source.matchAll(/(?<![.\w$])export\s+class\s+([A-Za-z_$][\w$]*)\s*/g)) {
+    if (scan.masked[match.index]) continue
+    const name = match[1]
+    let headerIndex = match.index + match[0].length
+    if (source[headerIndex] === '<') headerIndex = findBalancedEnd(source, scan, headerIndex, '<', '>')
+    const braceIndex = findNextUnmasked(source, scan, headerIndex, '{')
+    const header = source.slice(headerIndex, braceIndex)
+    if (/\bextends\b/.test(header)) {
+      throw new Error(
+        `Exported class "${name}" extends another class, which isn't supported for module-mode command groups. ` +
+          `Class command groups must have no base class.`,
+      )
+    }
+
+    const classEnd = findBalancedEnd(source, scan, braceIndex, '{', '}')
+    const methods = extractClassMethods(source, scan, name, braceIndex + 1, classEnd - 1)
+    if (methods.length === 0) {
+      throw new Error(
+        `Exported class "${name}" has no command methods. Class command groups must declare at least one public instance method.`,
+      )
+    }
+    classes.push({name, methods})
+  }
+
+  return classes
+}
+
+const findNextUnmasked = (source: string, scan: SourceScan, start: number, char: string): number => {
+  for (let i = start; i < source.length; i++) {
+    if (!scan.masked[i] && source[i] === char) return i
+  }
+  throw new Error(`Could not find \`${char}\` after index ${start} of module source`)
+}
+
+const extractClassMethods = (
+  source: string,
+  scan: SourceScan,
+  className: string,
+  bodyStart: number,
+  bodyEnd: number,
+): ExtractedCommand[] => {
+  const body = source.slice(bodyStart, bodyEnd)
+  const declarations: Array<{
+    name: string
+    position: number
+    hasBody: boolean
+    paramList: string
+    description: string | undefined
+  }> = []
+
+  const pattern = /(?<![.\w$#])(?:(public|private|protected)\s+)?(?:(static)\s+)?(?:(async)\s+)?([A-Za-z_$][\w$]*)\s*/g
+  for (const match of body.matchAll(pattern)) {
+    const absoluteIndex = bodyStart + match.index
+    if (scan.masked[absoluteIndex]) continue
+    if (!isTopLevelClassMember(source, scan, bodyStart, absoluteIndex)) continue
+
+    const visibility = match[1]
+    const staticModifier = match[2]
+    const name = match[4]
+    const beforeMatch = source.slice(bodyStart, absoluteIndex).trimEnd()
+    const declarationStart = source.slice(absoluteIndex, bodyStart + match.index + match[0].length).trimStart()
+    if (/\b(?:get|set)$/.test(beforeMatch)) continue
+    if (
+      visibility === 'private' ||
+      visibility === 'protected' ||
+      staticModifier ||
+      declarationStart.startsWith('get ')
+    ) {
+      continue
+    }
+    if (declarationStart.startsWith('set ')) continue
+
+    let parenIndex = bodyStart + match.index + match[0].length
+    if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>')
+    while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
+    if (source[parenIndex] !== '(') continue
+
+    const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
+    const paramList = source.slice(parenIndex + 1, parenEnd - 1)
+    if (name === 'constructor') {
+      if (paramList.trim()) {
+        throw new Error(
+          `Exported class "${className}" has a constructor with parameters, which isn't supported for module-mode command groups. ` +
+            `Class command groups must have no constructor arguments.`,
+        )
+      }
+      continue
+    }
+
+    declarations.push({
+      name,
+      position: absoluteIndex,
+      hasBody: hasFunctionBody(source, scan, parenEnd),
+      paramList,
+      description: jsdocBefore(source, scan, absoluteIndex),
+    })
+  }
+
+  declarations.sort((a, b) => a.position - b.position)
+  const winners = new Map<string, (typeof declarations)[number]>()
+  for (const declaration of declarations) {
+    const existing = winners.get(declaration.name)
+    if (!existing || (existing.hasBody && !declaration.hasBody)) winners.set(declaration.name, declaration)
+  }
+
+  return [...winners.values()].map(({name, description, paramList}) => ({
+    name,
+    exportName: name,
+    default: false,
+    description,
+    params: parseParams(`${className}.${name}`, paramList),
+  }))
+}
+
+const isTopLevelClassMember = (source: string, scan: SourceScan, bodyStart: number, index: number): boolean => {
+  let depth = 0
+  for (let i = bodyStart; i < index; i++) {
+    if (scan.masked[i]) continue
+    if (source[i] === '{') depth++
+    else if (source[i] === '}') depth--
+  }
+  return depth === 0
 }
 
 /**
