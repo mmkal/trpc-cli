@@ -9,10 +9,11 @@
  * scalar parameters become positional arguments and a trailing object-literal parameter becomes flags (the same
  * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only.
  * Command-group-shaped exported classes become nested command groups whose public instance methods are invoked on a
- * fresh class instance only when the command runs. Classes with constructor arguments, no public command methods,
- * or `extends` without an explicit zero-argument constructor are ignored as ordinary non-command exports.
- * File-backed modules can re-export other command modules: `export * as group from './group'` creates a nested
- * router, and `export * from './group'` merges named child commands into the current router.
+ * fresh class instance only when the command runs; a default-exported class puts its methods at the current router
+ * level. Classes with constructor arguments, no public command methods, or `extends` without an explicit
+ * zero-argument constructor are ignored as ordinary non-command exports. File-backed modules can re-export other
+ * command modules: `export * as group from './group'` creates a nested router, `export * from './group'` merges
+ * named child commands into the current router, and `export {Foo} from './foo'` re-exports selected commands.
  *
  * The source "parser" here is deliberately a lightweight hand-rolled extractor, not the TypeScript compiler API:
  * it only needs to find exported function/class method declarations, the jsdoc immediately preceding them, and each
@@ -28,17 +29,20 @@ import {getSchemaTypes, kebabCase} from './util.js'
 type AnyFn = (...args: any[]) => any
 
 type SourceCliModule = {source: string; exports: Record<string, unknown>}
+type FileSourceModule = {source: string; filepath: string}
 type FileCliModule = SourceCliModule & {filepath: string}
 
 interface ModuleFileLoader {
   load: (filepath: string | URL) => Promise<FileCliModule>
   loadSpecifier: (parentFilepath: string, specifier: string) => Promise<FileCliModule>
+  loadSourceSpecifier: (parentFilepath: string, specifier: string) => Promise<FileSourceModule>
 }
 
 interface ModuleReexport {
-  kind: 'all' | 'namespace'
+  kind: 'all' | 'namespace' | 'named'
   specifier: string
   name: string | undefined
+  names?: Array<{imported: string; exported: string}>
 }
 
 const moduleFileExtensions = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs']
@@ -74,6 +78,10 @@ export interface ExtractedCommand {
 export interface ExtractedClass {
   /** the export name, e.g. `Users` - becomes the (kebab-cased) command group name */
   name: string
+  /** the runtime module export to instantiate; differs from `name` for `export default class ...` */
+  exportName: string
+  /** true for `export default class`, whose methods become root commands */
+  default: boolean
   methods: ExtractedCommand[]
 }
 
@@ -111,16 +119,29 @@ const createModuleFileLoader = async (): Promise<ModuleFileLoader> => {
     import('node:url'),
   ])
 
-  const cache = new Map<string, Promise<FileCliModule>>()
+  const sourceCache = new Map<string, Promise<FileSourceModule>>()
+  const moduleCache = new Map<string, Promise<FileCliModule>>()
 
-  const loadResolvedPath = (fullpath: string) => {
+  const loadSourceResolvedPath = (fullpath: string) => {
     const normalized = path.resolve(fullpath)
-    const cached = cache.get(normalized)
+    const cached = sourceCache.get(normalized)
     if (cached) return cached
-    const promise = (async (): Promise<FileCliModule> => {
+    const promise = (async (): Promise<FileSourceModule> => {
       const source = await fs.readFile(normalized, 'utf8').catch((e: unknown) => {
         throw new Error(`Could not read module source at ${normalized}`, {cause: e})
       })
+      return {source, filepath: normalized}
+    })()
+    sourceCache.set(normalized, promise)
+    return promise
+  }
+
+  const loadResolvedPath = (fullpath: string) => {
+    const normalized = path.resolve(fullpath)
+    const cached = moduleCache.get(normalized)
+    if (cached) return cached
+    const promise = (async (): Promise<FileCliModule> => {
+      const {source} = await loadSourceResolvedPath(normalized)
       const exports = (await import(url.pathToFileURL(normalized).href).catch((e: unknown) => {
         throw new Error(
           `Could not import module at ${normalized}. For TypeScript modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).`,
@@ -129,7 +150,7 @@ const createModuleFileLoader = async (): Promise<ModuleFileLoader> => {
       })) as Record<string, unknown>
       return {source, exports: {...exports}, filepath: normalized}
     })()
-    cache.set(normalized, promise)
+    moduleCache.set(normalized, promise)
     return promise
   }
 
@@ -147,7 +168,15 @@ const createModuleFileLoader = async (): Promise<ModuleFileLoader> => {
     }
 
     const exact = path.resolve(path.dirname(parentFilepath), specifier)
-    const candidates = path.extname(exact) ? [exact] : [exact, ...moduleFileExtensions.map(ext => `${exact}${ext}`)]
+    const extension = path.extname(exact)
+    const extensionAlternates: Record<string, string[]> = {
+      '.cjs': ['.cts', '.ts'],
+      '.js': ['.ts', '.tsx'],
+      '.mjs': ['.mts', '.ts'],
+    }
+    const candidates = extension
+      ? [exact, ...(extensionAlternates[extension] || []).map(ext => `${exact.slice(0, -extension.length)}${ext}`)]
+      : [exact, ...moduleFileExtensions.map(ext => `${exact}${ext}`)]
     for (const candidate of candidates) {
       if (await fileExists(candidate)) return candidate
     }
@@ -165,6 +194,8 @@ const createModuleFileLoader = async (): Promise<ModuleFileLoader> => {
     },
     loadSpecifier: async (parentFilepath, specifier) =>
       loadResolvedPath(await resolveSpecifier(parentFilepath, specifier)),
+    loadSourceSpecifier: async (parentFilepath, specifier) =>
+      loadSourceResolvedPath(await resolveSpecifier(parentFilepath, specifier)),
   }
 }
 
@@ -186,7 +217,7 @@ export const buildRouterFromModule = (resolved: {
     )
   }
 
-  const {procedures, claimedExportNames} = buildLocalProcedures(resolved)
+  const {procedures, claimedExportNames} = buildLocalProcedures(resolved, buildDeclarationContext(resolved.source))
   assertNoUnmatchedFunctionExports(resolved.exports, claimedExportNames)
   assertHasProcedures(procedures)
   return t.router(procedures)
@@ -201,7 +232,8 @@ const buildRouterFromFileModule = async (
     throw new Error(`Circular module re-export detected: ${[...ancestors, resolved.filepath].join(' -> ')}`)
   }
 
-  const {procedures, claimedExportNames} = buildLocalProcedures(resolved)
+  const context = await buildFileDeclarationContext(resolved, loader)
+  const {procedures, claimedExportNames} = buildLocalProcedures(resolved, context)
   const childAncestors = [...ancestors, resolved.filepath]
   for (const reexport of extractModuleReexports(resolved.source)) {
     const child = await loader.loadSpecifier(resolved.filepath, reexport.specifier)
@@ -210,6 +242,16 @@ const buildRouterFromFileModule = async (
     if (reexport.kind === 'namespace') {
       addProcedureOrRouter(procedures, reexport.name!, childRouter, resolved.filepath, child.filepath)
       claimedExportNames.add(reexport.name!)
+      continue
+    }
+
+    if (reexport.kind === 'named') {
+      for (const {imported, exported} of reexport.names || []) {
+        claimedExportNames.add(exported)
+        const procedureOrRouter = childRouter[imported]
+        if (!procedureOrRouter) continue
+        addProcedureOrRouter(procedures, exported, procedureOrRouter, resolved.filepath, child.filepath)
+      }
       continue
     }
 
@@ -227,12 +269,11 @@ const buildRouterFromFileModule = async (
   return t.router(procedures)
 }
 
-const buildLocalProcedures = (resolved: SourceCliModule) => {
+const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string, unknown>) => {
   const {source, exports} = resolved
   const commands = extractModuleCommands(source)
   const classes = extractModuleClasses(source)
   const classExportNames = extractModuleClassNames(source)
-  const context = buildDeclarationContext(source)
 
   const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
   const claimedExportNames = new Set<string>()
@@ -241,15 +282,15 @@ const buildLocalProcedures = (resolved: SourceCliModule) => {
     claimedExportNames.add(command.exportName)
     const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
-    procedures[command.name] = buildProcedure(command, fn as AnyFn, context)
+    addLocalProcedureOrRouter(procedures, command.name, buildProcedure(command, fn as AnyFn, context))
   }
   for (const extractedClass of classes) {
-    const ClassCtor = exports[extractedClass.name]
+    const ClassCtor = exports[extractedClass.exportName]
     if (typeof ClassCtor !== 'function') continue
     if (ClassCtor.length > 0) continue
     const childProcedures: Record<string, NorpcProcedureLike> = {}
     for (const method of extractedClass.methods) {
-      childProcedures[method.name] = buildProcedure(
+      const procedure = buildProcedure(
         method,
         (...args: unknown[]) => {
           const instance = new (ClassCtor as new () => Record<string, AnyFn>)()
@@ -257,11 +298,22 @@ const buildLocalProcedures = (resolved: SourceCliModule) => {
         },
         context,
       )
+      if (extractedClass.default) addLocalProcedureOrRouter(procedures, method.name, procedure)
+      else childProcedures[method.name] = procedure
     }
-    procedures[extractedClass.name] = t.router(childProcedures)
+    if (!extractedClass.default) addLocalProcedureOrRouter(procedures, extractedClass.name, t.router(childProcedures))
   }
 
   return {procedures, claimedExportNames}
+}
+
+const addLocalProcedureOrRouter = (
+  procedures: Record<string, NorpcProcedureLike | NorpcRouterLike>,
+  name: string,
+  procedureOrRouter: NorpcProcedureLike | NorpcRouterLike,
+) => {
+  if (name in procedures) throw new Error(`Module command ${JSON.stringify(name)} is declared more than once.`)
+  procedures[name] = procedureOrRouter
 }
 
 const assertNoUnmatchedFunctionExports = (exports: Record<string, unknown>, claimedExportNames: Set<string>) => {
@@ -271,8 +323,8 @@ const assertNoUnmatchedFunctionExports = (exports: Record<string, unknown>, clai
   if (unmatched.length > 0) {
     throw new Error(
       `Could not find a parseable declaration for exported function(s) ${unmatched.map(n => JSON.stringify(n)).join(', ')}. ` +
-        `Every exported function becomes a command, and must be declared directly in the module source as \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\` - ` +
-        `re-exports like \`export {name} from './helpers.js'\` can't be parsed yet. ` +
+        `Every exported function becomes a command, and must be declared directly in the module source as \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`, or re-exported from a relative file-backed command module. ` +
+        `Local export lists like \`export {name}\` can't be parsed yet. ` +
         `If these exports aren't meant to be commands, move them to a separate module that the commands module doesn't re-export.`,
     )
   }
@@ -281,7 +333,7 @@ const assertNoUnmatchedFunctionExports = (exports: Record<string, unknown>, clai
 const assertHasProcedures = (procedures: Record<string, NorpcProcedureLike | NorpcRouterLike>) => {
   if (Object.keys(procedures).length === 0) {
     throw new Error(
-      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`.`,
+      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`, or export a command-group-shaped class.`,
     )
   }
 }
@@ -417,14 +469,14 @@ const parseParamSchema = (commandName: string, param: ExtractedParam, context: R
   if (isNeverSchema(schema)) {
     throw new Error(
       `Could not parse the type of parameter ${describeParam(param)} of "${commandName}": \`${param.typeText}\`. ` +
-        `Use a string/number/boolean type, an inline object type literal like \`{foo: string}\`, or a reference to a \`type X = {...}\`/\`interface X {...}\` declared in the same file.`,
+        `Use a string/number/boolean type, an inline object type literal like \`{foo: string}\`, or a reference to a \`type X = {...}\`/\`interface X {...}\` declared in the same file or imported from a relative file-backed module.`,
     )
   }
   const danglingRefs = collectRefs(schema)
   if (danglingRefs.length > 0) {
     throw new Error(
       `The type of parameter ${describeParam(param)} of "${commandName}" references ${danglingRefs.map(r => JSON.stringify(r)).join(', ')}, which couldn't be resolved. ` +
-        `Declare it as \`type X = {...}\` or \`interface X {...}\` in the same file, or inline the type.`,
+        `Declare it as \`type X = {...}\` or \`interface X {...}\` in the same file, import it from a relative file-backed module, or inline the type.`,
     )
   }
   return applySchemaJsdocMetadata(flattenIntersection(schema))
@@ -694,9 +746,35 @@ const extractModuleReexports = (source: string): ModuleReexport[] => {
     reexports.push({kind: 'all', name: undefined, specifier: match[2], position: match.index})
   }
 
+  for (const match of source.matchAll(/(?<![.\w$])export\s+(type\s+)?\{([^}]+)\}\s+from\s+(['"])([^'"]+)\3/g)) {
+    if (scan.masked[match.index]) continue
+    const names = parseNamedSpecifiers(match[2], Boolean(match[1]))
+      .filter(specifier => !specifier.typeOnly)
+      .map(({imported, exported}) => ({imported, exported}))
+    if (names.length > 0) {
+      reexports.push({kind: 'named', name: undefined, names, specifier: match[4], position: match.index})
+    }
+  }
+
   reexports.sort((a, b) => a.position - b.position)
-  return reexports.map(({kind, name, specifier}) => ({kind, name, specifier}))
+  return reexports.map(({kind, name, names, specifier}) => ({kind, name, names, specifier}))
 }
+
+const parseNamedSpecifiers = (
+  raw: string,
+  typeOnlyExport: boolean,
+): Array<{imported: string; exported: string; typeOnly: boolean}> =>
+  raw
+    .split(',')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .flatMap(part => {
+      const typeOnly = typeOnlyExport || part.startsWith('type ')
+      const text = part.replace(/^type\s+/, '').trim()
+      const match = text.match(/^([A-Za-z_$][\w$]*|default)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/)
+      if (!match) return []
+      return [{imported: match[1], exported: match[2] || match[1], typeOnly}]
+    })
 
 /**
  * @experimental Extract exported function declarations from module source text: name, preceding jsdoc, and the full
@@ -788,33 +866,41 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
   const scan = scanSource(source)
   const classes: ExtractedClass[] = []
 
-  for (const match of source.matchAll(/(?<![.\w$])export\s+class\s+([A-Za-z_$][\w$]*)\s*/g)) {
-    if (scan.masked[match.index]) continue
-    const name = match[1]
-    let headerIndex = match.index + match[0].length
-    if (source[headerIndex] === '<') headerIndex = findBalancedEnd(source, scan, headerIndex, '<', '>')
-    const braceIndex = findNextUnmasked(source, scan, headerIndex, '{')
-    const header = source.slice(headerIndex, braceIndex)
-    const hasBaseClass = /\bextends\b/.test(header)
+  const patterns = [
+    {pattern: /(?<![.\w$])export\s+class\s+([A-Za-z_$][\w$]*)\s*/g, default: false},
+    {pattern: /(?<![.\w$])export\s+default\s+class(?:\s+([A-Za-z_$][\w$]*))?\s*/g, default: true},
+  ]
 
-    const classEnd = findBalancedEnd(source, scan, braceIndex, '{', '}')
-    const {methodDeclarations, hasConstructorParameters, hasZeroArgConstructor} = extractClassMethodDeclarations(
-      source,
-      scan,
-      braceIndex + 1,
-      classEnd - 1,
-    )
-    if (hasConstructorParameters) continue
-    if (hasBaseClass && !hasZeroArgConstructor) continue
-    if (methodDeclarations.length === 0) continue
-    const methods = methodDeclarations.map(({methodName, description, paramList}) => ({
-      name: methodName,
-      exportName: methodName,
-      default: false,
-      description,
-      params: parseParams(`${name}.${methodName}`, paramList),
-    }))
-    classes.push({name, methods})
+  for (const {pattern, default: defaultExport} of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      if (scan.masked[match.index]) continue
+      const name = match[1] || 'default'
+      const exportName = defaultExport ? 'default' : name
+      let headerIndex = match.index + match[0].length
+      if (source[headerIndex] === '<') headerIndex = findBalancedEnd(source, scan, headerIndex, '<', '>')
+      const braceIndex = findNextUnmasked(source, scan, headerIndex, '{')
+      const header = source.slice(headerIndex, braceIndex)
+      const hasBaseClass = /\bextends\b/.test(header)
+
+      const classEnd = findBalancedEnd(source, scan, braceIndex, '{', '}')
+      const {methodDeclarations, hasConstructorParameters, hasZeroArgConstructor} = extractClassMethodDeclarations(
+        source,
+        scan,
+        braceIndex + 1,
+        classEnd - 1,
+      )
+      if (hasConstructorParameters) continue
+      if (hasBaseClass && !hasZeroArgConstructor) continue
+      if (methodDeclarations.length === 0) continue
+      const methods = methodDeclarations.map(({methodName, description, paramList}) => ({
+        name: methodName,
+        exportName: methodName,
+        default: false,
+        description,
+        params: parseParams(`${name}.${methodName}`, paramList),
+      }))
+      classes.push({name, exportName, default: defaultExport, methods})
+    }
   }
 
   return classes
@@ -823,9 +909,15 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
 const extractModuleClassNames = (source: string): string[] => {
   const scan = scanSource(source)
   const names: string[] = []
-  for (const match of source.matchAll(/(?<![.\w$])export\s+class\s+([A-Za-z_$][\w$]*)\s*/g)) {
-    if (scan.masked[match.index]) continue
-    names.push(match[1])
+  const patterns = [
+    {pattern: /(?<![.\w$])export\s+class\s+([A-Za-z_$][\w$]*)\s*/g, defaultName: false},
+    {pattern: /(?<![.\w$])export\s+default\s+class(?:\s+([A-Za-z_$][\w$]*))?\s*/g, defaultName: true},
+  ]
+  for (const {pattern, defaultName} of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      if (scan.masked[match.index]) continue
+      names.push(defaultName ? 'default' : match[1])
+    }
   }
   return names
 }
@@ -1059,6 +1151,69 @@ const parseParams = (functionName: string, paramList: string): ExtractedParam[] 
 // ------------------------------------------------------------------
 // Type declaration context
 // ------------------------------------------------------------------
+
+const buildFileDeclarationContext = async (
+  resolved: FileSourceModule,
+  loader: ModuleFileLoader,
+): Promise<Record<string, unknown>> => {
+  const parts = await collectTypeContextParts(resolved, loader, new Set<string>())
+  return buildDeclarationContext([...parts.sources, ...parts.aliases].join('\n'))
+}
+
+const collectTypeContextParts = async (
+  resolved: FileSourceModule,
+  loader: ModuleFileLoader,
+  seen: Set<string>,
+): Promise<{sources: string[]; aliases: string[]}> => {
+  if (seen.has(resolved.filepath)) return {sources: [], aliases: []}
+  seen.add(resolved.filepath)
+
+  const sources: string[] = []
+  const aliases: string[] = []
+  for (const typeImport of extractModuleTypeImports(resolved.source)) {
+    if (!typeImport.specifier.startsWith('./') && !typeImport.specifier.startsWith('../')) continue
+    const child = await loader.loadSourceSpecifier(resolved.filepath, typeImport.specifier)
+    const childParts = await collectTypeContextParts(child, loader, seen)
+    sources.push(...childParts.sources)
+    aliases.push(...childParts.aliases)
+    for (const {imported, local} of typeImport.imports) {
+      if (imported !== local) aliases.push(`type ${local} = ${imported}`)
+    }
+  }
+  sources.push(resolved.source)
+
+  return {sources, aliases}
+}
+
+const extractModuleTypeImports = (
+  source: string,
+): Array<{specifier: string; imports: Array<{imported: string; local: string}>}> => {
+  const scan = scanSource(source)
+  const imports: Array<{specifier: string; imports: Array<{imported: string; local: string}>; position: number}> = []
+
+  for (const match of source.matchAll(/(?<![.\w$])import\s+type\s+\{([^}]+)\}\s+from\s+(['"])([^'"]+)\2/g)) {
+    if (scan.masked[match.index]) continue
+    imports.push({
+      specifier: match[3],
+      imports: parseNamedSpecifiers(match[1], true).map(({imported, exported}) => ({imported, local: exported})),
+      position: match.index,
+    })
+  }
+
+  for (const match of source.matchAll(/(?<![.\w$])import\s+\{([^}]+)\}\s+from\s+(['"])([^'"]+)\2/g)) {
+    if (scan.masked[match.index]) continue
+    const typeSpecifiers = parseNamedSpecifiers(match[1], false).filter(specifier => specifier.typeOnly)
+    if (typeSpecifiers.length === 0) continue
+    imports.push({
+      specifier: match[3],
+      imports: typeSpecifiers.map(({imported, exported}) => ({imported, local: exported})),
+      position: match.index,
+    })
+  }
+
+  imports.sort((a, b) => a.position - b.position)
+  return imports.map(({specifier, imports: importedNames}) => ({specifier, imports: importedNames}))
+}
 
 /**
  * Extract `type X = ...` and `interface X {...}` declarations from the source and parse them into a record of

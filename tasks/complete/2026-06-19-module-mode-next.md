@@ -90,6 +90,7 @@ This maps to `mycli users invite` and `mycli users deactivate`.
 Rules:
 
 - Only direct `export class Users { ... }` declarations are candidates.
+- `export default class Commands { ... }` exposes public methods at the current router level instead of adding a class-name subcommand.
 - Classes without a base class may omit the constructor; classes with `extends` must declare an explicit zero-argument constructor.
 - Classes with constructor parameters, unsupported inheritance, or no public command methods are ignored as ordinary exports.
 - Public instance method declarations directly in the class body become commands.
@@ -157,7 +158,6 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 
 - Implementing the proposal.
 - Switching module mode to the TypeScript compiler API.
-- Imported type resolution.
 - Object-literal command groups.
 - Class groups with constructor arguments.
 - Explicit norpc procedure/router exports.
@@ -174,6 +174,7 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - [x] Open a draft PR for review. _Opened as #211._
 - [x] Implement JSDoc `@alias` support. _Implemented in `src/module-commands.ts` by stripping `@alias` from JSDoc descriptions and mapping tags onto existing command/option alias metadata._
 - [x] Implement lazy class command groups. _Implemented in `src/module-commands.ts`; direct exported classes with no constructor args become nested routers, inherited classes require an explicit zero-argument constructor, unsupported class shapes are ignored, and method handlers instantiate a fresh class instance only when invoked._
+- [x] Handle default class exports, named command re-exports, and relative imported type declarations. _Default class methods are root commands; `export {CommandOrGroup} from './module'` re-exports selected file-backed commands/groups; relative type imports are read as source-only declaration context._
 - [x] Update docs and tests. _README module-mode docs updated; behavior covered in `test/typebox-module-commands.test.ts`._
 
 ## Implementation Notes
@@ -186,3 +187,4 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - 2026-06-19: Implemented the scoped feature set. `pnpm exec vitest run test/typebox-module-commands.test.ts`, `pnpm compile`, and `pnpm test` pass. `pnpm lint` is blocked only by the pre-existing unstaged `test/zod4.test.ts` unused-disable warning.
 - 2026-06-19: Follow-up user decision allowed `extends` when the class declares an explicit zero-argument constructor, and added coverage that TypeScript `private` methods are not commands.
 - 2026-06-19: Follow-up user decision changed unsupported class shapes, including constructor parameters, from startup errors to ignored non-command exports.
+- 2026-06-19: Follow-up user decision added support for `export default class`, named file-backed re-exports like `export {Users} from './users.ts'`, and relative imported type/interface declarations for file-backed modules.

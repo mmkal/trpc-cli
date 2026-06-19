@@ -175,7 +175,7 @@ test('module commands: unresolvable named type errors clearly', async () => {
     exports: {deploy: () => {}},
   }
   await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'The type of parameter "options" of "deploy" references "ImportedFromElsewhere", which couldn\'t be resolved. Declare it as `type X = {...}` or `interface X {...}` in the same file, or inline the type.',
+    'The type of parameter "options" of "deploy" references "ImportedFromElsewhere", which couldn\'t be resolved. Declare it as `type X = {...}` or `interface X {...}` in the same file, import it from a relative file-backed module, or inline the type.',
   )
 })
 
@@ -224,6 +224,35 @@ test('module commands: re-exported module resolution supports exact well-known e
   expect(await runWith({filename: fixture.barrelPath}, ['extra', 'ping', '--name', 'Ada'])).toMatchInlineSnapshot(
     `"pong Ada"`,
   )
+})
+
+test('module commands: named re-exports expose selected child command classes', async () => {
+  using fixture = createReexportFixture()
+
+  expect(await runWith({filename: fixture.barrelPath}, ['users', 'invite', '--email', 'ada@example.com']))
+    .toMatchInlineSnapshot(`
+      "user ada@example.com"
+    `)
+
+  const help = await runWith({filename: fixture.barrelPath}, ['--help'])
+  expect(help).toContain('users')
+})
+
+test('module commands: file-backed modules resolve parameter types imported from relative files', async () => {
+  using fixture = createImportedTypesFixture()
+
+  expect(await runWith({filename: fixture.commandsPath}, ['invite', '--email', 'ada@example.com', '--role', 'admin']))
+    .toMatchInlineSnapshot(`
+      "invite ada@example.com as admin"
+    `)
+  expect(await runWith({filename: fixture.commandsPath}, ['assign', '--id', 'u_123', '--group', 'staff']))
+    .toMatchInlineSnapshot(`
+      "assign u_123 to staff"
+    `)
+
+  const help = await runWith({filename: fixture.commandsPath}, ['invite', '--help'])
+  expect(help).toContain('email to invite')
+  expect(help).toContain('role to grant')
 })
 
 test('module commands: {source, exports} rejects re-export module composition', async () => {
@@ -817,6 +846,50 @@ test('module commands: exported classes create lazily-instantiated command group
   expect(constructed).toBe(3)
 })
 
+test('module commands: default exported class methods become root commands', async () => {
+  let constructed = 0
+  class Commands {
+    constructor() {
+      constructed++
+    }
+
+    invite(options: {email: string}) {
+      return `invite ${options.email}`
+    }
+  }
+
+  const params = {
+    source: `
+      export default class Commands {
+        constructor() {}
+
+        /** invite from the root */
+        invite(options: {
+          /** target email */
+          email: string
+        }) {
+          return 'invite ' + options.email
+        }
+
+        private helper() {
+          return 'not a command'
+        }
+      }
+    `,
+    exports: {default: Commands},
+  }
+
+  const rootHelp = await runWith(params, ['--help'])
+  expect(rootHelp).toContain('invite')
+  expect(rootHelp).toContain('invite from the root')
+  expect(rootHelp).not.toContain('helper')
+  expect(constructed).toBe(0)
+  expect(await runWith(params, ['invite', '--email', 'ada@example.com'])).toMatchInlineSnapshot(
+    `"invite ada@example.com"`,
+  )
+  expect(constructed).toBe(1)
+})
+
 test('module commands: inherited class groups require an explicit zero-arg constructor', async () => {
   class Base {
     protected prefix = 'base'
@@ -960,6 +1033,7 @@ const createReexportFixture = () => {
       export * from './root'
       export * as admin from './admin'
       export * as extra from './extra.mts'
+      export {Users} from './users'
 
       export function localThing(options: {name: string}) {
         return \`local \${options.name}\`
@@ -1004,9 +1078,68 @@ const createReexportFixture = () => {
       }
     `,
   )
+  write(
+    'users.ts',
+    `
+      export class Users {
+        invite(options: {email: string}) {
+          return \`user \${options.email}\`
+        }
+      }
+    `,
+  )
 
   return {
     barrelPath: path.join(dir, 'barrel.ts'),
+    [Symbol.dispose]() {
+      fs.rmSync(dir, {recursive: true, force: true})
+    },
+  }
+}
+
+const createImportedTypesFixture = () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trpc-cli-imported-types-'))
+  const write = (filename: string, source: string) => fs.writeFileSync(path.join(dir, filename), source, 'utf8')
+
+  write(
+    'commands.ts',
+    `
+      import type {InviteOptions as Options} from './types.js'
+      import {type AssignOptions} from './types.js'
+
+      export function invite(options: Options) {
+        return \`invite \${options.email} as \${options.role || 'member'}\`
+      }
+
+      export default class Commands {
+        assign(options: AssignOptions) {
+          return \`assign \${options.id} to \${options.group}\`
+        }
+      }
+    `,
+  )
+  write(
+    'types.ts',
+    `
+      export interface InviteOptions {
+        /** email to invite */
+        email: string
+        /** role to grant */
+        role?: 'admin' | 'member'
+      }
+
+      export type AssignOptions = {
+        /** user id */
+        id: string
+      } & {
+        /** destination group */
+        group: string
+      }
+    `,
+  )
+
+  return {
+    commandsPath: path.join(dir, 'commands.ts'),
     [Symbol.dispose]() {
       fs.rmSync(dir, {recursive: true, force: true})
     },
