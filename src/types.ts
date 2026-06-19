@@ -40,8 +40,9 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
  * `Type.Script`) becomes the input schema - property jsdoc comments become flag descriptions, and inputs are
  * validated against the schema before the function runs. `@alias` tags in command/property jsdoc become command and
  * option aliases. A default-exported function becomes the default command, equivalent to `{default: true}` in
- * procedure meta. Exported classes with no base class and no constructor arguments become nested command groups;
- * their public instance methods are lazily invoked on a fresh class instance. In file-backed module mode,
+ * procedure meta. Exported classes become nested command groups when they have no constructor arguments; classes
+ * with `extends` must declare an explicit zero-argument constructor. Their public instance methods are lazily
+ * invoked on a fresh class instance. In file-backed module mode,
  * `export * as foo from './foo'` becomes a nested sub-router named `foo`, and `export * from './foo'` merges that
  * module's named commands into the current router level.
  *

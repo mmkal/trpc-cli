@@ -743,6 +743,15 @@ test('module commands: exported classes create lazily-instantiated command group
       return `invite ${options.email}`
     }
 
+    private getOrCreate(email: string) {
+      return {email}
+    }
+
+    login(email: string, password: string) {
+      const user = this.getOrCreate(email)
+      return `login ${user.email} with ${password.length} chars`
+    }
+
     #audit() {
       return 'audited'
     }
@@ -764,6 +773,15 @@ test('module commands: exported classes create lazily-instantiated command group
           return 'invite ' + options.email
         }
 
+        private getOrCreate(email: string) {
+          return {email}
+        }
+
+        login(email: string, password: string) {
+          const user = this.getOrCreate(email)
+          return 'login ' + user.email + ' with ' + password.length + ' chars'
+        }
+
         #audit() {
           return 'audited'
         }
@@ -782,6 +800,7 @@ test('module commands: exported classes create lazily-instantiated command group
   expect(inviteHelp).toContain('address to invite')
   expect(inviteHelp).not.toContain('@alias')
   expect(inviteHelp).not.toContain('audit')
+  expect(inviteHelp).not.toContain('get-or-create')
   expect(constructed).toBe(0)
 
   expect(await runWith(params, ['users', 'invite', '--email', 'ada@example.com'])).toMatchInlineSnapshot(
@@ -792,9 +811,13 @@ test('module commands: exported classes create lazily-instantiated command group
     `"invite grace@example.com"`,
   )
   expect(constructed).toBe(2)
+  expect(await runWith(params, ['users', 'login', 'ada@example.com', 's3cr3t'])).toMatchInlineSnapshot(
+    `"login ada@example.com with 6 chars"`,
+  )
+  expect(constructed).toBe(3)
 })
 
-test('module commands: class groups reject inheritance, constructor parameters, and static-only command shapes', async () => {
+test('module commands: class groups allow inheritance only with an explicit zero-arg constructor', async () => {
   await expect(
     runWith(
       {
@@ -816,8 +839,45 @@ test('module commands: class groups reject inheritance, constructor parameters, 
       },
       ['--help'],
     ),
-  ).rejects.toThrowError(/must have no base class/)
+  ).rejects.toThrowError(/must declare an explicit zero-argument constructor/)
 
+  class Base {
+    protected prefix = 'base'
+  }
+  class Users extends Base {
+    constructor() {
+      super()
+    }
+
+    invite(options: {email: string}) {
+      return `${this.prefix}:${options.email}`
+    }
+  }
+  expect(
+    await runWith(
+      {
+        source: `
+          class Base {
+            protected prefix = 'base'
+          }
+          export class Users extends Base {
+            constructor() {
+              super()
+            }
+
+            invite(options: {email: string}) {
+              return this.prefix + ':' + options.email
+            }
+          }
+        `,
+        exports: {Users},
+      },
+      ['users', 'invite', '--email', 'ada@example.com'],
+    ),
+  ).toMatchInlineSnapshot(`"base:ada@example.com"`)
+})
+
+test('module commands: class groups reject constructor parameters and static-only command shapes', async () => {
   await expect(
     runWith(
       {

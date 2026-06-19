@@ -260,3 +260,20 @@ Updated decision:
 - Keep a note that explicit norpc exports are probably the right future schema/procedure escape hatch.
 - Do not include `os.input(...).handler(...)`, `t.procedure...`, or `os.router(...)` support in the first implementation scope.
 - This proposal should focus on documenting current type/overload behavior, JSDoc aliases, and class groups.
+
+---
+
+## Implementation Follow-Up — private methods and explicit inherited constructors — 2026-06-19
+
+The user asked for two class-group refinements during implementation:
+
+- TypeScript `private` methods must not become commands.
+- `extends` can be allowed when the exported class declares an explicit zero-argument constructor.
+
+Updated decision:
+
+- Public instance methods declared directly in the exported class are commands.
+- `private`/`protected` methods, ECMAScript `#private` methods, static methods, getters, setters, and inherited methods are not commands.
+- A class with no base class may omit its constructor.
+- A class with `extends` must declare `constructor()`.
+- Constructor parameters remain unsupported.

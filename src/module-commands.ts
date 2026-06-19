@@ -8,8 +8,9 @@
  * function becomes a norpc procedure, so the rest of trpc-cli treats the module like any other router: leading
  * scalar parameters become positional arguments and a trailing object-literal parameter becomes flags (the same
  * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only. Exported classes
- * with no base class and no constructor arguments become nested command groups whose public instance methods are
- * invoked on a fresh class instance only when the command runs.
+ * with no constructor arguments become nested command groups whose public instance methods are invoked on a fresh
+ * class instance only when the command runs. Classes with `extends` must declare an explicit zero-argument
+ * constructor.
  * File-backed modules can re-export other command modules: `export * as group from './group'` creates a nested
  * router, and `export * from './group'` merges named child commands into the current router.
  *
@@ -798,15 +799,15 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
     if (source[headerIndex] === '<') headerIndex = findBalancedEnd(source, scan, headerIndex, '<', '>')
     const braceIndex = findNextUnmasked(source, scan, headerIndex, '{')
     const header = source.slice(headerIndex, braceIndex)
-    if (/\bextends\b/.test(header)) {
-      throw new Error(
-        `Exported class "${name}" extends another class, which isn't supported for module-mode command groups. ` +
-          `Class command groups must have no base class.`,
-      )
-    }
+    const hasBaseClass = /\bextends\b/.test(header)
 
     const classEnd = findBalancedEnd(source, scan, braceIndex, '{', '}')
-    const methods = extractClassMethods(source, scan, name, braceIndex + 1, classEnd - 1)
+    const {methods, hasZeroArgConstructor} = extractClassMethods(source, scan, name, braceIndex + 1, classEnd - 1)
+    if (hasBaseClass && !hasZeroArgConstructor) {
+      throw new Error(
+        `Exported class "${name}" extends another class and must declare an explicit zero-argument constructor for module-mode command groups.`,
+      )
+    }
     if (methods.length === 0) {
       throw new Error(
         `Exported class "${name}" has no command methods. Class command groups must declare at least one public instance method.`,
@@ -831,7 +832,7 @@ const extractClassMethods = (
   className: string,
   bodyStart: number,
   bodyEnd: number,
-): ExtractedCommand[] => {
+): {methods: ExtractedCommand[]; hasZeroArgConstructor: boolean} => {
   const body = source.slice(bodyStart, bodyEnd)
   const declarations: Array<{
     name: string
@@ -840,6 +841,7 @@ const extractClassMethods = (
     paramList: string
     description: string | undefined
   }> = []
+  let hasZeroArgConstructor = false
 
   const pattern = /(?<![.\w$#])(?:(public|private|protected)\s+)?(?:(static)\s+)?(?:(async)\s+)?([A-Za-z_$][\w$]*)\s*/g
   for (const match of body.matchAll(pattern)) {
@@ -877,6 +879,7 @@ const extractClassMethods = (
             `Class command groups must have no constructor arguments.`,
         )
       }
+      hasZeroArgConstructor = true
       continue
     }
 
@@ -896,13 +899,16 @@ const extractClassMethods = (
     if (!existing || (existing.hasBody && !declaration.hasBody)) winners.set(declaration.name, declaration)
   }
 
-  return [...winners.values()].map(({name, description, paramList}) => ({
-    name,
-    exportName: name,
-    default: false,
-    description,
-    params: parseParams(`${className}.${name}`, paramList),
-  }))
+  return {
+    hasZeroArgConstructor,
+    methods: [...winners.values()].map(({name, description, paramList}) => ({
+      name,
+      exportName: name,
+      default: false,
+      description,
+      params: parseParams(`${className}.${name}`, paramList),
+    })),
+  }
 }
 
 const isTopLevelClassMember = (source: string, scan: SourceScan, bodyStart: number, index: number): boolean => {
