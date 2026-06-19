@@ -159,35 +159,60 @@ test('module commands: {source, exports} escape hatch works without file reading
   expect(await runWith(params, ['add', '--help'])).toContain('the name of the package to add')
 })
 
-test('module commands: missing type annotation errors clearly', async () => {
+test('module commands: unparseable exported functions are ignored', async () => {
   const params = {
-    source: `export function greet(name) { return 'hi ' + name }`,
-    exports: {greet: (name: string) => 'hi ' + name},
+    source: `
+      export function missingAnnotation(name) {
+        return 'hi ' + name
+      }
+
+      export function unresolved(options: ImportedFromElsewhere) {
+        return options.name
+      }
+
+      const localExportList = () => 'local'
+      export {localExportList}
+
+      export const loadSomeInternalThing = (params: NoInfer<{foo: string}>) => {
+        return params.foo
+      }
+
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {
+      loadSomeInternalThing: (input: any) => input.foo,
+      localExportList: () => 'local',
+      missingAnnotation: (name: string) => 'hi ' + name,
+      status: () => 'ok',
+      unresolved: (options: any) => options.name,
+    },
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter "name" of "greet" has no type annotation. Annotate it, e.g. `(name: string)` or `(name: {someFlag: string})`.',
-  )
+
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('missing-annotation')
+  expect(help).not.toContain('unresolved')
+  expect(help).not.toContain('local-export-list')
+  expect(help).not.toContain('load-some-internal-thing')
+  expect(await runWith(params, ['status'])).toMatchInlineSnapshot(`"ok"`)
 })
 
-test('module commands: unresolvable named type errors clearly', async () => {
+test('module commands: module with only ignored function exports errors with no commands found', async () => {
   const params = {
-    source: `export function deploy(options: ImportedFromElsewhere) {}`,
-    exports: {deploy: () => {}},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'The type of parameter "options" of "deploy" references "ImportedFromElsewhere", which couldn\'t be resolved. Declare it as `type X = {...}` or `interface X {...}` in the same file, import it from a relative file-backed module, or inline the type.',
-  )
-})
+    source: `
+      export function greet(name) {
+        return 'hi ' + name
+      }
 
-test('module commands: exported function with no parseable declaration errors clearly', async () => {
-  const params = {
-    // `export {fn}` statements aren't supported by the extractor - the error should say so
-    source: `const start = () => 'started'\nexport {start}`,
-    exports: {start: () => 'started'},
+      export const loadSomeInternalThing = (params: NoInfer<{foo: string}>) => {
+        return params.foo
+      }
+    `,
+    exports: {greet: (name: string) => 'hi ' + name, loadSomeInternalThing: (input: any) => input.foo},
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    /Could not find a parseable declaration for exported function\(s\) "start"/,
-  )
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(/No commands found in module/)
 })
 
 test('module commands: export * merges child module commands at the root', async () => {
@@ -434,54 +459,51 @@ test('module positionals: missing and invalid positionals fail before the functi
   `)
 })
 
-test('module positionals: rest parameters error clearly', async () => {
+test('module positionals: unsupported signatures are ignored', async () => {
   const params = {
-    source: `export function sum(...numbers: number[]) { return 0 }`,
-    exports: {sum: () => 0},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter "...numbers" of "sum" is a rest parameter, which isn\'t supported. Use an explicitly-typed array parameter (e.g. `numbers: number[]`, which becomes a variadic positional argument), or move it into a trailing options object.',
-  )
-})
+    source: `
+      export function sum(...numbers: number[]) {
+        return 0
+      }
 
-test('module positionals: destructured positional parameters error clearly', async () => {
-  const params = {
-    source: `export function move([x, y]: [number, number], options: {fast?: boolean}) {}`,
-    exports: {move: () => {}},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter 1 ("[number, number]") of "move" is a destructuring pattern, which isn\'t supported for positional arguments. Give the parameter a name, or move it into a trailing options object.',
-  )
-})
+      export function move([x, y]: [number, number], options: {fast?: boolean}) {
+        return x + y
+      }
 
-test('module positionals: object parameter in non-final position errors clearly', async () => {
-  const params = {
-    source: `export function deploy(options: {env: string}, target: string) {}`,
-    exports: {deploy: () => {}},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter 1 ("options") of "deploy" is an object type, but only the *last* parameter can be an object - leading parameters become positional arguments and a trailing object parameter maps to flags. Move it to the end, or flatten it into the trailing options object.',
-  )
-})
+      export function deploy(options: {env: string}, target: string) {
+        return target
+      }
 
-test('module positionals: optional array parameter errors clearly', async () => {
-  const params = {
-    source: `export function lint(files?: string[]) {}`,
-    exports: {lint: () => {}},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter 1 ("files") of "lint" is an optional array. Optional array parameters aren\'t supported as positional arguments - make it required, or move it into a trailing options object.',
-  )
-})
+      export function lint(files?: string[]) {
+        return files?.join(',') || ''
+      }
 
-test('module positionals: default value without a type annotation errors clearly', async () => {
-  const params = {
-    source: `export function pad(text: string, width = 10) { return text }`,
-    exports: {pad: (text: string) => text},
+      export function pad(text: string, width = 10) {
+        return text + width
+      }
+
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {
+      deploy: (_options: any, target: string) => target,
+      lint: (files?: string[]) => files?.join(',') || '',
+      move: ([x, y]: [number, number]) => x + y,
+      pad: (text: string, width = 10) => text + width,
+      status: () => 'ok',
+      sum: () => 0,
+    },
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter "width" of "pad" has no type annotation. Annotate it, e.g. `(width: string)` or `(width: {someFlag: string})`.',
-  )
+
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('sum')
+  expect(help).not.toContain('move')
+  expect(help).not.toContain('deploy')
+  expect(help).not.toContain('lint')
+  expect(help).not.toContain('pad')
+  expect(await runWith(params, ['status'])).toMatchInlineSnapshot(`"ok"`)
 })
 
 test('module commands: intersection and multi-line union type aliases keep their tails', async () => {
@@ -555,7 +577,7 @@ test('module commands: generic type parameters containing => are skipped correct
   const params = {
     // without the => exception in findBalancedEnd, the `>` of `() => void` would close the generic
     // bracket early and the whole declaration would mis-slice. (A *parameter* typed as a generic like
-    // `callback?: T` is a different story - it errors as an unresolvable reference, by design.)
+    // `callback?: T` is a different story - it is ignored unless the type can resolve into a CLI input.)
     source: `
       export async function run<T extends () => void>(options: {name: string}) {
         return 'ran ' + options.name
@@ -745,19 +767,23 @@ test('module commands: async const arrow with destructured param', async () => {
   )
 })
 
-test('module commands: type-annotated const declarations error with parseable-declaration guidance', async () => {
+test('module commands: type-annotated const function exports are ignored', async () => {
   const params = {
-    // `export const f: SomeType = ...` isn't parsed (the annotation would be the source of truth, and it can
-    // reference imported types the extractor can't see) - the existing actionable error applies
+    // `export const f: SomeType = ...` isn't parsed; the annotation would be the source of truth, and it can
+    // reference imported types the extractor can't see.
     source: `
       type Cmd = (options: {name: string}) => string
       export const greet: Cmd = (options) => 'hi ' + options.name
+      export function status() {
+        return 'ok'
+      }
     `,
-    exports: {greet: (options: any) => 'hi ' + options.name},
+    exports: {greet: (options: any) => 'hi ' + options.name, status: () => 'ok'},
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    /Could not find a parseable declaration for exported function\(s\) "greet"/,
-  )
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('greet')
+  expect(await runWith(params, ['status'])).toMatchInlineSnapshot(`"ok"`)
 })
 
 test('module commands: exported classes create lazily-instantiated command groups', async () => {

@@ -89,6 +89,7 @@ This maps to `mycli users invite` and `mycli users deactivate`.
 
 Rules:
 
+- Exported functions whose signatures cannot be converted into CLI inputs are ignored as ordinary non-command exports. A `NoInfer<...>` parameter is a convenient opt-out because Type.Script cannot resolve it.
 - Only direct `export class Users { ... }` declarations are candidates.
 - `export default class Commands { ... }` exposes public methods at the current router level instead of adding a class-name subcommand.
 - Classes without a base class may omit the constructor; classes with `extends` must declare an explicit zero-argument constructor.
@@ -99,7 +100,7 @@ Rules:
 - Method parameter parsing, JSDoc descriptions, aliases, and overload behavior follow the same rules as exported functions.
 - Help/schema generation must not instantiate the class.
 - Instantiate lazily inside the command handler, and create a fresh instance per command invocation.
-- If a public instance method is command-shaped but cannot be parsed, fail loudly.
+- If a public instance method is command-shaped but cannot be converted into a CLI input, ignore that method.
 - Do not add object-literal command groups in this proposal. Ordinary exported object constants stay ignored.
 
 ### Explicit Schema/Procedure Exports
@@ -149,6 +150,7 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - Same-file `Type.Script`-parseable support is the right boundary because it matches the project's preference for loud errors and small pragmatic mechanisms over building a TypeScript compiler.
 - JSDoc is the least-bad metadata channel for aliases because module mode already treats source comments as CLI documentation.
 - First-overload-only behavior is preferable because Commander help and validation need one concrete public invocation shape.
+- Ignoring unconvertible function exports is preferable to forcing custom metadata for helper exports; `NoInfer<...>` becomes one possible opt-out without becoming a trpc-cli feature.
 - Class groups are acceptable when constrained to no constructor arguments, public instance methods only, and lazy per-invocation instantiation. Inheritance is acceptable when the class explicitly declares a zero-argument constructor; unsupported class shapes should be ignored rather than hard errors.
 - Explicit norpc exports are probably the right schema escape hatch, but they belong in a separate change because they introduce runtime-export composition beyond plain source-scanned commands.
 - Object-literal command groups should be skipped for now so `export const config = {...}` remains unambiguously ordinary data.
@@ -188,3 +190,4 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - 2026-06-19: Follow-up user decision allowed `extends` when the class declares an explicit zero-argument constructor, and added coverage that TypeScript `private` methods are not commands.
 - 2026-06-19: Follow-up user decision changed unsupported class shapes, including constructor parameters, from startup errors to ignored non-command exports.
 - 2026-06-19: Follow-up user decision added support for `export default class`, named file-backed re-exports like `export {Users} from './users.ts'`, and relative imported type/interface declarations for file-backed modules.
+- 2026-06-19: Follow-up user decision changed unconvertible function exports from startup errors to ignored non-command exports, making `NoInfer<...>` parameters usable as an opt-out.

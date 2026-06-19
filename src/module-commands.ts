@@ -7,7 +7,8 @@
  * JSON Schema - including jsdoc comments as property descriptions - with a `~standard` validator attached. Each
  * function becomes a norpc procedure, so the rest of trpc-cli treats the module like any other router: leading
  * scalar parameters become positional arguments and a trailing object-literal parameter becomes flags (the same
- * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only.
+ * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only. Exported
+ * functions whose signatures cannot be converted into CLI inputs are ignored as ordinary non-command exports.
  * Command-group-shaped exported classes become nested command groups whose public instance methods are invoked on a
  * fresh class instance only when the command runs; a default-exported class puts its methods at the current router
  * level. Classes with constructor arguments, no public command methods, or `extends` without an explicit
@@ -44,6 +45,8 @@ interface ModuleReexport {
   name: string | undefined
   names?: Array<{imported: string; exported: string}>
 }
+
+class SkippedModuleCommandError extends Error {}
 
 const moduleFileExtensions = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs']
 
@@ -201,10 +204,10 @@ const createModuleFileLoader = async (): Promise<ModuleFileLoader> => {
 
 /**
  * @experimental Build a norpc router from a module's source text + live exports. Exported functions become
- * procedures: source order determines command order, function jsdoc becomes the command description, and parameter
- * type annotations (inline literals, or references to a `type`/`interface` declared in the same file) are parsed by
- * the vendored `Type.Script` into the input schema. Leading scalar parameters become positional arguments; a
- * trailing object parameter becomes flags.
+ * procedures when their signatures can be converted into CLI inputs: source order determines command order,
+ * function jsdoc becomes the command description, and parameter type annotations (inline literals, or references to
+ * a `type`/`interface` declared in the same file) are parsed by the vendored `Type.Script` into the input schema.
+ * Leading scalar parameters become positional arguments; a trailing object parameter becomes flags.
  */
 export const buildRouterFromModule = (resolved: {
   source: string
@@ -217,8 +220,7 @@ export const buildRouterFromModule = (resolved: {
     )
   }
 
-  const {procedures, claimedExportNames} = buildLocalProcedures(resolved, buildDeclarationContext(resolved.source))
-  assertNoUnmatchedFunctionExports(resolved.exports, claimedExportNames)
+  const procedures = buildLocalProcedures(resolved, buildDeclarationContext(resolved.source))
   assertHasProcedures(procedures)
   return t.router(procedures)
 }
@@ -233,7 +235,7 @@ const buildRouterFromFileModule = async (
   }
 
   const context = await buildFileDeclarationContext(resolved, loader)
-  const {procedures, claimedExportNames} = buildLocalProcedures(resolved, context)
+  const procedures = buildLocalProcedures(resolved, context)
   const childAncestors = [...ancestors, resolved.filepath]
   for (const reexport of extractModuleReexports(resolved.source)) {
     const child = await loader.loadSpecifier(resolved.filepath, reexport.specifier)
@@ -241,13 +243,11 @@ const buildRouterFromFileModule = async (
 
     if (reexport.kind === 'namespace') {
       addProcedureOrRouter(procedures, reexport.name!, childRouter, resolved.filepath, child.filepath)
-      claimedExportNames.add(reexport.name!)
       continue
     }
 
     if (reexport.kind === 'named') {
       for (const {imported, exported} of reexport.names || []) {
-        claimedExportNames.add(exported)
         const procedureOrRouter = childRouter[imported]
         if (!procedureOrRouter) continue
         addProcedureOrRouter(procedures, exported, procedureOrRouter, resolved.filepath, child.filepath)
@@ -260,11 +260,9 @@ const buildRouterFromFileModule = async (
       // on the parent module namespace, so only merge names that the runtime import actually exposed.
       if (!(name in resolved.exports)) continue
       addProcedureOrRouter(procedures, name, procedureOrRouter, resolved.filepath, child.filepath)
-      claimedExportNames.add(name)
     }
   }
 
-  assertNoUnmatchedFunctionExports(resolved.exports, claimedExportNames)
   assertHasProcedures(procedures)
   return t.router(procedures)
 }
@@ -273,16 +271,13 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
   const {source, exports} = resolved
   const commands = extractModuleCommands(source)
   const classes = extractModuleClasses(source)
-  const classExportNames = extractModuleClassNames(source)
 
   const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
-  const claimedExportNames = new Set<string>()
-  for (const name of classExportNames) claimedExportNames.add(name)
   for (const command of commands) {
-    claimedExportNames.add(command.exportName)
     const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
-    addLocalProcedureOrRouter(procedures, command.name, buildProcedure(command, fn as AnyFn, context))
+    const procedure = tryBuildProcedure(command, fn as AnyFn, context)
+    if (procedure) addLocalProcedureOrRouter(procedures, command.name, procedure)
   }
   for (const extractedClass of classes) {
     const ClassCtor = exports[extractedClass.exportName]
@@ -290,7 +285,7 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
     if (ClassCtor.length > 0) continue
     const childProcedures: Record<string, NorpcProcedureLike> = {}
     for (const method of extractedClass.methods) {
-      const procedure = buildProcedure(
+      const procedure = tryBuildProcedure(
         method,
         (...args: unknown[]) => {
           const instance = new (ClassCtor as new () => Record<string, AnyFn>)()
@@ -298,13 +293,16 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
         },
         context,
       )
+      if (!procedure) continue
       if (extractedClass.default) addLocalProcedureOrRouter(procedures, method.name, procedure)
       else childProcedures[method.name] = procedure
     }
-    if (!extractedClass.default) addLocalProcedureOrRouter(procedures, extractedClass.name, t.router(childProcedures))
+    if (!extractedClass.default && Object.keys(childProcedures).length > 0) {
+      addLocalProcedureOrRouter(procedures, extractedClass.name, t.router(childProcedures))
+    }
   }
 
-  return {procedures, claimedExportNames}
+  return procedures
 }
 
 const addLocalProcedureOrRouter = (
@@ -316,17 +314,16 @@ const addLocalProcedureOrRouter = (
   procedures[name] = procedureOrRouter
 }
 
-const assertNoUnmatchedFunctionExports = (exports: Record<string, unknown>, claimedExportNames: Set<string>) => {
-  const unmatched = Object.entries(exports)
-    .filter(([name, value]) => typeof value === 'function' && !claimedExportNames.has(name))
-    .map(([name]) => name)
-  if (unmatched.length > 0) {
-    throw new Error(
-      `Could not find a parseable declaration for exported function(s) ${unmatched.map(n => JSON.stringify(n)).join(', ')}. ` +
-        `Every exported function becomes a command, and must be declared directly in the module source as \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`, or re-exported from a relative file-backed command module. ` +
-        `Local export lists like \`export {name}\` can't be parsed yet. ` +
-        `If these exports aren't meant to be commands, move them to a separate module that the commands module doesn't re-export.`,
-    )
+const tryBuildProcedure = (
+  command: ExtractedCommand,
+  fn: AnyFn,
+  context: Record<string, unknown>,
+): NorpcProcedureLike | undefined => {
+  try {
+    return buildProcedure(command, fn, context)
+  } catch (error) {
+    if (error instanceof SkippedModuleCommandError) return undefined
+    throw error
   }
 }
 
@@ -398,25 +395,25 @@ const buildPositionalProcedure = (
   positionalParams.forEach((param, i) => {
     const where = `Parameter ${i + 1} (${describeParam(param)}) of "${command.name}"`
     if (param.destructured) {
-      throw new Error(
+      throw new SkippedModuleCommandError(
         `${where} is a destructuring pattern, which isn't supported for positional arguments. Give the parameter a name, or move it into a trailing options object.`,
       )
     }
     if (isObjectLikeSchema(paramSchemas[i])) {
-      throw new Error(
+      throw new SkippedModuleCommandError(
         `${where} is an object type, but only the *last* parameter can be an object - leading parameters become positional arguments and a trailing object parameter maps to flags. Move it to the end, or flatten it into the trailing options object.`,
       )
     }
     if (isArrayOfPrimitives(paramSchemas[i])) {
       if (param.optional) {
-        throw new Error(
+        throw new SkippedModuleCommandError(
           `${where} is an optional array. Optional array parameters aren't supported as positional arguments - make it required, or move it into a trailing options object.`,
         )
       }
       return // required array of primitives -> variadic positional, supported by the existing tuple handling
     }
     if (!isPrimitiveish(paramSchemas[i])) {
-      throw new Error(
+      throw new SkippedModuleCommandError(
         `${where} has type \`${param.typeText}\`, which can't be used as a positional argument. Positional parameters must be strings, numbers, booleans (or arrays of those) - put other values in a trailing options object.`,
       )
     }
@@ -432,9 +429,9 @@ const buildPositionalProcedure = (
       return cliOptional[i] ? `(${param.typeText}) | undefined` : param.typeText
     })
     .join(', ')}]`
-  const schema = Type.Script(context as never, tupleScript) as {items?: unknown[]; minItems?: number}
+  const schema = parseTypeScriptSchema(context, tupleScript) as {items?: unknown[]; minItems?: number}
   if (isNeverSchema(schema) || !Array.isArray(schema.items) || schema.items.length !== params.length) {
-    throw new Error(
+    throw new SkippedModuleCommandError(
       `Could not parse the parameter list of "${command.name}" as a tuple: \`${tupleScript}\`. This is likely a bug in trpc-cli's module-commands extractor - please report it.`,
     )
   }
@@ -465,21 +462,29 @@ const buildPositionalProcedure = (
  * (where it's used for object-vs-scalar analysis before the combined tuple script is synthesized).
  */
 const parseParamSchema = (commandName: string, param: ExtractedParam, context: Record<string, unknown>): unknown => {
-  const schema = Type.Script(context as never, param.typeText)
+  const schema = parseTypeScriptSchema(context, param.typeText)
   if (isNeverSchema(schema)) {
-    throw new Error(
+    throw new SkippedModuleCommandError(
       `Could not parse the type of parameter ${describeParam(param)} of "${commandName}": \`${param.typeText}\`. ` +
         `Use a string/number/boolean type, an inline object type literal like \`{foo: string}\`, or a reference to a \`type X = {...}\`/\`interface X {...}\` declared in the same file or imported from a relative file-backed module.`,
     )
   }
   const danglingRefs = collectRefs(schema)
   if (danglingRefs.length > 0) {
-    throw new Error(
+    throw new SkippedModuleCommandError(
       `The type of parameter ${describeParam(param)} of "${commandName}" references ${danglingRefs.map(r => JSON.stringify(r)).join(', ')}, which couldn't be resolved. ` +
         `Declare it as \`type X = {...}\` or \`interface X {...}\` in the same file, import it from a relative file-backed module, or inline the type.`,
     )
   }
   return applySchemaJsdocMetadata(flattenIntersection(schema))
+}
+
+const parseTypeScriptSchema = (context: Record<string, unknown>, script: string): unknown => {
+  try {
+    return Type.Script(context as never, script)
+  } catch (error) {
+    throw new SkippedModuleCommandError(error instanceof Error ? error.message : String(error))
+  }
 }
 
 /**
@@ -853,13 +858,11 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
     const existing = winners.get(declaration.name)
     if (!existing || (existing.hasBody && !declaration.hasBody)) winners.set(declaration.name, declaration)
   }
-  return [...winners.values()].map(({name, exportName, default: defaultExport, description, paramList}) => ({
-    name,
-    exportName,
-    default: defaultExport,
-    description,
-    params: parseParams(name, paramList),
-  }))
+  return [...winners.values()].flatMap(({name, exportName, default: defaultExport, description, paramList}) => {
+    const params = tryParseParams(name, paramList)
+    if (!params) return []
+    return [{name, exportName, default: defaultExport, description, params}]
+  })
 }
 
 export const extractModuleClasses = (source: string): ExtractedClass[] => {
@@ -892,34 +895,17 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
       if (hasConstructorParameters) continue
       if (hasBaseClass && !hasZeroArgConstructor) continue
       if (methodDeclarations.length === 0) continue
-      const methods = methodDeclarations.map(({methodName, description, paramList}) => ({
-        name: methodName,
-        exportName: methodName,
-        default: false,
-        description,
-        params: parseParams(`${name}.${methodName}`, paramList),
-      }))
+      const methods = methodDeclarations.flatMap(({methodName, description, paramList}) => {
+        const params = tryParseParams(`${name}.${methodName}`, paramList)
+        if (!params) return []
+        return [{name: methodName, exportName: methodName, default: false, description, params}]
+      })
+      if (methods.length === 0) continue
       classes.push({name, exportName, default: defaultExport, methods})
     }
   }
 
   return classes
-}
-
-const extractModuleClassNames = (source: string): string[] => {
-  const scan = scanSource(source)
-  const names: string[] = []
-  const patterns = [
-    {pattern: /(?<![.\w$])export\s+class\s+([A-Za-z_$][\w$]*)\s*/g, defaultName: false},
-    {pattern: /(?<![.\w$])export\s+default\s+class(?:\s+([A-Za-z_$][\w$]*))?\s*/g, defaultName: true},
-  ]
-  for (const {pattern, defaultName} of patterns) {
-    for (const match of source.matchAll(pattern)) {
-      if (scan.masked[match.index]) continue
-      names.push(defaultName ? 'default' : match[1])
-    }
-  }
-  return names
 }
 
 const findNextUnmasked = (source: string, scan: SourceScan, start: number, char: string): number => {
@@ -1081,6 +1067,15 @@ const hasFunctionBody = (source: string, scan: SourceScan, parenEnd: number): bo
  * jsdoc (`/** doc *\/ left: number`). `<`/`>` are tracked as brackets (so `Map<string, number>` survives the
  * top-level-comma check) except the `>` of `=>`.
  */
+const tryParseParams = (functionName: string, paramList: string): ExtractedParam[] | undefined => {
+  try {
+    return parseParams(functionName, paramList)
+  } catch (error) {
+    if (error instanceof SkippedModuleCommandError) return undefined
+    throw error
+  }
+}
+
 const parseParams = (functionName: string, paramList: string): ExtractedParam[] => {
   const scan = scanSource(paramList)
 
@@ -1130,7 +1125,7 @@ const parseParams = (functionName: string, paramList: string): ExtractedParam[] 
 
     if (nameText.startsWith('...')) {
       const annotation = colon === -1 ? 'string[]' : paramList.slice(colon + 1, segment.end).trim()
-      throw new Error(
+      throw new SkippedModuleCommandError(
         `Parameter "${nameText}" of "${functionName}" is a rest parameter, which isn't supported. Use an explicitly-typed array parameter (e.g. \`${nameText.slice(3)}: ${annotation}\`, which becomes a variadic positional argument), or move it into a trailing options object.`,
       )
     }
@@ -1139,7 +1134,7 @@ const parseParams = (functionName: string, paramList: string): ExtractedParam[] 
     const name = destructured ? undefined : nameText.replace(/\?$/, '').trim()
 
     if (colon === -1) {
-      throw new Error(
+      throw new SkippedModuleCommandError(
         `Parameter "${nameText}" of "${functionName}" has no type annotation. Annotate it, e.g. \`(${nameText}: string)\` or \`(${nameText}: {someFlag: string})\`.`,
       )
     }

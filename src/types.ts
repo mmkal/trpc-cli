@@ -38,13 +38,14 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
  * Exported functions become commands: the jsdoc above each function becomes the command description, and the first
  * parameter's object type annotation (parsed from the module's *source text* via the vendored `trpc-cli/typebox`
  * `Type.Script`) becomes the input schema - property jsdoc comments become flag descriptions, and inputs are
- * validated against the schema before the function runs. `@alias` tags in command/property jsdoc become command and
- * option aliases. A default-exported function becomes the default command, equivalent to `{default: true}` in
- * procedure meta. Exported classes become nested command groups when they have no constructor arguments and at least
- * one public command method; default-exported classes put their methods at the current router level. Classes with
- * `extends` must declare an explicit zero-argument constructor. Unsupported class shapes are ignored as ordinary
- * non-command exports. Their public instance methods are lazily invoked on a fresh class instance. In file-backed
- * module mode, `export * as foo from './foo'` becomes a nested sub-router named `foo`, `export * from './foo'`
+ * validated against the schema before the function runs. Exported functions whose signatures cannot be converted
+ * into CLI inputs are ignored as ordinary non-command exports. `@alias` tags in command/property jsdoc become
+ * command and option aliases. A default-exported function becomes the default command, equivalent to `{default:
+ * true}` in procedure meta. Exported classes become nested command groups when they have no constructor arguments
+ * and at least one public command method; default-exported classes put their methods at the current router level.
+ * Classes with `extends` must declare an explicit zero-argument constructor. Unsupported class shapes are ignored
+ * as ordinary non-command exports. Their public instance methods are lazily invoked on a fresh class instance. In
+ * file-backed module mode, `export * as foo from './foo'` becomes a nested sub-router named `foo`, `export * from './foo'`
  * merges that module's named commands into the current router level, and `export {foo} from './foo'` re-exports
  * selected commands.
  *

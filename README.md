@@ -656,6 +656,14 @@ void createCli({filename: '/path/to/commands.ts'}).run()
 
 trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and parameter type annotations are parsed by the vendored `Type.Script` into real JSON schemas - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`). A default-exported function becomes the default command, so `export default function hola(...)` can be run as either `mycli ...` or `mycli hola ...`.
 
+Exported functions whose signatures cannot be converted into CLI inputs are ignored as ordinary non-command exports. This gives helper exports an escape hatch without adding trpc-cli-specific metadata:
+
+```ts
+export const loadSomeInternalThing = (params: NoInfer<{foo: string}>) => {
+  return loadIt(params.foo) // not a command
+}
+```
+
 Command and option aliases can be added with `@alias` tags in the same jsdoc comments:
 
 ```ts
