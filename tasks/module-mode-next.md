@@ -5,7 +5,7 @@ size: medium
 
 # Module Mode Next
 
-Status summary: proposal ready for review. The grill pass resolved the requested module-mode questions and scoped a pragmatic next implementation path: document existing type/overload behavior, add JSDoc aliases, support explicit norpc exports, and add conservative same-file object-literal groups. No implementation has been done yet.
+Status summary: proposal ready for review. The grill pass resolved the requested module-mode questions, then a follow-up decision switched same-file subcommands from object-literal groups to class groups only. The scoped path is now: document existing type/overload behavior, add JSDoc aliases, support explicit norpc exports, and add lazy-instantiated class subcommand groups. No implementation has been done yet.
 
 ## User Ask
 
@@ -64,26 +64,42 @@ Keep the current first-signature behavior. A CLI command has one help shape and 
 
 ### Same-File Subcommands
 
-Do not support class exports as subcommand groups. Classes create too many hidden policy choices: static vs instance methods, constructor arguments, per-invocation lifecycle, inherited methods, and private state.
+Support exported classes as the only new same-file subcommand grouping syntax. The class is a command group; its public instance methods are subcommands.
 
-Prefer direct exported object-literal groups:
+Example:
 
 ```ts
-export const users = {
+export class Users {
   /** invite a user */
-  invite(options: {email: string}) {},
-  async deactivate(options: {id: string}) {},
+  invite(options: {email: string}) {
+    return options.email
+  }
+
+  async deactivate(options: {id: string}) {
+    return options.id
+  }
+
+  #audit(action: string) {
+    // private implementation detail, not a command
+  }
 }
 ```
 
+This maps to `mycli users invite` and `mycli users deactivate`.
+
 Rules:
 
-- A direct `export const users = { ... }` object literal is a group candidate.
-- The object becomes a group only if it contains at least one command-shaped property.
-- Once classified as a group, every property must be command-shaped: method shorthand, function-valued property, arrow-function property, norpc procedure, or norpc router.
-- Ordinary exported objects with no command-shaped properties stay ignored.
-- Nested object-literal groups are future work; use explicit `t.router`/`os.router` for nested runtime groups.
-- `export class Whatever {}` should keep failing with an actionable startup error.
+- Only direct `export class Users { ... }` declarations are candidates.
+- No `extends`; base classes are rejected.
+- The class must have no constructor, or exactly a zero-argument constructor.
+- Public instance method declarations directly in the class body become commands.
+- Private/protected methods and private fields are internal implementation details, not commands.
+- Static methods are not commands in the first slice.
+- Method parameter parsing, JSDoc descriptions, aliases, and overload behavior follow the same rules as exported functions.
+- Help/schema generation must not instantiate the class.
+- Instantiate lazily inside the command handler, and create a fresh instance per command invocation.
+- If a public instance method is command-shaped but cannot be parsed, fail loudly.
+- Do not add object-literal command groups in this proposal. Ordinary exported object constants stay ignored unless they are explicit norpc routers/procedures.
 
 ### Explicit Schema/Procedure Exports
 
@@ -111,7 +127,7 @@ Rules:
 
 - `isNorpcProcedure` runtime exports become commands named after their export.
 - `isNorpcRouter` runtime exports become subcommand groups named after their export.
-- Explicit norpc exports can coexist with source-scanned plain functions and object-literal groups.
+- Explicit norpc exports can coexist with source-scanned plain functions and class groups.
 - Conflicts fail loudly.
 - Exported consts whose runtime values are norpc procedures/routers should not require parseable function declarations.
 - Actual tRPC/oRPC procedure or router exports are future work; they have different root parsing/calling requirements and should not be half-supported in this pass.
@@ -129,24 +145,24 @@ export const run = os
   .handler(...)
 ```
 
-Do not infer default behavior from default-exported explicit procedures, and do not add a magic `default()` method convention inside plain object-literal groups.
+Do not infer default behavior from default-exported explicit procedures, and do not add a magic `default()` method convention inside class groups. If a class group needs a default child, use an explicit norpc router/procedure instead.
 
 ## Suggested Implementation Slices
 
 1. Documentation and test pins for current type/overload behavior.
 2. JSDoc metadata parsing for command and property `@alias`, including stripping tags from descriptions.
 3. Runtime norpc procedure/router exports in module mode, with conflict detection.
-4. Direct object-literal command groups.
-5. Documentation for non-goals: imported type resolution, class groups, tRPC/oRPC mixed exports, overload merging, and default-method magic.
+4. Lazy-instantiated class command groups.
+5. Documentation for non-goals: imported type resolution, object-literal command groups, tRPC/oRPC mixed exports, overload merging, and default-method magic.
 
 ## Guesses And Assumptions
 
 - Same-file `Type.Script`-parseable support is the right boundary because it matches the project's preference for loud errors and small pragmatic mechanisms over building a TypeScript compiler.
 - JSDoc is the least-bad metadata channel for aliases because module mode already treats source comments as CLI documentation.
 - First-overload-only behavior is preferable because Commander help and validation need one concrete public invocation shape.
-- Class syntax is attractive but would create too many unspoken runtime policies for a feature whose selling point is obvious function-to-command mapping.
+- Class groups are acceptable when constrained to no base class, no constructor arguments, public instance methods only, and lazy per-invocation instantiation.
 - Norpc explicit exports are the right first schema escape hatch because module mode already normalizes plain functions into a norpc router.
-- Object-literal group detection should be conservative so `export const config = {...}` stays safe.
+- Object-literal command groups should be skipped for now so `export const config = {...}` remains unambiguously ordinary data unless it is an explicit norpc router/procedure.
 - Default command behavior should avoid competing conventions and preserve only the existing plain-function shortcut plus norpc `meta.default`.
 
 ## Out Of Scope For This Proposal PR
@@ -154,7 +170,8 @@ Do not infer default behavior from default-exported explicit procedures, and do 
 - Implementing the proposal.
 - Switching module mode to the TypeScript compiler API.
 - Imported type resolution.
-- Class-based subcommands.
+- Object-literal command groups.
+- Class groups with inheritance or constructor arguments.
 - Mixed tRPC/oRPC/norpc export trees.
 - Overload merging or overload-selection metadata.
 - Top-level-awaited `createCli(import.meta).run()`.
@@ -172,3 +189,4 @@ Do not infer default behavior from default-exported explicit procedures, and do 
 - 2026-06-19: Created branch `module-mode-next` from `main`, committed this task stub first, pushed, and opened draft PR #211 before filling in the proposal.
 - 2026-06-19: Local `claude --print` sub-agent invocation failed with `401 Invalid authentication credentials`; continued the grill with the platform multi-agent tool.
 - 2026-06-19: Quick local probe against built `dist` confirmed same-file extended interfaces, multiple interface extends, and alias-to-alias intersections currently derive flags as expected.
+- 2026-06-19: Follow-up user decision replaced object-literal groups with class groups only, scoped to no base class/no constructor args and lazy instantiation.

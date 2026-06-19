@@ -228,3 +228,23 @@ For object-literal plain groups, do not introduce a magic `default()` method con
 ## Stop — 2026-06-19
 
 ready for Phase 2
+
+---
+
+## Post-Grill User Update — class groups only — 2026-06-19
+
+The user challenged the earlier rejection of classes and proposed a narrower rule: class groups are workable if trpc-cli can confirm the class has no base class and no constructor arguments.
+
+Updated decision:
+
+- Same-file subcommands should use class groups only, not object-literal groups.
+- `export class Users { invite(...) {} }` maps to `mycli users invite`.
+- Reject `extends`.
+- Reject constructors with parameters; allow no constructor or `constructor()`.
+- Help/schema generation must not instantiate the class.
+- Instantiate lazily inside the command handler, with a fresh instance per invocation.
+- Public instance methods directly declared in the class body are commands.
+- Private/protected methods and private fields are allowed as implementation details and are not commands.
+- Static methods are not commands in the first slice.
+
+Rationale: the constraints remove the main lifecycle ambiguity, and private state/side effects are a feature of classes as long as instantiation only happens when the command actually runs.
