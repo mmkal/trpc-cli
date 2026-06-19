@@ -248,3 +248,15 @@ Updated decision:
 - Static methods are not commands in the first slice.
 
 Rationale: the constraints remove the main lifecycle ambiguity, and private state/side effects are a feature of classes as long as instantiation only happens when the command actually runs.
+
+---
+
+## Post-Grill User Update — explicit norpc exports out of scope — 2026-06-19
+
+The user decided that support for exported norpc procedures/routers should move out of this proposal and into a separate change.
+
+Updated decision:
+
+- Keep a note that explicit norpc exports are probably the right future schema/procedure escape hatch.
+- Do not include `os.input(...).handler(...)`, `t.procedure...`, or `os.router(...)` support in the first implementation scope.
+- This proposal should focus on documenting current type/overload behavior, JSDoc aliases, and class groups.

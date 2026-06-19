@@ -5,7 +5,7 @@ size: medium
 
 # Module Mode Next
 
-Status summary: proposal ready for review. The grill pass resolved the requested module-mode questions, then a follow-up decision switched same-file subcommands from object-literal groups to class groups only. The scoped path is now: document existing type/overload behavior, add JSDoc aliases, support explicit norpc exports, and add lazy-instantiated class subcommand groups. No implementation has been done yet.
+Status summary: proposal ready for review. The grill pass resolved the requested module-mode questions, then follow-up decisions switched same-file subcommands to class groups only and moved explicit norpc exports out of scope for a separate change. The scoped path is now: document existing type/overload behavior, add JSDoc aliases, and add lazy-instantiated class subcommand groups. No implementation has been done yet.
 
 ## User Ask
 
@@ -99,19 +99,17 @@ Rules:
 - Help/schema generation must not instantiate the class.
 - Instantiate lazily inside the command handler, and create a fresh instance per command invocation.
 - If a public instance method is command-shaped but cannot be parsed, fail loudly.
-- Do not add object-literal command groups in this proposal. Ordinary exported object constants stay ignored unless they are explicit norpc routers/procedures.
+- Do not add object-literal command groups in this proposal. Ordinary exported object constants stay ignored.
 
 ### Explicit Schema/Procedure Exports
 
-First implementation slice should support trpc-cli's own norpc values only:
+This belongs in a separate change, not this first follow-up. Keep the design note, but do not implement it in this proposal's scope.
+
+The likely separate change should support trpc-cli's own norpc values first:
 
 ```ts
 import {os} from 'trpc-cli'
 import {z} from 'zod/v4'
-
-export function plain(options: {name: string}) {
-  return options.name
-}
 
 export const explicit = os
   .input(z.object({name: z.string()}))
@@ -127,33 +125,23 @@ Rules:
 
 - `isNorpcProcedure` runtime exports become commands named after their export.
 - `isNorpcRouter` runtime exports become subcommand groups named after their export.
-- Explicit norpc exports can coexist with source-scanned plain functions and class groups.
+- Explicit norpc exports can coexist with source-scanned plain functions and class groups in that later change.
 - Conflicts fail loudly.
 - Exported consts whose runtime values are norpc procedures/routers should not require parseable function declarations.
 - Actual tRPC/oRPC procedure or router exports are future work; they have different root parsing/calling requirements and should not be half-supported in this pass.
 
 ### Default Commands
 
-Preserve existing `export default function` behavior for plain functions only.
+Preserve existing `export default function` behavior for plain functions only. Do not add a magic `default()` method convention inside class groups.
 
-For explicit norpc exports, use existing metadata:
-
-```ts
-export const run = os
-  .meta({default: true})
-  .input(schema)
-  .handler(...)
-```
-
-Do not infer default behavior from default-exported explicit procedures, and do not add a magic `default()` method convention inside class groups. If a class group needs a default child, use an explicit norpc router/procedure instead.
+Default behavior for explicit norpc exports should be handled in the separate explicit-procedure change, using existing `meta.default`.
 
 ## Suggested Implementation Slices
 
 1. Documentation and test pins for current type/overload behavior.
 2. JSDoc metadata parsing for command and property `@alias`, including stripping tags from descriptions.
-3. Runtime norpc procedure/router exports in module mode, with conflict detection.
-4. Lazy-instantiated class command groups.
-5. Documentation for non-goals: imported type resolution, object-literal command groups, tRPC/oRPC mixed exports, overload merging, and default-method magic.
+3. Lazy-instantiated class command groups.
+4. Documentation for non-goals and follow-ups: imported type resolution, object-literal command groups, explicit norpc exports, tRPC/oRPC mixed exports, overload merging, and default-method magic.
 
 ## Guesses And Assumptions
 
@@ -161,9 +149,9 @@ Do not infer default behavior from default-exported explicit procedures, and do 
 - JSDoc is the least-bad metadata channel for aliases because module mode already treats source comments as CLI documentation.
 - First-overload-only behavior is preferable because Commander help and validation need one concrete public invocation shape.
 - Class groups are acceptable when constrained to no base class, no constructor arguments, public instance methods only, and lazy per-invocation instantiation.
-- Norpc explicit exports are the right first schema escape hatch because module mode already normalizes plain functions into a norpc router.
-- Object-literal command groups should be skipped for now so `export const config = {...}` remains unambiguously ordinary data unless it is an explicit norpc router/procedure.
-- Default command behavior should avoid competing conventions and preserve only the existing plain-function shortcut plus norpc `meta.default`.
+- Explicit norpc exports are probably the right schema escape hatch, but they belong in a separate change because they introduce runtime-export composition beyond plain source-scanned commands.
+- Object-literal command groups should be skipped for now so `export const config = {...}` remains unambiguously ordinary data.
+- Default command behavior should avoid competing conventions and preserve only the existing plain-function shortcut in this proposal.
 
 ## Out Of Scope For This Proposal PR
 
@@ -172,6 +160,7 @@ Do not infer default behavior from default-exported explicit procedures, and do 
 - Imported type resolution.
 - Object-literal command groups.
 - Class groups with inheritance or constructor arguments.
+- Explicit norpc procedure/router exports.
 - Mixed tRPC/oRPC/norpc export trees.
 - Overload merging or overload-selection metadata.
 - Top-level-awaited `createCli(import.meta).run()`.
@@ -190,3 +179,4 @@ Do not infer default behavior from default-exported explicit procedures, and do 
 - 2026-06-19: Local `claude --print` sub-agent invocation failed with `401 Invalid authentication credentials`; continued the grill with the platform multi-agent tool.
 - 2026-06-19: Quick local probe against built `dist` confirmed same-file extended interfaces, multiple interface extends, and alias-to-alias intersections currently derive flags as expected.
 - 2026-06-19: Follow-up user decision replaced object-literal groups with class groups only, scoped to no base class/no constructor args and lazy instantiation.
+- 2026-06-19: Follow-up user decision moved support for exported norpc procedures/routers out of scope for this proposal and into a separate change.
