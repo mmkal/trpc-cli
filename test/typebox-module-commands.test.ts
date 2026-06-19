@@ -817,30 +817,7 @@ test('module commands: exported classes create lazily-instantiated command group
   expect(constructed).toBe(3)
 })
 
-test('module commands: class groups allow inheritance only with an explicit zero-arg constructor', async () => {
-  await expect(
-    runWith(
-      {
-        source: `
-          class Base {}
-          export class Users extends Base {
-            invite(options: {email: string}) {
-              return options.email
-            }
-          }
-        `,
-        exports: {
-          Users: class Users {
-            invite(options: any) {
-              return options.email
-            }
-          },
-        },
-      },
-      ['--help'],
-    ),
-  ).rejects.toThrowError(/must declare an explicit zero-argument constructor/)
-
+test('module commands: inherited class groups require an explicit zero-arg constructor', async () => {
   class Base {
     protected prefix = 'base'
   }
@@ -877,74 +854,87 @@ test('module commands: class groups allow inheritance only with an explicit zero
   ).toMatchInlineSnapshot(`"base:ada@example.com"`)
 })
 
-test('module commands: class groups reject constructor parameters and static-only command shapes', async () => {
-  await expect(
-    runWith(
-      {
-        source: `
-          export class Users {
-            constructor(config: {dryRun?: boolean}) {}
+test('module commands: unsupported exported classes are ignored instead of throwing', async () => {
+  class Base {}
+  class NeedsConfig {
+    constructor(config: {dryRun?: boolean}) {
+      void config
+    }
 
-            invite(options: {email: string}) {
-              return options.email
-            }
-          }
-        `,
-        exports: {
-          Users: class Users {
-            constructor(config: any) {
-              void config
-            }
+    invite(options: {email: string}) {
+      return options.email
+    }
+  }
+  class InheritedWithoutConstructor extends Base {
+    invite(options: {email: string}) {
+      return options.email
+    }
+  }
+  class StaticOnly {}
+  class AccessorOnly {
+    get invite() {
+      return 'not a command'
+    }
+  }
+  class PrivateOnly {}
 
-            invite(options: any) {
-              return options.email
-            }
-          },
-        },
-      },
-      ['--help'],
-    ),
-  ).rejects.toThrowError(/must have no constructor arguments/)
+  const params = {
+    source: `
+      export class NeedsConfig {
+        constructor(config: {dryRun?: boolean}) {}
 
-  await expect(
-    runWith(
-      {
-        source: `
-          export class Users {
-            static invite(options: {email: string}) {
-              return options.email
-            }
-          }
-        `,
-        exports: {
-          Users: function Users() {},
-        },
-      },
-      ['--help'],
-    ),
-  ).rejects.toThrowError(/has no command methods/)
+        invite(options: {email: string}) {
+          return options.email
+        }
+      }
 
-  await expect(
-    runWith(
-      {
-        source: `
-          export class Users {
-            get invite() {
-              return 'not a command'
-            }
-          }
-        `,
-        exports: {
-          Users: class Users {
-            get invite() {
-              return 'not a command'
-            }
-          },
-        },
-      },
-      ['--help'],
-    ),
-  ).rejects.toThrowError(/has no command methods/)
+      class Base {}
+      export class InheritedWithoutConstructor extends Base {
+        invite(options: {email: string}) {
+          return options.email
+        }
+      }
+
+      export class StaticOnly {
+        static invite(options: {email: string}) {
+          return options.email
+        }
+      }
+
+      export class AccessorOnly {
+        get invite() {
+          return 'not a command'
+        }
+      }
+
+      export class PrivateOnly {
+        private invite(options: {email: string}) {
+          return options.email
+        }
+      }
+
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {
+      AccessorOnly,
+      InheritedWithoutConstructor,
+      NeedsConfig,
+      PrivateOnly,
+      StaticOnly,
+      status: () => 'ok',
+    },
+  }
+
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('needs-config')
+  expect(help).not.toContain('inherited-without-constructor')
+  expect(help).not.toContain('static-only')
+  expect(help).not.toContain('accessor-only')
+  expect(help).not.toContain('private-only')
+  expect(await runWith(params, ['status'])).toMatchInlineSnapshot(`"ok"`)
 })
 
 test('module positionals: destructured trailing options object works', async () => {

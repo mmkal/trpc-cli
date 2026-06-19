@@ -709,7 +709,7 @@ $ tsx commands.ts users invite --email bob@example.com
 invite bob@example.com
 ```
 
-Class command groups must be direct `export class Name { ... }` declarations. Classes without a base class may omit the constructor; classes with `extends` must declare an explicit zero-argument constructor. Constructor parameters are not supported. Public instance methods declared directly in the class body become commands. Static methods, inherited methods, private/protected methods, getters and setters are not commands.
+Class command groups must be direct `export class Name { ... }` declarations. Classes without a base class may omit the constructor; classes with `extends` must declare an explicit zero-argument constructor. Classes with constructor parameters, unsupported inheritance, or no public command methods are ignored as ordinary exports. Public instance methods declared directly in the class body become commands. Static methods, inherited methods, private/protected methods, getters and setters are not commands.
 
 Multi-parameter functions work too: leading string/number/boolean parameters become positional arguments, and a trailing object parameter becomes flags - the same convention as [tuple inputs](#combining-positional-arguments-and-options):
 

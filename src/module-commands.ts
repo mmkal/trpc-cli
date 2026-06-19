@@ -7,10 +7,10 @@
  * JSON Schema - including jsdoc comments as property descriptions - with a `~standard` validator attached. Each
  * function becomes a norpc procedure, so the rest of trpc-cli treats the module like any other router: leading
  * scalar parameters become positional arguments and a trailing object-literal parameter becomes flags (the same
- * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only. Exported classes
- * with no constructor arguments become nested command groups whose public instance methods are invoked on a fresh
- * class instance only when the command runs. Classes with `extends` must declare an explicit zero-argument
- * constructor.
+ * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only.
+ * Command-group-shaped exported classes become nested command groups whose public instance methods are invoked on a
+ * fresh class instance only when the command runs. Classes with constructor arguments, no public command methods,
+ * or `extends` without an explicit zero-argument constructor are ignored as ordinary non-command exports.
  * File-backed modules can re-export other command modules: `export * as group from './group'` creates a nested
  * router, and `export * from './group'` merges named child commands into the current router.
  *
@@ -231,10 +231,12 @@ const buildLocalProcedures = (resolved: SourceCliModule) => {
   const {source, exports} = resolved
   const commands = extractModuleCommands(source)
   const classes = extractModuleClasses(source)
+  const classExportNames = extractModuleClassNames(source)
   const context = buildDeclarationContext(source)
 
   const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
   const claimedExportNames = new Set<string>()
+  for (const name of classExportNames) claimedExportNames.add(name)
   for (const command of commands) {
     claimedExportNames.add(command.exportName)
     const fn = exports[command.exportName]
@@ -242,15 +244,9 @@ const buildLocalProcedures = (resolved: SourceCliModule) => {
     procedures[command.name] = buildProcedure(command, fn as AnyFn, context)
   }
   for (const extractedClass of classes) {
-    claimedExportNames.add(extractedClass.name)
     const ClassCtor = exports[extractedClass.name]
     if (typeof ClassCtor !== 'function') continue
-    if (ClassCtor.length > 0) {
-      throw new Error(
-        `Exported class "${extractedClass.name}" has a constructor with parameters, which isn't supported for module-mode command groups. ` +
-          `Class command groups must have no constructor arguments.`,
-      )
-    }
+    if (ClassCtor.length > 0) continue
     const childProcedures: Record<string, NorpcProcedureLike> = {}
     for (const method of extractedClass.methods) {
       childProcedures[method.name] = buildProcedure(
@@ -802,21 +798,36 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
     const hasBaseClass = /\bextends\b/.test(header)
 
     const classEnd = findBalancedEnd(source, scan, braceIndex, '{', '}')
-    const {methods, hasZeroArgConstructor} = extractClassMethods(source, scan, name, braceIndex + 1, classEnd - 1)
-    if (hasBaseClass && !hasZeroArgConstructor) {
-      throw new Error(
-        `Exported class "${name}" extends another class and must declare an explicit zero-argument constructor for module-mode command groups.`,
-      )
-    }
-    if (methods.length === 0) {
-      throw new Error(
-        `Exported class "${name}" has no command methods. Class command groups must declare at least one public instance method.`,
-      )
-    }
+    const {methodDeclarations, hasConstructorParameters, hasZeroArgConstructor} = extractClassMethodDeclarations(
+      source,
+      scan,
+      braceIndex + 1,
+      classEnd - 1,
+    )
+    if (hasConstructorParameters) continue
+    if (hasBaseClass && !hasZeroArgConstructor) continue
+    if (methodDeclarations.length === 0) continue
+    const methods = methodDeclarations.map(({methodName, description, paramList}) => ({
+      name: methodName,
+      exportName: methodName,
+      default: false,
+      description,
+      params: parseParams(`${name}.${methodName}`, paramList),
+    }))
     classes.push({name, methods})
   }
 
   return classes
+}
+
+const extractModuleClassNames = (source: string): string[] => {
+  const scan = scanSource(source)
+  const names: string[] = []
+  for (const match of source.matchAll(/(?<![.\w$])export\s+class\s+([A-Za-z_$][\w$]*)\s*/g)) {
+    if (scan.masked[match.index]) continue
+    names.push(match[1])
+  }
+  return names
 }
 
 const findNextUnmasked = (source: string, scan: SourceScan, start: number, char: string): number => {
@@ -826,13 +837,16 @@ const findNextUnmasked = (source: string, scan: SourceScan, start: number, char:
   throw new Error(`Could not find \`${char}\` after index ${start} of module source`)
 }
 
-const extractClassMethods = (
+const extractClassMethodDeclarations = (
   source: string,
   scan: SourceScan,
-  className: string,
   bodyStart: number,
   bodyEnd: number,
-): {methods: ExtractedCommand[]; hasZeroArgConstructor: boolean} => {
+): {
+  methodDeclarations: Array<{methodName: string; description: string | undefined; paramList: string}>
+  hasConstructorParameters: boolean
+  hasZeroArgConstructor: boolean
+} => {
   const body = source.slice(bodyStart, bodyEnd)
   const declarations: Array<{
     name: string
@@ -841,6 +855,7 @@ const extractClassMethods = (
     paramList: string
     description: string | undefined
   }> = []
+  let hasConstructorParameters = false
   let hasZeroArgConstructor = false
 
   const pattern = /(?<![.\w$#])(?:(public|private|protected)\s+)?(?:(static)\s+)?(?:(async)\s+)?([A-Za-z_$][\w$]*)\s*/g
@@ -873,13 +888,8 @@ const extractClassMethods = (
     const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
     const paramList = source.slice(parenIndex + 1, parenEnd - 1)
     if (name === 'constructor') {
-      if (paramList.trim()) {
-        throw new Error(
-          `Exported class "${className}" has a constructor with parameters, which isn't supported for module-mode command groups. ` +
-            `Class command groups must have no constructor arguments.`,
-        )
-      }
-      hasZeroArgConstructor = true
+      if (paramList.trim()) hasConstructorParameters = true
+      else hasZeroArgConstructor = true
       continue
     }
 
@@ -900,13 +910,12 @@ const extractClassMethods = (
   }
 
   return {
+    hasConstructorParameters,
     hasZeroArgConstructor,
-    methods: [...winners.values()].map(({name, description, paramList}) => ({
-      name,
-      exportName: name,
-      default: false,
+    methodDeclarations: [...winners.values()].map(({name, description, paramList}) => ({
+      methodName: name,
       description,
-      params: parseParams(`${className}.${name}`, paramList),
+      paramList,
     })),
   }
 }

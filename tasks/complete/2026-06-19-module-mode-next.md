@@ -91,7 +91,7 @@ Rules:
 
 - Only direct `export class Users { ... }` declarations are candidates.
 - Classes without a base class may omit the constructor; classes with `extends` must declare an explicit zero-argument constructor.
-- Constructor parameters are rejected.
+- Classes with constructor parameters, unsupported inheritance, or no public command methods are ignored as ordinary exports.
 - Public instance method declarations directly in the class body become commands.
 - Private/protected methods and private fields are internal implementation details, not commands.
 - Static methods are not commands in the first slice.
@@ -148,7 +148,7 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - Same-file `Type.Script`-parseable support is the right boundary because it matches the project's preference for loud errors and small pragmatic mechanisms over building a TypeScript compiler.
 - JSDoc is the least-bad metadata channel for aliases because module mode already treats source comments as CLI documentation.
 - First-overload-only behavior is preferable because Commander help and validation need one concrete public invocation shape.
-- Class groups are acceptable when constrained to no constructor arguments, public instance methods only, and lazy per-invocation instantiation. Inheritance is acceptable when the class explicitly declares a zero-argument constructor.
+- Class groups are acceptable when constrained to no constructor arguments, public instance methods only, and lazy per-invocation instantiation. Inheritance is acceptable when the class explicitly declares a zero-argument constructor; unsupported class shapes should be ignored rather than hard errors.
 - Explicit norpc exports are probably the right schema escape hatch, but they belong in a separate change because they introduce runtime-export composition beyond plain source-scanned commands.
 - Object-literal command groups should be skipped for now so `export const config = {...}` remains unambiguously ordinary data.
 - Default command behavior should avoid competing conventions and preserve only the existing plain-function shortcut in this proposal.
@@ -173,7 +173,7 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - [x] Capture open risks, tradeoffs, and follow-up implementation slices. _Captured in "Suggested Implementation Slices", "Guesses And Assumptions", and "Out Of Scope"._
 - [x] Open a draft PR for review. _Opened as #211._
 - [x] Implement JSDoc `@alias` support. _Implemented in `src/module-commands.ts` by stripping `@alias` from JSDoc descriptions and mapping tags onto existing command/option alias metadata._
-- [x] Implement lazy class command groups. _Implemented in `src/module-commands.ts`; direct exported classes with no constructor args become nested routers, inherited classes require an explicit zero-argument constructor, and method handlers instantiate a fresh class instance only when invoked._
+- [x] Implement lazy class command groups. _Implemented in `src/module-commands.ts`; direct exported classes with no constructor args become nested routers, inherited classes require an explicit zero-argument constructor, unsupported class shapes are ignored, and method handlers instantiate a fresh class instance only when invoked._
 - [x] Update docs and tests. _README module-mode docs updated; behavior covered in `test/typebox-module-commands.test.ts`._
 
 ## Implementation Notes
@@ -185,3 +185,4 @@ Default behavior for explicit norpc exports should be handled in the separate ex
 - 2026-06-19: Follow-up user decision moved support for exported norpc procedures/routers out of scope for this proposal and into a separate change.
 - 2026-06-19: Implemented the scoped feature set. `pnpm exec vitest run test/typebox-module-commands.test.ts`, `pnpm compile`, and `pnpm test` pass. `pnpm lint` is blocked only by the pre-existing unstaged `test/zod4.test.ts` unused-disable warning.
 - 2026-06-19: Follow-up user decision allowed `extends` when the class declares an explicit zero-argument constructor, and added coverage that TypeScript `private` methods are not commands.
+- 2026-06-19: Follow-up user decision changed unsupported class shapes, including constructor parameters, from startup errors to ignored non-command exports.
