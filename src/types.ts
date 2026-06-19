@@ -288,7 +288,7 @@ export type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
-  prompts?: Promptable | true | null
+  prompts?: Promptable | boolean | null
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
   process?: {

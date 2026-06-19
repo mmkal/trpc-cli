@@ -1461,7 +1461,21 @@ const cli = createCli({router: myRouter})
 cli.run({prompts: true})
 ```
 
-The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation. The built-in prompts intentionally use plain line input: selects are numbered and checkboxes accept comma-separated numbers. If you want a richer terminal UI, install and pass `enquirer`, `prompts`, `@clack/prompts`, or `@inquirer/prompts` instead:
+The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation. The built-in prompts intentionally use plain line input: selects are numbered and checkboxes accept comma-separated numbers.
+
+You can pass a boolean expression too. `false` disables prompting, so this uses the built-in prompts unless trpc-cli detects a coding-agent environment:
+
+```ts
+import {createCli, isAgent} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+await cli.run({
+  prompts: !isAgent(),
+})
+```
+
+If you want a richer terminal UI, install and pass `enquirer`, `prompts`, `@clack/prompts`, or `@inquirer/prompts` instead:
 
 ```ts
 import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer', or import * as prompts from 'prompts'
