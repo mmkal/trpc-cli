@@ -159,35 +159,60 @@ test('module commands: {source, exports} escape hatch works without file reading
   expect(await runWith(params, ['add', '--help'])).toContain('the name of the package to add')
 })
 
-test('module commands: missing type annotation errors clearly', async () => {
+test('module commands: unparseable exported functions are ignored', async () => {
   const params = {
-    source: `export function greet(name) { return 'hi ' + name }`,
-    exports: {greet: (name: string) => 'hi ' + name},
+    source: `
+      export function missingAnnotation(name) {
+        return 'hi ' + name
+      }
+
+      export function unresolved(options: ImportedFromElsewhere) {
+        return options.name
+      }
+
+      const localExportList = () => 'local'
+      export {localExportList}
+
+      export const loadSomeInternalThing = (params: NoInfer<{foo: string}>) => {
+        return params.foo
+      }
+
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {
+      loadSomeInternalThing: (input: any) => input.foo,
+      localExportList: () => 'local',
+      missingAnnotation: (name: string) => 'hi ' + name,
+      status: () => 'ok',
+      unresolved: (options: any) => options.name,
+    },
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter "name" of "greet" has no type annotation. Annotate it, e.g. `(name: string)` or `(name: {someFlag: string})`.',
-  )
+
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('missing-annotation')
+  expect(help).not.toContain('unresolved')
+  expect(help).not.toContain('local-export-list')
+  expect(help).not.toContain('load-some-internal-thing')
+  expect(await runWith(params, ['status'])).toMatchInlineSnapshot(`"ok"`)
 })
 
-test('module commands: unresolvable named type errors clearly', async () => {
+test('module commands: module with only ignored function exports errors with no commands found', async () => {
   const params = {
-    source: `export function deploy(options: ImportedFromElsewhere) {}`,
-    exports: {deploy: () => {}},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'The type of parameter "options" of "deploy" references "ImportedFromElsewhere", which couldn\'t be resolved. Declare it as `type X = {...}` or `interface X {...}` in the same file, or inline the type.',
-  )
-})
+    source: `
+      export function greet(name) {
+        return 'hi ' + name
+      }
 
-test('module commands: exported function with no parseable declaration errors clearly', async () => {
-  const params = {
-    // `export {fn}` statements aren't supported by the extractor - the error should say so
-    source: `const start = () => 'started'\nexport {start}`,
-    exports: {start: () => 'started'},
+      export const loadSomeInternalThing = (params: NoInfer<{foo: string}>) => {
+        return params.foo
+      }
+    `,
+    exports: {greet: (name: string) => 'hi ' + name, loadSomeInternalThing: (input: any) => input.foo},
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    /Could not find a parseable declaration for exported function\(s\) "start"/,
-  )
+  await expect(runWith(params, ['--help'])).rejects.toThrowError(/No commands found in module/)
 })
 
 test('module commands: export * merges child module commands at the root', async () => {
@@ -224,6 +249,35 @@ test('module commands: re-exported module resolution supports exact well-known e
   expect(await runWith({filename: fixture.barrelPath}, ['extra', 'ping', '--name', 'Ada'])).toMatchInlineSnapshot(
     `"pong Ada"`,
   )
+})
+
+test('module commands: named re-exports expose selected child command classes', async () => {
+  using fixture = createReexportFixture()
+
+  expect(await runWith({filename: fixture.barrelPath}, ['users', 'invite', '--email', 'ada@example.com']))
+    .toMatchInlineSnapshot(`
+      "user ada@example.com"
+    `)
+
+  const help = await runWith({filename: fixture.barrelPath}, ['--help'])
+  expect(help).toContain('users')
+})
+
+test('module commands: file-backed modules resolve parameter types imported from relative files', async () => {
+  using fixture = createImportedTypesFixture()
+
+  expect(await runWith({filename: fixture.commandsPath}, ['invite', '--email', 'ada@example.com', '--role', 'admin']))
+    .toMatchInlineSnapshot(`
+      "invite ada@example.com as admin"
+    `)
+  expect(await runWith({filename: fixture.commandsPath}, ['assign', '--id', 'u_123', '--group', 'staff']))
+    .toMatchInlineSnapshot(`
+      "assign u_123 to staff"
+    `)
+
+  const help = await runWith({filename: fixture.commandsPath}, ['invite', '--help'])
+  expect(help).toContain('email to invite')
+  expect(help).toContain('role to grant')
 })
 
 test('module commands: {source, exports} rejects re-export module composition', async () => {
@@ -405,54 +459,51 @@ test('module positionals: missing and invalid positionals fail before the functi
   `)
 })
 
-test('module positionals: rest parameters error clearly', async () => {
+test('module positionals: unsupported signatures are ignored', async () => {
   const params = {
-    source: `export function sum(...numbers: number[]) { return 0 }`,
-    exports: {sum: () => 0},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter "...numbers" of "sum" is a rest parameter, which isn\'t supported. Use an explicitly-typed array parameter (e.g. `numbers: number[]`, which becomes a variadic positional argument), or move it into a trailing options object.',
-  )
-})
+    source: `
+      export function sum(...numbers: number[]) {
+        return 0
+      }
 
-test('module positionals: destructured positional parameters error clearly', async () => {
-  const params = {
-    source: `export function move([x, y]: [number, number], options: {fast?: boolean}) {}`,
-    exports: {move: () => {}},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter 1 ("[number, number]") of "move" is a destructuring pattern, which isn\'t supported for positional arguments. Give the parameter a name, or move it into a trailing options object.',
-  )
-})
+      export function move([x, y]: [number, number], options: {fast?: boolean}) {
+        return x + y
+      }
 
-test('module positionals: object parameter in non-final position errors clearly', async () => {
-  const params = {
-    source: `export function deploy(options: {env: string}, target: string) {}`,
-    exports: {deploy: () => {}},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter 1 ("options") of "deploy" is an object type, but only the *last* parameter can be an object - leading parameters become positional arguments and a trailing object parameter maps to flags. Move it to the end, or flatten it into the trailing options object.',
-  )
-})
+      export function deploy(options: {env: string}, target: string) {
+        return target
+      }
 
-test('module positionals: optional array parameter errors clearly', async () => {
-  const params = {
-    source: `export function lint(files?: string[]) {}`,
-    exports: {lint: () => {}},
-  }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter 1 ("files") of "lint" is an optional array. Optional array parameters aren\'t supported as positional arguments - make it required, or move it into a trailing options object.',
-  )
-})
+      export function lint(files?: string[]) {
+        return files?.join(',') || ''
+      }
 
-test('module positionals: default value without a type annotation errors clearly', async () => {
-  const params = {
-    source: `export function pad(text: string, width = 10) { return text }`,
-    exports: {pad: (text: string) => text},
+      export function pad(text: string, width = 10) {
+        return text + width
+      }
+
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {
+      deploy: (_options: any, target: string) => target,
+      lint: (files?: string[]) => files?.join(',') || '',
+      move: ([x, y]: [number, number]) => x + y,
+      pad: (text: string, width = 10) => text + width,
+      status: () => 'ok',
+      sum: () => 0,
+    },
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    'Parameter "width" of "pad" has no type annotation. Annotate it, e.g. `(width: string)` or `(width: {someFlag: string})`.',
-  )
+
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('sum')
+  expect(help).not.toContain('move')
+  expect(help).not.toContain('deploy')
+  expect(help).not.toContain('lint')
+  expect(help).not.toContain('pad')
+  expect(await runWith(params, ['status'])).toMatchInlineSnapshot(`"ok"`)
 })
 
 test('module commands: intersection and multi-line union type aliases keep their tails', async () => {
@@ -487,11 +538,46 @@ test('module commands: intersection and multi-line union type aliases keep their
   await expect(runWith(params, ['configure', '--mode', 'fast'])).rejects.toThrowError(/extra/)
 })
 
+test('module commands: same-file extended interfaces and alias intersections derive flags', async () => {
+  const params = {
+    source: `
+      interface Common {
+        root: string
+      }
+      interface Named {
+        name: string
+      }
+      interface Options extends Common, Named {
+        tag: string
+      }
+      type Extra = Options & {
+        verbose?: boolean
+      }
+
+      export function deploy(options: Extra) {
+        return options.root + ':' + options.name + ':' + options.tag + ':' + String(options.verbose || false)
+      }
+    `,
+    exports: {
+      deploy: (options: any) => `${options.root}:${options.name}:${options.tag}:${String(options.verbose || false)}`,
+    },
+  }
+
+  const help = await runWith(params, ['deploy', '--help'])
+  expect(help).toContain('--root <string>')
+  expect(help).toContain('--name <string>')
+  expect(help).toContain('--tag <string>')
+  expect(help).toContain('--verbose [boolean]')
+  expect(
+    await runWith(params, ['deploy', '--root', 'prod', '--name', 'api', '--tag', 'v1', '--verbose']),
+  ).toMatchInlineSnapshot(`"prod:api:v1:true"`)
+})
+
 test('module commands: generic type parameters containing => are skipped correctly', async () => {
   const params = {
     // without the => exception in findBalancedEnd, the `>` of `() => void` would close the generic
     // bracket early and the whole declaration would mis-slice. (A *parameter* typed as a generic like
-    // `callback?: T` is a different story - it errors as an unresolvable reference, by design.)
+    // `callback?: T` is a different story - it is ignored unless the type can resolve into a CLI input.)
     source: `
       export async function run<T extends () => void>(options: {name: string}) {
         return 'ran ' + options.name
@@ -514,6 +600,36 @@ test('module commands: jsdoc still attaches when a line comment sits between it 
     exports: {thing: async (options: any) => options.input},
   }
   expect(await runWith(params, ['--help'])).toContain('does the thing')
+})
+
+test('module commands: jsdoc aliases create command and option aliases without leaking into help', async () => {
+  const params = {
+    source: `
+      /**
+       * install dependencies
+       * @alias i
+       */
+      export function install(options: {
+        /** fail if the lockfile changed
+         * @alias f
+         */
+        frozenLockfile?: boolean
+      }) {
+        return options.frozenLockfile ? 'frozen' : 'normal'
+      }
+    `,
+    exports: {install: (options: any) => (options.frozenLockfile ? 'frozen' : 'normal')},
+  }
+
+  const rootHelp = await runWith(params, ['--help'])
+  expect(rootHelp).toContain('install dependencies')
+  expect(rootHelp).not.toContain('@alias')
+  expect(await runWith(params, ['i', '-f'])).toMatchInlineSnapshot(`"frozen"`)
+
+  const installHelp = await runWith(params, ['install', '--help'])
+  expect(installHelp).toContain('-f, --frozen-lockfile')
+  expect(installHelp).toContain('fail if the lockfile changed')
+  expect(installHelp).not.toContain('@alias')
 })
 
 test('module commands: union-of-objects parameter derives union flags', async () => {
@@ -651,19 +767,273 @@ test('module commands: async const arrow with destructured param', async () => {
   )
 })
 
-test('module commands: type-annotated const declarations error with parseable-declaration guidance', async () => {
+test('module commands: type-annotated const function exports are ignored', async () => {
   const params = {
-    // `export const f: SomeType = ...` isn't parsed (the annotation would be the source of truth, and it can
-    // reference imported types the extractor can't see) - the existing actionable error applies
+    // `export const f: SomeType = ...` isn't parsed; the annotation would be the source of truth, and it can
+    // reference imported types the extractor can't see.
     source: `
       type Cmd = (options: {name: string}) => string
       export const greet: Cmd = (options) => 'hi ' + options.name
+      export function status() {
+        return 'ok'
+      }
     `,
-    exports: {greet: (options: any) => 'hi ' + options.name},
+    exports: {greet: (options: any) => 'hi ' + options.name, status: () => 'ok'},
   }
-  await expect(runWith(params, ['--help'])).rejects.toThrowError(
-    /Could not find a parseable declaration for exported function\(s\) "greet"/,
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('greet')
+  expect(await runWith(params, ['status'])).toMatchInlineSnapshot(`"ok"`)
+})
+
+test('module commands: exported classes create lazily-instantiated command groups', async () => {
+  let constructed = 0
+  class Users {
+    constructor() {
+      constructed++
+    }
+
+    invite(options: {email: string}) {
+      this.#audit()
+      return `invite ${options.email}`
+    }
+
+    private getOrCreate(email: string) {
+      return {email}
+    }
+
+    login(email: string, password: string) {
+      const user = this.getOrCreate(email)
+      return `login ${user.email} with ${password.length} chars`
+    }
+
+    #audit() {
+      return 'audited'
+    }
+  }
+
+  const params = {
+    source: `
+      export class Users {
+        constructor() {}
+
+        /** invite a user
+         * @alias i
+         */
+        invite(options: {
+          /** address to invite */
+          email: string
+        }) {
+          this.#audit()
+          return 'invite ' + options.email
+        }
+
+        private getOrCreate(email: string) {
+          return {email}
+        }
+
+        login(email: string, password: string) {
+          const user = this.getOrCreate(email)
+          return 'login ' + user.email + ' with ' + password.length + ' chars'
+        }
+
+        #audit() {
+          return 'audited'
+        }
+      }
+    `,
+    exports: {Users},
+  }
+
+  const rootHelp = await runWith(params, ['--help'])
+  expect(rootHelp).toContain('users')
+  expect(constructed).toBe(0)
+
+  const inviteHelp = await runWith(params, ['users', 'invite', '--help'])
+  expect(inviteHelp).toContain('invite a user')
+  expect(inviteHelp).toContain('--email <string>')
+  expect(inviteHelp).toContain('address to invite')
+  expect(inviteHelp).not.toContain('@alias')
+  expect(inviteHelp).not.toContain('audit')
+  expect(inviteHelp).not.toContain('get-or-create')
+  expect(constructed).toBe(0)
+
+  expect(await runWith(params, ['users', 'invite', '--email', 'ada@example.com'])).toMatchInlineSnapshot(
+    `"invite ada@example.com"`,
   )
+  expect(constructed).toBe(1)
+  expect(await runWith(params, ['users', 'i', '--email', 'grace@example.com'])).toMatchInlineSnapshot(
+    `"invite grace@example.com"`,
+  )
+  expect(constructed).toBe(2)
+  expect(await runWith(params, ['users', 'login', 'ada@example.com', 's3cr3t'])).toMatchInlineSnapshot(
+    `"login ada@example.com with 6 chars"`,
+  )
+  expect(constructed).toBe(3)
+})
+
+test('module commands: default exported class methods become root commands', async () => {
+  let constructed = 0
+  class Commands {
+    constructor() {
+      constructed++
+    }
+
+    invite(options: {email: string}) {
+      return `invite ${options.email}`
+    }
+  }
+
+  const params = {
+    source: `
+      export default class Commands {
+        constructor() {}
+
+        /** invite from the root */
+        invite(options: {
+          /** target email */
+          email: string
+        }) {
+          return 'invite ' + options.email
+        }
+
+        private helper() {
+          return 'not a command'
+        }
+      }
+    `,
+    exports: {default: Commands},
+  }
+
+  const rootHelp = await runWith(params, ['--help'])
+  expect(rootHelp).toContain('invite')
+  expect(rootHelp).toContain('invite from the root')
+  expect(rootHelp).not.toContain('helper')
+  expect(constructed).toBe(0)
+  expect(await runWith(params, ['invite', '--email', 'ada@example.com'])).toMatchInlineSnapshot(
+    `"invite ada@example.com"`,
+  )
+  expect(constructed).toBe(1)
+})
+
+test('module commands: inherited class groups require an explicit zero-arg constructor', async () => {
+  class Base {
+    protected prefix = 'base'
+  }
+  class Users extends Base {
+    constructor() {
+      super()
+    }
+
+    invite(options: {email: string}) {
+      return `${this.prefix}:${options.email}`
+    }
+  }
+  expect(
+    await runWith(
+      {
+        source: `
+          class Base {
+            protected prefix = 'base'
+          }
+          export class Users extends Base {
+            constructor() {
+              super()
+            }
+
+            invite(options: {email: string}) {
+              return this.prefix + ':' + options.email
+            }
+          }
+        `,
+        exports: {Users},
+      },
+      ['users', 'invite', '--email', 'ada@example.com'],
+    ),
+  ).toMatchInlineSnapshot(`"base:ada@example.com"`)
+})
+
+test('module commands: unsupported exported classes are ignored instead of throwing', async () => {
+  class Base {}
+  class NeedsConfig {
+    constructor(config: {dryRun?: boolean}) {
+      void config
+    }
+
+    invite(options: {email: string}) {
+      return options.email
+    }
+  }
+  class InheritedWithoutConstructor extends Base {
+    invite(options: {email: string}) {
+      return options.email
+    }
+  }
+  class StaticOnly {}
+  class AccessorOnly {
+    get invite() {
+      return 'not a command'
+    }
+  }
+  class PrivateOnly {}
+
+  const params = {
+    source: `
+      export class NeedsConfig {
+        constructor(config: {dryRun?: boolean}) {}
+
+        invite(options: {email: string}) {
+          return options.email
+        }
+      }
+
+      class Base {}
+      export class InheritedWithoutConstructor extends Base {
+        invite(options: {email: string}) {
+          return options.email
+        }
+      }
+
+      export class StaticOnly {
+        static invite(options: {email: string}) {
+          return options.email
+        }
+      }
+
+      export class AccessorOnly {
+        get invite() {
+          return 'not a command'
+        }
+      }
+
+      export class PrivateOnly {
+        private invite(options: {email: string}) {
+          return options.email
+        }
+      }
+
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {
+      AccessorOnly,
+      InheritedWithoutConstructor,
+      NeedsConfig,
+      PrivateOnly,
+      StaticOnly,
+      status: () => 'ok',
+    },
+  }
+
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('needs-config')
+  expect(help).not.toContain('inherited-without-constructor')
+  expect(help).not.toContain('static-only')
+  expect(help).not.toContain('accessor-only')
+  expect(help).not.toContain('private-only')
+  expect(await runWith(params, ['status'])).toMatchInlineSnapshot(`"ok"`)
 })
 
 test('module positionals: destructured trailing options object works', async () => {
@@ -689,6 +1059,7 @@ const createReexportFixture = () => {
       export * from './root'
       export * as admin from './admin'
       export * as extra from './extra.mts'
+      export {Users} from './users'
 
       export function localThing(options: {name: string}) {
         return \`local \${options.name}\`
@@ -733,9 +1104,68 @@ const createReexportFixture = () => {
       }
     `,
   )
+  write(
+    'users.ts',
+    `
+      export class Users {
+        invite(options: {email: string}) {
+          return \`user \${options.email}\`
+        }
+      }
+    `,
+  )
 
   return {
     barrelPath: path.join(dir, 'barrel.ts'),
+    [Symbol.dispose]() {
+      fs.rmSync(dir, {recursive: true, force: true})
+    },
+  }
+}
+
+const createImportedTypesFixture = () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'trpc-cli-imported-types-'))
+  const write = (filename: string, source: string) => fs.writeFileSync(path.join(dir, filename), source, 'utf8')
+
+  write(
+    'commands.ts',
+    `
+      import type {InviteOptions as Options} from './types.js'
+      import {type AssignOptions} from './types.js'
+
+      export function invite(options: Options) {
+        return \`invite \${options.email} as \${options.role || 'member'}\`
+      }
+
+      export default class Commands {
+        assign(options: AssignOptions) {
+          return \`assign \${options.id} to \${options.group}\`
+        }
+      }
+    `,
+  )
+  write(
+    'types.ts',
+    `
+      export interface InviteOptions {
+        /** email to invite */
+        email: string
+        /** role to grant */
+        role?: 'admin' | 'member'
+      }
+
+      export type AssignOptions = {
+        /** user id */
+        id: string
+      } & {
+        /** destination group */
+        group: string
+      }
+    `,
+  )
+
+  return {
+    commandsPath: path.join(dir, 'commands.ts'),
     [Symbol.dispose]() {
       fs.rmSync(dir, {recursive: true, force: true})
     },

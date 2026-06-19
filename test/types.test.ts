@@ -14,6 +14,7 @@ test('prompt types', async () => {
 
 test('agent-aware prompt disabling type', async () => {
   expectTypeOf({prompts: isAgent({}) ? null : ({} as Promptable)}).toMatchTypeOf<TrpcCliRunParams>()
+  expectTypeOf({prompts: !isAgent({})}).toMatchTypeOf<TrpcCliRunParams>()
 })
 
 test('jsonInput createCli param type', async () => {

@@ -34,14 +34,20 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
 }
 
 /**
- * @experimental Derive a CLI from a plain TypeScript module of exported functions instead of a router.
+ * @experimental Derive a CLI from a plain TypeScript module of exported functions/classes instead of a router.
  * Exported functions become commands: the jsdoc above each function becomes the command description, and the first
  * parameter's object type annotation (parsed from the module's *source text* via the vendored `trpc-cli/typebox`
  * `Type.Script`) becomes the input schema - property jsdoc comments become flag descriptions, and inputs are
- * validated against the schema before the function runs. A default-exported function becomes the default command,
- * equivalent to `{default: true}` in procedure meta. In file-backed module mode, `export * as foo from './foo'`
- * becomes a nested sub-router named `foo`, and `export * from './foo'` merges that module's named commands into the
- * current router level.
+ * validated against the schema before the function runs. Exported functions whose signatures cannot be converted
+ * into CLI inputs are ignored as ordinary non-command exports. `@alias` tags in command/property jsdoc become
+ * command and option aliases. A default-exported function becomes the default command, equivalent to `{default:
+ * true}` in procedure meta. Exported classes become nested command groups when they have no constructor arguments
+ * and at least one public command method; default-exported classes put their methods at the current router level.
+ * Classes with `extends` must declare an explicit zero-argument constructor. Unsupported class shapes are ignored
+ * as ordinary non-command exports. Their public instance methods are lazily invoked on a fresh class instance. In
+ * file-backed module mode, `export * as foo from './foo'` becomes a nested sub-router named `foo`, `export * from './foo'`
+ * merges that module's named commands into the current router level, and `export {foo} from './foo'` re-exports
+ * selected commands.
  *
  * `import.meta` satisfies this shape (it carries `filename`/`url`), so the simplest setup is to call `createCli`
  * from the bottom of the commands file itself:
@@ -282,7 +288,7 @@ export type TrpcCliRunParams = {
   argv?: string[]
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
-  prompts?: Promptable | true | null
+  prompts?: Promptable | boolean | null
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
   process?: {

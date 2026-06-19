@@ -3,3 +3,5 @@ dist
 *ignoreme*
 *.log
 session-ses_*.md
+tasks/*interview*
+tasks/**/*interview*

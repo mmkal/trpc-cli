@@ -38,7 +38,10 @@ test('prompts package types', async () => {
 })
 
 test('built-in prompt types', () => {
+  const enablePrompts: boolean = false
   expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts: true})
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts: false})
+  expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts: enablePrompts})
   expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts: builtInPrompts})
   expectTypeOf(createCli({router: promptTypeRouter}).run).toBeCallableWith({prompts: createBuiltInPrompts()})
 })
