@@ -272,7 +272,7 @@ To use positional arguments _and_ options, there are two approaches:
 
 **1) Using input schema metadata (recommended)**
 
-Use `z.string().meta({positional: true})`. This is available on zod v4, and arktype via `type('string').configure({positional: true})`:
+Use `z.string().meta({positional: true})`. This is available on zod v4, Valibot via `v.pipe(v.string(), v.metadata({positional: true}))`, and arktype via `type('string').configure({positional: true})`:
 
 ```ts
 t.router({
@@ -546,6 +546,28 @@ const router = t.router({
 const cli = createCli({router})
 
 cli.run() // e.g. `mycli add 1 2`
+```
+
+Valibot `v.metadata(...)` values are understood for trpc-cli-specific fields like `alias`, `positional`, `hidden`, and `negatable`:
+
+```ts
+const router = t.router({
+  install: t.procedure
+    .input(
+      v.object({
+        cwd: v.pipe(v.string(), v.metadata({positional: true})),
+        frozenLockfile: v.pipe(
+          v.optional(v.boolean()),
+          v.metadata({alias: 'f', negatable: true}),
+        ),
+      }),
+    )
+    .query(({input}) => JSON.stringify(input)),
+})
+
+const cli = createCli({router})
+
+cli.run() // e.g. `mycli install /repo -f`
 ```
 
 ### effect

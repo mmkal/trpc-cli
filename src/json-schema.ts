@@ -275,6 +275,145 @@ export function toJsonSchema(input: unknown, dependencies: Dependencies): Result
 
 // #region vendor specific stuff
 
+const valibotCliMetaKeys = ['alias', 'positional', 'hidden', 'negatable'] as const
+
+type ValibotCliMeta = Partial<Record<(typeof valibotCliMetaKeys)[number], unknown>>
+type ValibotGetMetadata = ((schema: unknown) => Record<string, unknown>) | undefined
+type ValibotSchemaLike = {
+  type?: unknown
+  wrapped?: unknown
+  entries?: unknown
+  item?: unknown
+  items?: unknown
+}
+type ValibotModule = {
+  object: (entries: {child: unknown}) => unknown
+  getMetadata?: unknown
+}
+
+// @valibot/to-json-schema does not include custom v.metadata(...) values, so copy over the CLI-specific fields
+// after conversion while preserving the JSON Schema shape emitted by the converter.
+const getValibotCliMeta = (getMetadata: ValibotGetMetadata, schema: unknown): ValibotCliMeta => {
+  if (!getMetadata || !schema) return {}
+
+  try {
+    const metadata = getMetadata(schema)
+    const cliMeta: ValibotCliMeta = {}
+
+    for (const key of valibotCliMetaKeys) {
+      if (key in metadata) cliMeta[key] = metadata[key]
+    }
+
+    return cliMeta
+  } catch {
+    return {}
+  }
+}
+
+const getValibotSchemaChain = (schema: unknown): unknown[] => {
+  const chain: unknown[] = []
+  const seen = new Set<unknown>()
+  let current = schema
+
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    chain.push(current)
+    seen.add(current)
+
+    const wrapped = (current as ValibotSchemaLike).wrapped
+    if (!wrapped) break
+    current = wrapped
+  }
+
+  return chain
+}
+
+const unwrapValibotSchema = (schema: unknown): unknown => {
+  return getValibotSchemaChain(schema).at(-1) ?? schema
+}
+
+const getDeepValibotCliMeta = (getMetadata: ValibotGetMetadata, schema: unknown): ValibotCliMeta => {
+  const cliMeta: ValibotCliMeta = {}
+  const chain = getValibotSchemaChain(schema)
+
+  for (let index = chain.length - 1; index >= 0; index--) {
+    Object.assign(cliMeta, getValibotCliMeta(getMetadata, chain[index]))
+  }
+
+  return cliMeta
+}
+
+const assignValibotCliMeta = (jsonSchema: JSONSchema7, cliMeta: ValibotCliMeta) => {
+  if (Object.keys(cliMeta).length > 0) Object.assign(jsonSchema, cliMeta)
+}
+
+const primaryJsonSchemaShape = (jsonSchema: JSONSchema7): JSONSchema7 => {
+  if (Array.isArray(jsonSchema.anyOf)) {
+    const nonNot = jsonSchema.anyOf.find(subSchema => {
+      return (
+        subSchema &&
+        typeof subSchema === 'object' &&
+        !('not' in subSchema && Object.keys(subSchema).join(',') === 'not')
+      )
+    })
+
+    if (nonNot && typeof nonNot === 'object') return {...jsonSchema, ...nonNot}
+  }
+
+  return jsonSchema
+}
+
+const applyValibotCliMetadata = (getMetadata: ValibotGetMetadata, schema: unknown, jsonSchema: JSONSchema7) => {
+  assignValibotCliMeta(jsonSchema, getDeepValibotCliMeta(getMetadata, schema))
+
+  const unwrapped = unwrapValibotSchema(schema) as ValibotSchemaLike
+  const shape = primaryJsonSchemaShape(jsonSchema)
+
+  if (unwrapped.type === 'object' && unwrapped.entries && typeof unwrapped.entries === 'object' && shape.properties) {
+    const required = Array.isArray(shape.required) ? new Set(shape.required) : null
+    for (const [key, entrySchema] of Object.entries(unwrapped.entries)) {
+      const propertyJson = shape.properties[key]
+      if (propertyJson && typeof propertyJson === 'object') {
+        if (required && !required.has(key)) Object.assign(propertyJson, {optional: true})
+        applyValibotCliMetadata(getMetadata, entrySchema, propertyJson)
+      }
+    }
+  }
+
+  if (unwrapped.type === 'array' && unwrapped.item) {
+    const itemsJson = shape.items
+    if (itemsJson && typeof itemsJson === 'object' && !Array.isArray(itemsJson)) {
+      applyValibotCliMetadata(getMetadata, unwrapped.item, itemsJson)
+    }
+  }
+
+  if (unwrapped.type === 'tuple' && Array.isArray(unwrapped.items)) {
+    const jsonTupleItems =
+      (shape as JSONSchema7 & {prefixItems?: JSONSchema7[]}).prefixItems ||
+      (Array.isArray(shape.items) ? shape.items : [])
+
+    unwrapped.items.forEach((itemSchema, index) => {
+      const itemJson = jsonTupleItems[index]
+      if (itemJson && typeof itemJson === 'object') applyValibotCliMetadata(getMetadata, itemSchema, itemJson)
+    })
+  }
+}
+
+const convertValibotToJsonSchema = (
+  input: unknown,
+  valibot: ValibotModule,
+  valibotToJsonSchema: (input: unknown, options?: {errorMode?: 'throw' | 'ignore' | 'warn'}) => JSONSchema7,
+) => {
+  const parent = valibotToJsonSchema(valibot.object({child: input}), {
+    errorMode: 'ignore',
+  })
+  const child = parent.properties!.child as JSONSchema7
+  const result = parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
+  const getMetadata =
+    typeof valibot.getMetadata === 'function' ? (valibot.getMetadata as ValibotGetMetadata) : undefined
+  applyValibotCliMetadata(getMetadata, input, result)
+  return result
+}
+
 /** `Record<standard-schema vendor id, function that converts the input to JSON schema>` */
 const getJsonSchemaConverters = (dependencies: Dependencies) => {
   return {
@@ -324,11 +463,11 @@ const getJsonSchemaConverters = (dependencies: Dependencies) => {
         return valibotToJsonSchema(input as never)
       }
       const v = getModule(valibotOrError)
-      const parent = valibotToJsonSchema(v.object({child: input as import('valibot').StringSchema<undefined>}), {
-        errorMode: 'ignore',
-      })
-      const child = parent.properties!.child as JSONSchema7
-      return parent.required?.length === 0 ? Object.assign(child, {optional: true}) : child
+      return convertValibotToJsonSchema(
+        input,
+        v as ValibotModule,
+        valibotToJsonSchema as (input: unknown, options?: {errorMode?: 'throw' | 'ignore' | 'warn'}) => JSONSchema7,
+      )
     },
     effect: (input: unknown) => {
       const effect = dependencies.effect || getModule(effectOrError)
