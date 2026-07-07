@@ -36,6 +36,11 @@ test('module commands: --help lists commands with jsdoc descriptions', async () 
   `)
 })
 
+test('module commands: CLI is named after the module file when name is not passed', async () => {
+  const help = await runWith({filename: modulePath}, ['--help'])
+  expect(help).toContain('Usage: commands-module')
+})
+
 test('module commands: property jsdoc shows up as flag descriptions', async () => {
   const installHelp = await runWith({filename: modulePath}, ['install', '--help'])
   expect(installHelp).toContain('--frozen-lockfile')

@@ -3,6 +3,7 @@ import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArg
 import {Option as BaseOption} from 'commander'
 import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
+import {isAgent} from './agent.js'
 import {addCompletions} from './completions.js'
 import {runWithCliContext} from './context.js'
 import {FailedToExitError, CliValidationError} from './errors.js'
@@ -15,7 +16,7 @@ import {
   getAllowedSchemas,
 } from './json-schema.js'
 import {commandToJSON} from './json.js'
-import {lineByLineConsoleLogger} from './logging.js'
+import {yamlTableConsoleLogger} from './logging.js'
 import type {CliModuleInput} from './module-commands.js'
 import {
   type AnyRouter,
@@ -28,6 +29,7 @@ import {
   type ProcedureInfo,
 } from './parse-router.js'
 import {CosmeticJsonOption, promptify} from './prompts.js'
+import {guessCliName, scriptBasename} from './resolve-name.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {
@@ -189,12 +191,15 @@ export function createCli<R extends AnyRouter>(
     // import.meta.url (e.g. node 18, where import.meta.filename is absent)
     const moduleInput: CliModuleInput = source ? {source, exports: exports || {}} : filename || new URL(url as string)
     const shouldRun = getModuleRunGuard(allParams, moduleInput)
+    // module mode has a natural fallback name that router mode doesn't: the commands file itself. It ranks below
+    // environment-derived names (see buildProgram) so an installed bin still wins over the file basename.
+    const defaultName = source ? undefined : scriptBasename(filename || new URL(url as string))
     let cliPromise: Promise<TrpcCli> | undefined
     const getCli = () => {
       // node:fs / dynamic import / the vendored typebox parser are only needed (and only loaded) in this mode
       cliPromise ||= import('./module-commands.js')
         .then(mc => mc.moduleToRouter(moduleInput))
-        .then(router => createCli({router, ...params}))
+        .then(router => createCli({router, ...params, defaultName}))
       return cliPromise
     }
     // module loading is async, so this mode's buildProgram/toJSON are async wrappers around the resolved router CLI
@@ -213,8 +218,14 @@ export function createCli<R extends AnyRouter>(
   const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {
-    const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    const program = new Command(params.name)
+    const logger = {...yamlTableConsoleLogger, ...runParams?.logger}
+    // name resolution (readme "How the CLI name is resolved"): explicit name > environment-derived > module-mode
+    // commands-file basename. Environment-derived names only apply to environment-driven runs, i.e. a run() reading
+    // process.argv - when `argv` is passed explicitly (programmatic usage, tests, the trpc-cli bin), process.argv and
+    // the npm_* env vars describe the host process, not this CLI. Same reasoning as `jsonFlagSniffed` below: a bare
+    // buildProgram()/toJSON() call has no invocation to inspect, so it doesn't get an environment-derived name either.
+    const environmentDriven = runParams !== undefined && runParams.argv === undefined
+    const program = new Command(params.name || (environmentDriven ? guessCliName() : undefined) || params.defaultName)
 
     // Each leaf command resolves a `jsonInput` mode: `meta.jsonInput || params.jsonInput || 'never'`. 'always' builds
     // the command JSON-only; 'never' (the default) builds it from its schema. 'auto' is secretly 'always' with a
@@ -649,7 +660,7 @@ export function createCli<R extends AnyRouter>(
     const argv = [...(runParams?.argv || process.argv)]
 
     const _process = runParams?.process || process
-    const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
+    const logger = {...yamlTableConsoleLogger, ...runParams?.logger}
 
     program.exitOverride(exit => {
       _process.exit(exit.exitCode)
@@ -675,8 +686,15 @@ export function createCli<R extends AnyRouter>(
         return inspect(err)
       })
 
-    if (runParams?.prompts) {
-      program = promptify(program, runParams.prompts) as Command
+    // default prompts: prompt for missing inputs when the caller looks like an interactive human - a real terminal
+    // (TTY stdin) and not a coding agent. `prompts: false` (or `null`) disables prompting entirely; `prompts: true`
+    // forces the built-in prompts on even when the heuristic says no.
+    let prompts = runParams?.prompts
+    if (prompts === undefined) {
+      prompts = typeof process !== 'undefined' && Boolean(process.stdin?.isTTY) && !isAgent()
+    }
+    if (prompts) {
+      program = promptify(program, prompts) as Command
     }
 
     // Store the argv that commander will parse in "user" mode.

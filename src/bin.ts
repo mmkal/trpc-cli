@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-import {createBuiltInPrompts, createCli, isAgent} from './index.js'
-import * as path from 'path'
-import {yamlTableConsoleLogger} from './logging.js'
+import {createCli} from './index.js'
 
 const [filepath, ...argv] = process.argv.slice(2)
 
@@ -32,14 +30,8 @@ if (!filepath || filepath === '--help' || filepath === '-h') {
   process.exit(filepath ? 0 : 1)
 }
 
-const cli = createCli({
-  filename: filepath,
-  name: path.basename(filepath).replace(/\.[^.]+$/, ''),
-  jsonInput: 'auto',
-})
+// the library defaults cover the rest: the CLI is named after the module file, results are logged with the yaml
+// table logger, and missing inputs are prompted for when stdin is a TTY and no coding agent is detected
+const cli = createCli({filename: filepath, jsonInput: 'auto'})
 
-void cli.run({
-  argv,
-  logger: yamlTableConsoleLogger,
-  prompts: isAgent() ? undefined : createBuiltInPrompts(),
-})
+void cli.run({argv})

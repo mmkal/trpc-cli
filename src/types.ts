@@ -6,7 +6,17 @@ import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './parse-ro
 export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** A tRPC router. Procedures will become CLI commands. */
   router: R
+  /**
+   * Program name shown in help/usage output. When not set, a name is derived automatically - from the matching
+   * `bin` entry in your package.json when running as an installed bin, the npm script name when run via
+   * `npm run ...`, or the entry script's basename. See the readme section "How the CLI name is resolved".
+   */
   name?: string
+  /**
+   * Fallback `name` used only when `name` is absent and no environment-derived name applies. Set internally by
+   * module mode to the commands-file basename - you probably want `name` instead.
+   */
+  defaultName?: string
   version?: string
   description?: string
   usage?: string | string[]
@@ -107,6 +117,10 @@ export interface TrpcCliModuleParams {
   source?: string
   /** @experimental Bundler/browser escape hatch: the module's live exports. Pass alongside {@linkcode TrpcCliModuleParams.source}. */
   exports?: Record<string, unknown>
+  /**
+   * Program name shown in help/usage output. When not set, a name is derived automatically - falling back to the
+   * commands-file basename in this mode. See the readme section "How the CLI name is resolved".
+   */
   name?: string
   version?: string
   description?: string
@@ -286,8 +300,15 @@ export type Promptable =
 
 export type TrpcCliRunParams = {
   argv?: string[]
+  /** Logger for command results and errors. Defaults to `yamlTableConsoleLogger`, which renders objects as yaml and arrays of objects as tables. */
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
+  /**
+   * How to prompt for missing inputs. Pass a prompt library (`@inquirer/prompts`, `enquirer`, `prompts`,
+   * `@clack/prompts`) or a custom `Prompter`. `true` forces the built-in prompts; `false`/`null` disables prompting
+   * entirely. When not set, the built-in prompts are enabled iff the caller looks like an interactive human: stdin
+   * is a TTY and no coding-agent environment is detected (see `isAgent`).
+   */
   prompts?: Promptable | boolean | null
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
