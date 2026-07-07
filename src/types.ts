@@ -28,6 +28,8 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
    * - `'auto'`: every command accepts `--json` as an alternative to its schema-derived flags and positional arguments. When `--json` is passed it must be the *only* input - combining it with other flags or positional arguments results in an unknown option error. Exception: if a procedure's schema already defines a `json` property, the schema wins - that command keeps its regular schema-derived `--json` flag.
    * - `'always'`: every command *only* accepts `--json` - no schema-derived flags or positional arguments.
    *
+   * Commands whose procedures accept no input at all never get `--json`, in any mode - there's nothing to provide.
+   *
    * Individual procedures can override this with `jsonInput` in their meta.
    */
   jsonInput?: JsonInputMode

@@ -191,6 +191,32 @@ test('help in flags mode shows --json on leaf commands; json-mode help shows onl
   `)
 })
 
+test(`commands with no inputs never get --json`, async () => {
+  const router = t.router({
+    ping: t.procedure.query(() => 'pong'), // no .input() at all
+    empty: t.procedure.input(z.object({})).query(() => 'ok'), // empty object schema
+    greet: t.procedure.input(z.object({name: z.string()})).query(({input}) => `hello ${input.name}`),
+  })
+  const params = {router, jsonInput: 'auto'} as const
+
+  // there's nothing to provide as JSON, so --json isn't offered - and isn't accepted
+  expect(await runWith(params, ['ping', '--help'])).not.toContain('--json')
+  expect(await runWith(params, ['empty', '--help'])).not.toContain('--json')
+  await expect(runWith(params, ['ping', '--json', '{}'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--json'
+  `)
+  expect(await runWith(params, ['ping'])).toMatchInlineSnapshot(`"pong"`)
+
+  // sibling commands with inputs still get --json as usual
+  expect(await runWith(params, ['greet', '--help'])).toContain('--json')
+  expect(await runWith(params, ['greet', '--json', '{"name":"Ada"}'])).toMatchInlineSnapshot(`"hello Ada"`)
+
+  // same for 'always' mode: JSON-only would mean no inputs anyway, so the option is dropped there too
+  expect(await runWith({router, jsonInput: 'always'}, ['ping', '--help'])).not.toContain('--json')
+  expect(await runWith({router, jsonInput: 'always'}, ['ping'])).toMatchInlineSnapshot(`"pong"`)
+})
+
 test(`jsonInput: 'never' disables --json globally`, async () => {
   const router = t.router({
     object: t.procedure.input(z.object({foo: z.string().optional()})).query(({input}) => JSON.stringify(input)),
