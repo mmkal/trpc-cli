@@ -199,7 +199,7 @@ export function createCli<R extends AnyRouter>(
       // node:fs / dynamic import / the vendored typebox parser are only needed (and only loaded) in this mode
       cliPromise ||= import('./module-commands.js')
         .then(mc => mc.moduleToRouter(moduleInput))
-        .then(router => createCli({router, ...params, defaultName}))
+        .then(router => createRouterCli({router, ...params}, {defaultName}))
       return cliPromise
     }
     // module loading is async, so this mode's buildProgram/toJSON are async wrappers around the resolved router CLI
@@ -214,7 +214,19 @@ export function createCli<R extends AnyRouter>(
   }
   // the module branch above returns, so this is the router case. The params keys are all optional, so TS can't
   // narrow the union by their absence - assert the router shape explicitly.
-  const {router, ...params} = allParams as TrpcCliParams<R>
+  return createRouterCli(allParams as TrpcCliParams<R>, {defaultName: undefined})
+}
+
+/**
+ * Router-mode implementation of {@linkcode createCli}. Not exported: the second parameter is internal plumbing -
+ * module mode passes the commands-file basename as a low-priority fallback name, which ranks below
+ * environment-derived names and so can't be expressed via the public `name` param.
+ */
+function createRouterCli<R extends AnyRouter>(
+  allParams: TrpcCliParams<R>,
+  internal: {defaultName: string | undefined},
+): TrpcCli {
+  const {router, ...params} = allParams
   const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {
@@ -225,7 +237,7 @@ export function createCli<R extends AnyRouter>(
     // the npm_* env vars describe the host process, not this CLI. Same reasoning as `jsonFlagSniffed` below: a bare
     // buildProgram()/toJSON() call has no invocation to inspect, so it doesn't get an environment-derived name either.
     const environmentDriven = runParams !== undefined && runParams.argv === undefined
-    const program = new Command(params.name || (environmentDriven ? guessCliName() : undefined) || params.defaultName)
+    const program = new Command(params.name || (environmentDriven ? guessCliName() : undefined) || internal.defaultName)
 
     // Each leaf command resolves a `jsonInput` mode: `meta.jsonInput || params.jsonInput || 'never'`. 'always' builds
     // the command JSON-only; 'never' (the default) builds it from its schema. 'auto' is secretly 'always' with a

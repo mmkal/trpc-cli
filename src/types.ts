@@ -12,11 +12,6 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
    * `npm run ...`, or the entry script's basename. See the readme section "How the CLI name is resolved".
    */
   name?: string
-  /**
-   * Fallback `name` used only when `name` is absent and no environment-derived name applies. Set internally by
-   * module mode to the commands-file basename - you probably want `name` instead.
-   */
-  defaultName?: string
   version?: string
   description?: string
   usage?: string | string[]

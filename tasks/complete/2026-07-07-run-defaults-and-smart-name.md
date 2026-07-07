@@ -45,8 +45,9 @@ output. Make the good behavior the default and let explicit params override.
 - [x] Implement resolution _(src/resolve-name.ts: `guessCliName` = bin-entry match >
       npm_lifecycle_event (guarded) > argv[1] basename; soft `node:fs` import so non-node
       runtimes skip env rules)_
-- [x] Module-mode default name _(module branch of createCli passes the commands-file
-      basename down via a new internal-ish `defaultName` param on TrpcCliParams)_
+- [x] Module-mode default name _(module branch passes the commands-file basename to the
+      internal `createRouterCli` function as a low-priority fallback - not on the public
+      params type)_
 - [x] Tests _(test/resolve-name.test.ts unit tests incl. temp-package bin fixtures; e2e
       tests for lifecycle-derived + basename-derived names; in-process module-name test in
       typebox-module-commands.test.ts; bin.test.ts "named after the module file" now
@@ -100,6 +101,7 @@ output. Make the good behavior the default and let explicit params override.
 - Smoke-tested against built dist: fake package with `bin: {"my-neat-tool": "./cli.mjs"}`
   run as `node cli.mjs --help` shows `Usage: my-neat-tool`; piped-stdin run with missing
   args fails fast instead of hanging on a prompt.
-- `defaultName` lives on the public `TrpcCliParams` type (jsdoc steers users to `name`) -
-  alternative was threading module info into buildProgram some other way; this was the
-  smallest seam. Flag in review if it feels too public.
+- `defaultName` initially lived on the public `TrpcCliParams` type as the seam between
+  module mode and the router implementation; per review it was moved off the public API -
+  the router-mode implementation is now an internal `createRouterCli(params, {defaultName})`
+  function that both the public `createCli` and the module branch call.
