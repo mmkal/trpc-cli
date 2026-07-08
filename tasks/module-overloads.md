@@ -92,6 +92,20 @@ doesn't need to know which signature matched; it just passes the validated objec
 - Overloads of a *scalar* parameter (e.g. `(x: string)` / `(x: number)`) also fall back to
   first-signature: alternate positional layouts aren't representable.
 
+## Review feedback round 1 (2026-07-08)
+
+- "misleadingly universal" description: the first signature's jsdoc no longer poses as the
+  command description. Precedence now: implementation-signature jsdoc (the new home for an
+  overall description) > signatures' distinct descriptions joined with ' / '. `@alias` is
+  honored wherever declared (implementation or any signature).
+- Flag descriptions now advertise incompatibilities (`Do not use with: --scale`), derived
+  from the same `incompatiblePropertyPairs` that powers commander `conflicts`. Implemented
+  generically in index.ts, so zod/trpc union inputs get it too (migrations fixture
+  snapshots updated accordingly).
+- A flag documented *differently* across signatures shows every distinct description
+  joined with ' / ' (previously last-write-wins). Jsdoc declared in only one signature
+  already propagated; now pinned by tests.
+
 ## Possible follow-ups (not done)
 
 - Overloads whose positional params are textually identical, differing only in the

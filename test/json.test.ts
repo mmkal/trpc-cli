@@ -107,7 +107,7 @@ test('migrations toJSON', async () => {
               "negate": false,
               "variadic": false,
               "flags": "--to [string]",
-              "description": "Mark migrations up to this one as exectued",
+              "description": "Mark migrations up to this one as exectued; Do not use with: --step",
               "attributeName": "to"
             },
             {
@@ -117,7 +117,7 @@ test('migrations toJSON', async () => {
               "negate": false,
               "variadic": false,
               "flags": "--step [number]",
-              "description": "Mark this many migrations as executed; Exclusive minimum: 0",
+              "description": "Mark this many migrations as executed; Exclusive minimum: 0; Do not use with: --to",
               "attributeName": "step"
             }
           ],

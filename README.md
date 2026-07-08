@@ -778,7 +778,9 @@ Usage: mycli resize --input <string> --width <number> --height <number>  # resiz
 ...
 ```
 
-The flags list is the union of all signatures' flags, and flags that never appear in the same signature conflict (`--width` can't be combined with `--scale`). At runtime, the input is validated against each signature's schema in declaration order - mirroring TypeScript's own overload resolution - and the first match is passed to the function. If nothing matches, the error reports each signature's issues, closest match first.
+The flags list is the union of all signatures' flags, and flags that never appear in the same signature conflict (`--width` can't be combined with `--scale`) - their help descriptions are annotated with `Do not use with: ...`. At runtime, the input is validated against each signature's schema in declaration order - mirroring TypeScript's own overload resolution - and the first match is passed to the function. If nothing matches, the error reports each signature's issues, closest match first.
+
+jsdoc conventions for overloaded commands: each signature's jsdoc describes *its* calling convention (it becomes that usage line's `#` comment); a jsdoc on the *implementation* signature describes the command as a whole (shown as the command description - without one, the signatures' descriptions are joined). Property jsdoc works as usual, and a flag documented differently in different signatures (say, an `input` that means a URL in one and a file path in another) shows each distinct description, joined with `/`.
 
 Details and limitations:
 

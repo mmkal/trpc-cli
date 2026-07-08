@@ -348,7 +348,21 @@ export function createCli<R extends AnyRouter>(
             return propertyKey // by default commander uses camelcase(this.name()) which turns `use-mcp-server` into `useMcpServer` - when it might be `useMCPServer`
           }
         }
-        const description = getDescription(propertyValue)
+        // union inputs (including module-mode overloads) produce flags that can't be combined - say so in help,
+        // since commander's `conflicts` otherwise only surfaces at error time
+        const incompatibleWith = [
+          ...new Set(
+            incompatiblePairs.flatMap(pair => (pair.includes(propertyKey) ? pair.filter(p => p !== propertyKey) : [])),
+          ),
+        ]
+        const description = [
+          getDescription(propertyValue),
+          incompatibleWith.length > 0
+            ? `Do not use with: ${incompatibleWith.map(other => `--${kebabCase(other)}`).join(', ')}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('; ')
 
         const longOption = `--${kebabCase(propertyKey)}`
         let flags = longOption

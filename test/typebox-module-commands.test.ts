@@ -716,13 +716,13 @@ test('module commands: overloaded functions become alternate calling conventions
     "Usage: imgtool resize --input <string> --width <number> --height <number>  # resize by explicit dimensions
            imgtool resize --input <string> --scale <number>                    # resize by scale factor, preserving aspect ratio
 
-    resize by explicit dimensions
+    resize by explicit dimensions / resize by scale factor, preserving aspect ratio
 
     Options:
       --input [string]   path to the input image
-      --width [number]
-      --height [number]
-      --scale [number]
+      --width [number]   Do not use with: --scale
+      --height [number]  Do not use with: --scale
+      --scale [number]   Do not use with: --height, --width
       -h, --help         display help for command
     "
   `)
@@ -785,6 +785,7 @@ test('module commands: class method overloads become alternate calling conventio
         login(options: {token: string}): string
         /** log in with a username and password */
         login(options: {username: string; password: string}): string
+        /** authenticate with the service */
         login(options: any) {
           return 'logged in'
         }
@@ -806,10 +807,51 @@ test('module commands: class method overloads become alternate calling conventio
   expect(help).toContain(
     '       program auth login --username <string> --password <string>  # log in with a username and password',
   )
+  // the *implementation* signature's jsdoc describes the command as a whole (each overload jsdoc only describes
+  // its own calling convention, so none of them can honestly claim the top-level description slot)
+  expect(help).toContain('authenticate with the service')
   expect(await runWith(params, ['auth', 'login', '--token', 'xyz'])).toBe('logged in with token')
   expect(await runWith(params, ['auth', 'login', '--username', 'amy', '--password', 'hunter2'])).toBe(
     'logged in as amy',
   )
+})
+
+test('module commands: overload flag jsdoc - repeated, differing, and signature-specific', async () => {
+  const params = {
+    source: `
+      /** fetch from a URL */
+      export function grab(options: {
+        /** URL of the resource */
+        source: string
+        /** HTTP timeout in ms */
+        timeoutMs?: number
+      }): string
+      /** read from disk */
+      export function grab(options: {
+        /** path to a local file */
+        source: string
+        encoding?: 'utf8' | 'base64'
+      }): string
+      export function grab(options: any) {
+        return 'grabbed'
+      }
+    `,
+    exports: {grab: (options: any) => `grabbed ${options.source}`},
+  }
+  expect(await runWith({...params, name: 'grabber'}, ['grab', '--help'])).toMatchInlineSnapshot(`
+    "Usage: grabber grab --source <string> [--timeout-ms <number>]     # fetch from a URL
+           grabber grab --source <string> [--encoding <utf8|base64>]  # read from disk
+
+    fetch from a URL / read from disk
+
+    Options:
+      --source [string]      URL of the resource / path to a local file
+      --timeout-ms [number]  HTTP timeout in ms; Do not use with: --encoding
+      --encoding [string]    Do not use with: --timeout-ms (choices: "utf8",
+                             "base64")
+      -h, --help             display help for command
+    "
+  `)
 })
 
 test('module positionals: overloaded multi-parameter functions use the first overload signature', async () => {

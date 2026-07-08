@@ -86,6 +86,12 @@ export interface ExtractedCommand {
    * included. See `buildOverloadedProcedure` for how overloads become alternate calling conventions.
    */
   overloads?: ExtractedOverload[]
+  /**
+   * cleaned jsdoc of the overload *implementation* signature, when the export is overloaded. Each overload
+   * signature's jsdoc describes just that calling convention, so this is the natural home for a description of
+   * the command as a whole.
+   */
+  implementationDescription?: string
 }
 
 /** One signature of a command declared with multiple TS overload signatures. */
@@ -458,8 +464,25 @@ const buildOverloadedProcedure = (
   const usage = variants.map(variant =>
     variant.description ? `${variant.flags.padEnd(flagsWidth)}  # ${variant.description}` : variant.flags,
   )
+
+  // Command-level description: each signature's jsdoc describes *its* calling convention (shown as that usage
+  // line's comment), so presenting the first signature's jsdoc as the whole command's description would be
+  // misleadingly universal. The implementation signature's jsdoc is the natural home for an overall description;
+  // failing that, the signatures' (distinct) descriptions are joined. Command `@alias`es are honored wherever
+  // they're declared.
+  const implementationDoc = parseCliJsdoc(command.implementationDescription)
+  const variantDocs = command.overloads!.map(overload => parseCliJsdoc(overload.description))
+  const distinctDescriptions = [...new Set(variantDocs.map(doc => doc.description).filter(Boolean))]
+  const description = implementationDoc.description || distinctDescriptions.join(' / ')
+  const aliases = [...new Set([...implementationDoc.aliases, ...variantDocs.flatMap(doc => doc.aliases)])]
+  const overloadedMeta: Record<string, unknown> = {...meta, usage}
+  if (description) overloadedMeta.description = description
+  else delete overloadedMeta.description
+  if (aliases.length > 0) overloadedMeta.aliases = {command: aliases}
+  else delete overloadedMeta.aliases
+
   return t.procedure
-    .meta({...meta, usage})
+    .meta(overloadedMeta)
     .input(combined as never)
     .handler(({input}) => fn(input))
 }
@@ -512,24 +535,32 @@ const overloadFlagsSummary = (schema: unknown): string => {
 }
 
 /**
- * A flag shared between overload signatures keeps its jsdoc even when only one signature documents it: the union
- * flag-merge in `flattenedProperties` keeps the *last* occurrence of each property, so a description or `@alias`
- * declared on an earlier signature would silently disappear from help. Copy them (first occurrence wins) onto
- * same-named properties that lack them. Cosmetic metadata only - validation behavior is unaffected.
+ * Reconcile per-flag jsdoc across overload signatures. The union flag-merge in `flattenedProperties` keeps the
+ * *last* occurrence of each property, which would silently drop a description or `@alias` declared on an earlier
+ * signature. Descriptions: a flag documented in one signature (or identically in several) keeps that text; a flag
+ * documented *differently* per signature (e.g. an `input` accepting subtly different values) shows every distinct
+ * description, joined with ' / ' in declaration order. Aliases: first occurrence wins. Cosmetic metadata only -
+ * validation behavior is unaffected.
  */
 const fillSharedFlagMetadata = (variants: OverloadVariant[]) => {
   const branches = variants.flatMap(variant => objectBranches(variant.schema))
-  for (const key of ['description', 'alias']) {
-    const firstValues = new Map<string, unknown>()
-    for (const branch of branches) {
-      for (const [name, property] of Object.entries(branch.properties || {})) {
-        if (!firstValues.has(name) && property[key] !== undefined) firstValues.set(name, property[key])
+  const descriptions = new Map<string, string[]>()
+  const aliases = new Map<string, unknown>()
+  for (const branch of branches) {
+    for (const [name, property] of Object.entries(branch.properties || {})) {
+      if (typeof property.description === 'string') {
+        const distinct = descriptions.get(name) || []
+        if (!distinct.includes(property.description)) distinct.push(property.description)
+        descriptions.set(name, distinct)
       }
+      if (property.alias !== undefined && !aliases.has(name)) aliases.set(name, property.alias)
     }
-    for (const branch of branches) {
-      for (const [name, property] of Object.entries(branch.properties || {})) {
-        if (property[key] === undefined && firstValues.has(name)) property[key] = firstValues.get(name)
-      }
+  }
+  for (const branch of branches) {
+    for (const [name, property] of Object.entries(branch.properties || {})) {
+      const description = descriptions.get(name)?.join(' / ')
+      if (description) property.description = description
+      if (aliases.has(name)) property.alias = aliases.get(name)
     }
   }
 }
@@ -1030,13 +1061,13 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
   // falls back to just the first signature. The implementation signature is never used, so an unannotated
   // implementation (`function f(options) {`) can't poison a command whose signatures are fine, and signatures
   // whose params fail to parse are dropped individually rather than sinking the whole command.
-  return groupOverloadDeclarations(declarations).flatMap((group): ExtractedCommand[] => {
-    const overloads = group.flatMap(declaration => {
+  return groupOverloadDeclarations(declarations).flatMap(({winners, implementation}): ExtractedCommand[] => {
+    const overloads = winners.flatMap(declaration => {
       const params = tryParseParams(declaration.name, declaration.paramList)
       return params ? [{description: declaration.description, params}] : []
     })
     if (overloads.length === 0) return []
-    const {name, exportName, default: defaultExport} = group[0]
+    const {name, exportName, default: defaultExport} = winners[0]
     return [
       {
         name,
@@ -1044,17 +1075,20 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
         default: defaultExport,
         description: overloads[0].description,
         params: overloads[0].params,
-        ...(overloads.length > 1 ? {overloads} : {}),
+        ...(overloads.length > 1 ? {overloads, implementationDescription: implementation?.description} : {}),
       },
     ]
   })
 }
 
 /**
- * Group declarations sharing a name, keeping the declarations that define the command's calling convention(s):
+ * Group declarations sharing a name. `winners` are the declarations defining the command's calling convention(s):
  * all body-less overload signatures when any exist (in declaration order), otherwise the first implementation.
+ * The implementation declaration is kept separately - its jsdoc can describe an overloaded command as a whole.
  */
-const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean}>(declarations: D[]): D[][] => {
+const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; description?: string | undefined}>(
+  declarations: D[],
+): Array<{winners: D[]; implementation: D | undefined}> => {
   const groups = new Map<string, D[]>()
   for (const declaration of declarations) {
     const group = groups.get(declaration.name)
@@ -1063,7 +1097,10 @@ const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean}>(d
   }
   return [...groups.values()].map(group => {
     const signatures = group.filter(declaration => !declaration.hasBody)
-    return signatures.length > 0 ? signatures : group.slice(0, 1)
+    return {
+      winners: signatures.length > 0 ? signatures : group.slice(0, 1),
+      implementation: group.find(declaration => declaration.hasBody),
+    }
   })
 }
 
@@ -1097,23 +1134,25 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
       if (hasConstructorParameters) continue
       if (hasBaseClass && !hasZeroArgConstructor) continue
       if (methodDeclarations.length === 0) continue
-      const methods = methodDeclarations.flatMap(({methodName, signatures}): ExtractedCommand[] => {
-        const overloads = signatures.flatMap(signature => {
-          const params = tryParseParams(`${name}.${methodName}`, signature.paramList)
-          return params ? [{description: signature.description, params}] : []
-        })
-        if (overloads.length === 0) return []
-        return [
-          {
-            name: methodName,
-            exportName: methodName,
-            default: false,
-            description: overloads[0].description,
-            params: overloads[0].params,
-            ...(overloads.length > 1 ? {overloads} : {}),
-          },
-        ]
-      })
+      const methods = methodDeclarations.flatMap(
+        ({methodName, signatures, implementationDescription}): ExtractedCommand[] => {
+          const overloads = signatures.flatMap(signature => {
+            const params = tryParseParams(`${name}.${methodName}`, signature.paramList)
+            return params ? [{description: signature.description, params}] : []
+          })
+          if (overloads.length === 0) return []
+          return [
+            {
+              name: methodName,
+              exportName: methodName,
+              default: false,
+              description: overloads[0].description,
+              params: overloads[0].params,
+              ...(overloads.length > 1 ? {overloads, implementationDescription} : {}),
+            },
+          ]
+        },
+      )
       if (methods.length === 0) continue
       classes.push({name, exportName, default: defaultExport, methods})
     }
@@ -1139,6 +1178,8 @@ const extractClassMethodDeclarations = (
     methodName: string
     /** one per body-less overload signature, or a single entry for a plain method - same rule as `groupOverloadDeclarations` */
     signatures: Array<{description: string | undefined; paramList: string}>
+    /** jsdoc of the overload implementation, when the method is overloaded */
+    implementationDescription: string | undefined
   }>
   hasConstructorParameters: boolean
   hasZeroArgConstructor: boolean
@@ -1203,9 +1244,10 @@ const extractClassMethodDeclarations = (
   return {
     hasConstructorParameters,
     hasZeroArgConstructor,
-    methodDeclarations: groupOverloadDeclarations(declarations).map(group => ({
-      methodName: group[0].name,
-      signatures: group.map(({description, paramList}) => ({description, paramList})),
+    methodDeclarations: groupOverloadDeclarations(declarations).map(({winners, implementation}) => ({
+      methodName: winners[0].name,
+      signatures: winners.map(({description, paramList}) => ({description, paramList})),
+      implementationDescription: implementation?.description,
     })),
   }
 }
