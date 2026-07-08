@@ -684,29 +684,138 @@ test('module positionals: boolean and literal-union positionals', async () => {
   await expect(runWith(params, ['set', 'nope', 'true'])).rejects.toThrowError(/nope/)
 })
 
-test('module commands: overloaded functions use the first overload signature', async () => {
+test('module commands: overloaded functions become alternate calling conventions', async () => {
   const params = {
-    // TS overloads extract once per declaration. The *implementation* signature is typically widened
-    // (`options: any`) - using it would produce a misleading error. TS resolves calls against the overload
-    // signatures in order, so the FIRST signature is the primary documented shape and becomes the command's
-    // calling convention; the implementation and later overloads are ignored.
+    // TS overloads extract once per declaration: the body-less *signatures* first, the *implementation* (typically
+    // widened, e.g. `params: any`) last. Every signature becomes a way to call the command: help shows one usage
+    // line per signature (with its jsdoc as a trailing comment), the flags list is the union of all signatures'
+    // flags, and validation checks each signature in declaration order, passing the first match to the function.
     source: `
-      export function f(options: {mode: 'a'}): string
-      export function f(options: {mode: 'b'}): number
-      export function f(options: any) { return options.mode }
+      /** resize by explicit dimensions */
+      export function resize(params: {
+        /** path to the input image */
+        input: string
+        width: number
+        height: number
+      }): Promise<string>
+      /** resize by scale factor, preserving aspect ratio */
+      export function resize(params: {input: string; scale: number}): Promise<string>
+      export function resize(params: any) {
+        return 'resized'
+      }
     `,
-    exports: {f: (options: any) => options.mode},
+    exports: {
+      resize: (input: any) =>
+        'scale' in input
+          ? `resized ${input.input} by ${input.scale}x`
+          : `resized ${input.input} to ${input.width}x${input.height}`,
+    },
   }
-  expect(await runWith(params, ['f', '--mode', 'a'])).toMatchInlineSnapshot(`"a"`)
-  // the second overload is ignored, so 'b' is rejected - the CLI presents exactly one calling convention
-  await expect(runWith(params, ['f', '--mode', 'b'])).rejects.toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: Error: Invalid input: ✖ must be equal to constant → at mode
+
+  expect(await runWith({...params, name: 'imgtool'}, ['resize', '--help'])).toMatchInlineSnapshot(`
+    "Usage: imgtool resize --input <string> --width <number> --height <number>  # resize by explicit dimensions
+           imgtool resize --input <string> --scale <number>                    # resize by scale factor, preserving aspect ratio
+
+    resize by explicit dimensions
+
+    Options:
+      --input [string]   path to the input image
+      --width [number]
+      --height [number]
+      --scale [number]
+      -h, --help         display help for command
+    "
   `)
+
+  // each signature is dispatched by first match, in declaration order - the implementation branches on shape
+  expect(await runWith(params, ['resize', '--input', 'a.png', '--width', '100', '--height', '50'])).toBe(
+    'resized a.png to 100x50',
+  )
+  expect(await runWith(params, ['resize', '--input', 'a.png', '--scale', '0.5'])).toBe('resized a.png by 0.5x')
+
+  // flags that never appear in the same signature are conflicting - commander catches the mix before validation
+  await expect(runWith(params, ['resize', '--input', 'a.png', '--width', '100', '--scale', '2'])).rejects.toThrow(
+    /'--width \[number]' cannot be used with option '--scale \[number]'/,
+  )
+
+  // matching no signature reports each signature's issues - closest match (fewest issues) first
+  await expect(runWith(params, ['resize', '--input', 'a.png'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Error: Invalid input: ✖ matched none of the 2 ways to call this command:
+      --input <string> --width <number> --height <number>: must have required properties width, height
+      --input <string> --scale <number>: must have required properties scale
+  `)
+})
+
+test('module commands: overload signatures can use named types and required literals', async () => {
+  const params = {
+    // pnpm-install-style: a required `global: true` literal is the discriminator for the second calling
+    // convention, and shows in its usage line as a bare required flag
+    source: `
+      type LocalInstall = {
+        /** the package to install */
+        name: string
+        dev?: boolean
+      }
+      type GlobalInstall = {name: string; global: true; saveDir?: string}
+
+      export function install(params: LocalInstall): Promise<string>
+      export function install(params: GlobalInstall): Promise<string>
+      export function install(params: any) {
+        return 'installed'
+      }
+    `,
+    exports: {
+      install: (input: any) => `installed ${input.name}${input.global ? ' globally' : ''}`,
+    },
+  }
+  const help = await runWith({...params, name: 'mypm'}, ['install', '--help'])
+  expect(help).toContain('mypm install --name <string> [--dev]')
+  expect(help).toContain('mypm install --name <string> --global [--save-dir <string>]')
+  expect(help).toContain('the package to install') // property jsdoc survives the flag merge across signatures
+  expect(await runWith(params, ['install', '--name', 'left-pad', '--global'])).toBe('installed left-pad globally')
+  expect(await runWith(params, ['install', '--name', 'left-pad'])).toBe('installed left-pad')
+})
+
+test('module commands: class method overloads become alternate calling conventions', async () => {
+  const params = {
+    source: `
+      export class Auth {
+        /** log in with a personal access token */
+        login(options: {token: string}): string
+        /** log in with a username and password */
+        login(options: {username: string; password: string}): string
+        login(options: any) {
+          return 'logged in'
+        }
+      }
+    `,
+    exports: {
+      Auth: class {
+        login(options: any) {
+          return 'token' in options ? 'logged in with token' : `logged in as ${options.username}`
+        }
+      },
+    },
+  }
+  const help = await runWith(params, ['auth', 'login', '--help'])
+  // usage lines repeat the full nested command prefix and align the jsdoc comments across signatures
+  expect(help).toContain(
+    'Usage: program auth login --token <string>                         # log in with a personal access token',
+  )
+  expect(help).toContain(
+    '       program auth login --username <string> --password <string>  # log in with a username and password',
+  )
+  expect(await runWith(params, ['auth', 'login', '--token', 'xyz'])).toBe('logged in with token')
+  expect(await runWith(params, ['auth', 'login', '--username', 'amy', '--password', 'hunter2'])).toBe(
+    'logged in as amy',
+  )
 })
 
 test('module positionals: overloaded multi-parameter functions use the first overload signature', async () => {
   const params = {
+    // alternate calling conventions are only derived for single-object-parameter signatures - commander has no way
+    // to present alternate positional layouts, so overloads with positionals fall back to the first signature
     source: `
       /** greet someone */
       export function greet(name: string, options?: {shout?: boolean}): string

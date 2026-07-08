@@ -296,7 +296,24 @@ export function createCli<R extends AnyRouter>(
       })
       command.showHelpAfterError()
 
-      if (meta.usage) command.usage([meta.usage].flat().join('\n'))
+      if (meta.usage) {
+        const usageLines = [meta.usage].flat()
+        command.usage(usageLines.join('\n'))
+        if (usageLines.length > 1) {
+          // align each usage line under `Usage: `, repeating the full command prefix (like git's multi-line usage) -
+          // without this, commander renders continuation lines unindented at column 0
+          command.configureHelp({
+            commandUsage: cmd => {
+              let prefix = cmd.name()
+              if (cmd.aliases()[0]) prefix += `|${cmd.aliases()[0]}`
+              for (let ancestor = cmd.parent; ancestor; ancestor = ancestor.parent) {
+                prefix = `${ancestor.name()} ${prefix}`
+              }
+              return usageLines.map(line => `${prefix} ${line}`).join('\n' + ' '.repeat('Usage: '.length))
+            },
+          })
+        }
+      }
       if (meta.examples) command.addHelpText('after', `\nExamples:\n${[meta.examples].flat().join('\n')}`)
 
       meta?.aliases?.command?.forEach(alias => {
