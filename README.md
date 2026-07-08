@@ -764,8 +764,15 @@ export function resize(params: {
 }): Promise<string>
 /** resize by scale factor, preserving aspect ratio */
 export function resize(params: {input: string; scale: number}): Promise<string>
-export function resize(params: any) {
-  // the implementation dispatches on the input's shape, as overload implementations always do
+/** resize an image */
+export function resize(params: {
+  input: string
+  width?: number
+  height?: number
+  scale?: number
+}) {
+  // the implementation dispatches on the input's shape, as overload implementations always do.
+  // its jsdoc (if any) becomes the command's overall description
 }
 ```
 
