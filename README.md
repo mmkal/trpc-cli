@@ -410,6 +410,8 @@ When `--json` is passed, it must supply the *whole* input - schema-derived flags
 
 If a procedure's input schema defines its own `json` property, the schema wins: that command keeps its regular schema-derived `--json` flag, and the JSON-input behavior is disabled for it.
 
+Commands whose procedures accept no input at all (no `.input(...)`, or an empty object schema) never get a `--json` option, in any mode - there's nothing to provide.
+
 The `jsonInput` setting accepts `'never'` (the default - commands don't accept `--json`), `'auto'` (described above) or `'always'`, either CLI-wide via `createCli({jsonInput: ...})` or per procedure in its meta (the meta value takes precedence):
 
 ```ts

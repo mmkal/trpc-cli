@@ -14,7 +14,7 @@ if (!filepath || filepath === '--help' || filepath === '-h') {
       'Runs a TypeScript/JavaScript module of plain exported functions as a CLI (experimental).',
       'Each exported function becomes a command: leading string/number/boolean parameters become',
       'positional arguments, a trailing object parameter becomes flags, and jsdoc comments become',
-      'help text. Every command also accepts its full input as `--json <json>`.',
+      'help text. Commands that take input also accept it all at once as `--json <json>`.',
       '',
       'Example:',
       '  // commands.ts',
