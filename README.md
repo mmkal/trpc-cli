@@ -757,7 +757,11 @@ TypeScript function overloads become alternate calling conventions for a single 
 ```ts
 // commands.ts
 /** resize by explicit dimensions */
-export function resize(params: {input: string; width: number; height: number}): Promise<string>
+export function resize(params: {
+  input: string
+  width: number
+  height: number
+}): Promise<string>
 /** resize by scale factor, preserving aspect ratio */
 export function resize(params: {input: string; scale: number}): Promise<string>
 export function resize(params: any) {
