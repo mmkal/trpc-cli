@@ -1637,7 +1637,7 @@ npx trpc-cli ./commands.ts --help
 npx trpc-cli ./commands.ts add left-pad --dev
 ```
 
-The bin script sets [`jsonInput: 'auto'`](#json-input) (every command also accepts its full input as `--json '{...}'`); everything else - the yaml table logger, prompts for interactive humans, the CLI name - comes from the regular library defaults. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+The bin script sets [`jsonInput: 'auto'`](#json-input) (commands that take input also accept it all at once as `--json '{...}'`); everything else - the yaml table logger, prompts for interactive humans, the CLI name - comes from the regular library defaults. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
 
 Note: the bin script no longer accepts files exporting trpc/orpc routers - if you have a router, create a CLI entrypoint with `createCli({router}).run()` instead (see [Quick Start](#quick-start)).
 
