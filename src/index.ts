@@ -277,17 +277,23 @@ function createRouterCli<R extends AnyRouter>(
     const configureCommand = (command: Command, procedurePath: string, info: ProcedureInfo) => {
       const {meta} = info
       const jsonInputMode = resolveJsonInputMode(meta.jsonInput, params.jsonInput)
+      // parse the schema regardless of mode (neutralizing the meta 'always' shortcut inside getParsedProcedure,
+      // which is handled below) so we can tell whether the procedure accepts any input at all
+      const schemaDerived = getParsedProcedure({...info, meta: {...info.meta, jsonInput: undefined}})
+      const schemaProperties = flattenedProperties(schemaDerived.optionsJsonSchema)
+      const hasNoInputs = schemaDerived.positionalParameters.length === 0 && Object.keys(schemaProperties).length === 0
       let parsedProcedure: ParsedProcedure
       let addCosmeticJsonOption = false
-      if (jsonInputMode === 'always') {
+      if (hasNoInputs) {
+        // a procedure that accepts no input has nothing to provide as JSON - never offer `--json`, in any mode.
+        // (unparseable schemas don't land here: their fallback parse has a real `json` option, i.e. it HAS an input)
+        parsedProcedure = schemaDerived
+      } else if (jsonInputMode === 'always') {
         parsedProcedure = jsonProcedureInputs()
       } else {
-        const schemaDerived = getParsedProcedure(info)
         // schema-wins guard: if the schema already derives a `json` option (including the unparseable-schema fallback,
         // which *is* a real `--json` option), the schema keeps it - no JSON-only build, no cosmetic help option
-        const schemaHasJsonOption = Object.keys(flattenedProperties(schemaDerived.optionsJsonSchema)).some(
-          key => kebabCase(key) === 'json',
-        )
+        const schemaHasJsonOption = Object.keys(schemaProperties).some(key => kebabCase(key) === 'json')
         if (jsonInputMode === 'auto' && !schemaHasJsonOption && jsonFlagSniffed) {
           parsedProcedure = jsonProcedureInputs()
         } else {
