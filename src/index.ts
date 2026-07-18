@@ -319,7 +319,24 @@ function createRouterCli<R extends AnyRouter>(
       })
       command.showHelpAfterError()
 
-      if (meta.usage) command.usage([meta.usage].flat().join('\n'))
+      if (meta.usage) {
+        const usageLines = [meta.usage].flat()
+        command.usage(usageLines.join('\n'))
+        if (usageLines.length > 1) {
+          // align each usage line under `Usage: `, repeating the full command prefix (like git's multi-line usage) -
+          // without this, commander renders continuation lines unindented at column 0
+          command.configureHelp({
+            commandUsage: cmd => {
+              let prefix = cmd.name()
+              if (cmd.aliases()[0]) prefix += `|${cmd.aliases()[0]}`
+              for (let ancestor = cmd.parent; ancestor; ancestor = ancestor.parent) {
+                prefix = `${ancestor.name()} ${prefix}`
+              }
+              return usageLines.map(line => `${prefix} ${line}`).join('\n' + ' '.repeat('Usage: '.length))
+            },
+          })
+        }
+      }
       if (meta.examples) command.addHelpText('after', `\nExamples:\n${[meta.examples].flat().join('\n')}`)
 
       meta?.aliases?.command?.forEach(alias => {
@@ -354,7 +371,21 @@ function createRouterCli<R extends AnyRouter>(
             return propertyKey // by default commander uses camelcase(this.name()) which turns `use-mcp-server` into `useMcpServer` - when it might be `useMCPServer`
           }
         }
-        const description = getDescription(propertyValue)
+        // union inputs (including module-mode overloads) produce flags that can't be combined - say so in help,
+        // since commander's `conflicts` otherwise only surfaces at error time
+        const incompatibleWith = [
+          ...new Set(
+            incompatiblePairs.flatMap(pair => (pair.includes(propertyKey) ? pair.filter(p => p !== propertyKey) : [])),
+          ),
+        ]
+        const description = [
+          getDescription(propertyValue),
+          incompatibleWith.length > 0
+            ? `Do not use with: ${incompatibleWith.map(other => `--${kebabCase(other)}`).join(', ')}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('; ')
 
         const longOption = `--${kebabCase(propertyKey)}`
         let flags = longOption

@@ -753,6 +753,43 @@ export async function copy(
 
 Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becomes the positional argument's description.
 
+TypeScript function overloads become alternate calling conventions for a single command, when every signature takes a single object parameter:
+
+```ts
+// commands.ts
+/** resize by explicit dimensions */
+export function resize(params: {
+  input: string
+  width: number
+  height: number
+}): Promise<string>
+/** resize by scale factor, preserving aspect ratio */
+export function resize(params: {input: string; scale: number}): Promise<string>
+/** resize an image */
+export function resize(params: {
+  input: string
+  width?: number
+  height?: number
+  scale?: number
+}) {
+  // the implementation dispatches on the input's shape, as overload implementations always do.
+  // its jsdoc (if any) becomes the command's overall description
+}
+```
+
+Help shows one usage line per signature (with its jsdoc as a trailing comment):
+
+```console
+$ mycli resize --help
+Usage: mycli resize --input <string> --width <number> --height <number>  # resize by explicit dimensions
+       mycli resize --input <string> --scale <number>                    # resize by scale factor, preserving aspect ratio
+...
+```
+
+The flags list is the union of all signatures' flags, and flags that never appear in the same signature conflict (`--width` can't be combined with `--scale`) - their help descriptions are annotated with `Do not use with: ...`. At runtime, the input is validated against each signature's schema in declaration order - mirroring TypeScript's own overload resolution - and the first match is passed to the function. If nothing matches, the error reports each signature's issues, closest match first.
+
+jsdoc conventions for overloaded commands: each signature's jsdoc describes *its* calling convention (it becomes that usage line's `#` comment); a jsdoc on the *implementation* signature describes the command as a whole (shown as the command description - without one, the signatures' descriptions are joined). Property jsdoc works as usual, and a flag documented differently in different signatures (say, an `input` that means a URL in one and a file path in another) shows each distinct description, joined with `/`.
+
 Details and limitations:
 
 - `filename` accepts an absolute path (robust - works from any directory), `import.meta` (when the call lives in the commands file itself), or a `URL` like `new URL('./commands.ts', import.meta.url)` (resolves relative to the importing file, so a distributed CLI works wherever it's invoked). A *relative* path string is resolved against `process.cwd()`, so it's only reliable when the CLI is run from a known directory - fine for quick scripts, but it breaks the moment a globally-installed CLI runs somewhere else, so prefer `import.meta`/`URL` for anything you distribute. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
@@ -760,7 +797,7 @@ Details and limitations:
 - Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`), references to a `type X = {...}`/`interface X {...}` declared in the same file, or relative file-backed type imports such as `import type {Options} from './types.ts'`. Interface `extends` clauses and intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags when possible. Functions with no parameters become commands with no arguments.
 - Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
 - Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed), `export default function f(...)` (anonymous default functions become a command named `default`), `export class Group { method(...) {} }`, `export default class Commands { method(...) {} }`, `export * as group from './group'`, `export * from './group'`, and `export {commandOrGroup} from './group'`. The module must export *only* commands: any other exported function - a local `export {f}` statement or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module.
-- Overloaded functions work, with a simple rule: only the *first* overload signature is used; later overloads and the implementation signature are ignored. TypeScript resolves calls against overload signatures in order, so the first one is the primary documented shape - and a CLI can only present one calling convention.
+- Overloaded functions (and class methods) become alternate calling conventions as described above when every signature takes a single object parameter. Signatures involving positional parameters can't be presented as alternatives (commander has no way to show alternate positional layouts for one command), so those fall back to using only the *first* overload signature - the primary documented shape, since TypeScript resolves calls against signatures in order. The implementation signature is always ignored.
 - For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({source: rawSourceText, exports: await import('./commands.js')})`. Re-exported command modules are not supported in this form because trpc-cli has no filesystem location to resolve child modules from.
 - In this mode `run`/`buildProgram`/`toJSON` are all **async** (the module is loaded asynchronously): `const program = await createCli(import.meta).buildProgram()`. With a router, `buildProgram`/`toJSON` are synchronous.
 - Don't pass user-controlled strings as `filename` - the path is read and dynamically imported, i.e. executed.

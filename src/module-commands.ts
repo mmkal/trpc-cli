@@ -21,8 +21,12 @@
  * parameter's name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type
  * syntax into JSON Schema - is all `Type.Script`.
  */
+import {flattenedProperties, getEnumChoices} from './json-schema.js'
 import {t} from './norpc.js'
+import {isOptional} from './parse-procedure.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
+import {StandardSchemaV1} from './standard-schema/contract.js'
+import {toDotPath} from './standard-schema/errors.js'
 import Type from './typebox/index.js'
 import {getSchemaTypes, kebabCase} from './util.js'
 
@@ -74,7 +78,26 @@ export interface ExtractedCommand {
   default: boolean
   /** cleaned jsdoc text from the comment immediately preceding the export - becomes the command description */
   description: string | undefined
-  /** the function's parameters, in declaration order. Empty = command with no args */
+  /** the function's parameters, in declaration order. Empty = command with no args. For overloaded functions, the first signature's parameters */
+  params: ExtractedParam[]
+  /**
+   * present when the function is declared with multiple TS overload signatures: one entry per body-less signature,
+   * in declaration order (the first entry mirrors `description`/`params`). The implementation signature is never
+   * included. See `buildOverloadedProcedure` for how overloads become alternate calling conventions.
+   */
+  overloads?: ExtractedOverload[]
+  /**
+   * cleaned jsdoc of the overload *implementation* signature, when the export is overloaded. Each overload
+   * signature's jsdoc describes just that calling convention, so this is the natural home for a description of
+   * the command as a whole.
+   */
+  implementationDescription?: string
+}
+
+/** One signature of a command declared with multiple TS overload signatures. */
+export interface ExtractedOverload {
+  /** cleaned jsdoc text from the comment immediately preceding this signature */
+  description: string | undefined
   params: ExtractedParam[]
 }
 
@@ -357,6 +380,11 @@ const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<st
     ...(command.default ? {default: true} : {}),
     ...(commandDoc.aliases.length > 0 ? {aliases: {command: commandDoc.aliases}} : {}),
   }
+  if (command.overloads) {
+    const overloaded = buildOverloadedProcedure(command, fn, context, meta)
+    if (overloaded) return overloaded
+  }
+
   const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
   if (command.params.length === 0) {
     return builder.handler(() => fn())
@@ -370,6 +398,187 @@ const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<st
   }
 
   return buildPositionalProcedure(builder, command, fn, context, paramSchemas)
+}
+
+interface OverloadVariant {
+  schema: unknown
+  /** flags summary shown as this variant's usage line, e.g. `--name <string> [--dev]` */
+  flags: string
+  /** first line of this signature's jsdoc, shown as a comment on its usage line */
+  description: string | undefined
+}
+
+/**
+ * TS function overloads where every signature takes a single object(-like) parameter become a command with
+ * alternate calling conventions: help shows one usage line per signature, the flags list is the union of all
+ * signatures' flags (the existing union-of-objects derivation in parse-procedure.ts, including commander
+ * `conflicts` for flags that never appear in the same signature), and validation checks each signature's schema
+ * in declaration order - mirroring TS overload resolution - passing the first match to the function. The runtime
+ * implementation dispatches on the input's shape itself, as overload implementations always do, so it doesn't
+ * need to be told which signature matched. When nothing matches, the error reports each signature's issues,
+ * closest match (fewest issues) first.
+ *
+ * Returns undefined for any other overload shape (positional parameters, differing arity, unparseable types),
+ * falling back to the first signature only - the behavior before overload support existed. Positional parameters
+ * are excluded because commander has no way to present alternate positional layouts for one command.
+ */
+const buildOverloadedProcedure = (
+  command: ExtractedCommand,
+  fn: AnyFn,
+  context: Record<string, unknown>,
+  meta: Record<string, unknown>,
+): NorpcProcedureLike | undefined => {
+  const variants: OverloadVariant[] = []
+  for (const overload of command.overloads!) {
+    if (overload.params.length !== 1) return undefined
+    let schema: unknown
+    try {
+      schema = parseParamSchema(command.name, overload.params[0], context)
+    } catch (error) {
+      if (error instanceof SkippedModuleCommandError) return undefined
+      throw error
+    }
+    if (!isObjectLikeSchema(schema)) return undefined
+    variants.push({
+      schema,
+      flags: overloadFlagsSummary(schema),
+      description: parseCliJsdoc(overload.description).description?.split('\n')[0],
+    })
+  }
+
+  fillSharedFlagMetadata(variants)
+
+  const combined = {anyOf: variants.map(variant => variant.schema)}
+  Object.defineProperty(combined, '~standard', {
+    configurable: true,
+    enumerable: false,
+    value: {
+      version: 1,
+      vendor: 'trpc-cli',
+      validate: (input: unknown) => validateOverloads(variants, input),
+      jsonSchema: {input: () => combined, output: () => combined},
+    },
+  })
+
+  const flagsWidth = Math.max(...variants.map(variant => variant.flags.length))
+  const usage = variants.map(variant =>
+    variant.description ? `${variant.flags.padEnd(flagsWidth)}  # ${variant.description}` : variant.flags,
+  )
+
+  // Command-level description: each signature's jsdoc describes *its* calling convention (shown as that usage
+  // line's comment), so presenting the first signature's jsdoc as the whole command's description would be
+  // misleadingly universal. The implementation signature's jsdoc is the natural home for an overall description;
+  // failing that, the signatures' (distinct) descriptions are joined. Command `@alias`es are honored wherever
+  // they're declared.
+  const implementationDoc = parseCliJsdoc(command.implementationDescription)
+  const variantDocs = command.overloads!.map(overload => parseCliJsdoc(overload.description))
+  const distinctDescriptions = [...new Set(variantDocs.map(doc => doc.description).filter(Boolean))]
+  const description = implementationDoc.description || distinctDescriptions.join(' / ')
+  const aliases = [...new Set([...implementationDoc.aliases, ...variantDocs.flatMap(doc => doc.aliases)])]
+  const overloadedMeta: Record<string, unknown> = {...meta, usage}
+  if (description) overloadedMeta.description = description
+  else delete overloadedMeta.description
+  if (aliases.length > 0) overloadedMeta.aliases = {command: aliases}
+  else delete overloadedMeta.aliases
+
+  return t.procedure
+    .meta(overloadedMeta)
+    .input(combined as never)
+    .handler(({input}) => fn(input))
+}
+
+/** Validate against each overload's schema in declaration order, first match wins - the CLI equivalent of TS overload resolution. */
+const validateOverloads = (variants: OverloadVariant[], input: unknown): StandardSchemaV1.Result<unknown> => {
+  const failures: Array<{variant: OverloadVariant; issues: readonly StandardSchemaV1.Issue[]}> = []
+  for (const variant of variants) {
+    const result = (variant.schema as StandardSchemaV1)['~standard'].validate(input)
+    if (result instanceof Promise) throw new TypeError('Overload schemas must validate synchronously') // Type.Script validators always do
+    if (!result.issues) return result
+    failures.push({variant, issues: result.issues})
+  }
+  // the signature producing the fewest issues is the one the user was closest to matching - report it first
+  // (ties keep declaration order, since `sort` is stable)
+  const sorted = [...failures].sort((a, b) => a.issues.length - b.issues.length)
+  const lines = sorted.map(failure => {
+    const details = failure.issues.map(issue => {
+      const path = (issue.path || []).map(segment => (typeof segment === 'object' ? segment.key : segment))
+      return issue.message + (path.length > 0 ? ` (${toDotPath(path)})` : '')
+    })
+    return `  ${failure.variant.flags}: ${details.join('; ')}`
+  })
+  const message = `matched none of the ${variants.length} ways to call this command:\n${lines.join('\n')}`
+  return {issues: [{message}]}
+}
+
+/**
+ * A one-line usage summary of an overload signature's flags, e.g. `--name <string> --global [--save-dir <string>]`.
+ * Booleans (including `true` literals like `global: true`) show as bare flags, string-literal unions show their
+ * choices, everything else shows its type; flags that aren't required in every branch of the (possibly union)
+ * schema are bracketed.
+ */
+const overloadFlagsSummary = (schema: unknown): string => {
+  const properties = flattenedProperties(schema as never)
+  const required = requiredInAllBranches(schema)
+  const parts = Object.entries(properties).map(([key, propertySchema]) => {
+    const flag = `--${kebabCase(key)}`
+    const types = getSchemaTypes(propertySchema).filter(type => type !== 'undefined' && type !== 'null')
+    const enumChoices = getEnumChoices(propertySchema)
+    let placeholder: string | null
+    if (types.length === 1 && types[0] === 'boolean') placeholder = null
+    else if (enumChoices?.type === 'string_enum') placeholder = enumChoices.choices.join('|')
+    else if (types.length === 1 && types[0] === 'array') placeholder = 'values...'
+    else placeholder = types.join('|') || 'value'
+    const part = placeholder ? `${flag} <${placeholder}>` : flag
+    return required.has(key) && !isOptional(propertySchema) ? part : `[${part}]`
+  })
+  return parts.join(' ')
+}
+
+/**
+ * Reconcile per-flag jsdoc across overload signatures. The union flag-merge in `flattenedProperties` keeps the
+ * *last* occurrence of each property, which would silently drop a description or `@alias` declared on an earlier
+ * signature. Descriptions: a flag documented in one signature (or identically in several) keeps that text; a flag
+ * documented *differently* per signature (e.g. an `input` accepting subtly different values) shows every distinct
+ * description, joined with ' / ' in declaration order. Aliases: first occurrence wins. Cosmetic metadata only -
+ * validation behavior is unaffected.
+ */
+const fillSharedFlagMetadata = (variants: OverloadVariant[]) => {
+  const branches = variants.flatMap(variant => objectBranches(variant.schema))
+  const descriptions = new Map<string, string[]>()
+  const aliases = new Map<string, unknown>()
+  for (const branch of branches) {
+    for (const [name, property] of Object.entries(branch.properties || {})) {
+      if (typeof property.description === 'string') {
+        const distinct = descriptions.get(name) || []
+        if (!distinct.includes(property.description)) distinct.push(property.description)
+        descriptions.set(name, distinct)
+      }
+      if (property.alias !== undefined && !aliases.has(name)) aliases.set(name, property.alias)
+    }
+  }
+  for (const branch of branches) {
+    for (const [name, property] of Object.entries(branch.properties || {})) {
+      const description = descriptions.get(name)?.join(' / ')
+      if (description) property.description = description
+      if (aliases.has(name)) property.alias = aliases.get(name)
+    }
+  }
+}
+
+const objectBranches = (schema: unknown): Array<{properties?: Record<string, Record<string, unknown>>}> => {
+  const {anyOf} = (schema || {}) as {anyOf?: unknown[]}
+  if (Array.isArray(anyOf)) return anyOf.flatMap(objectBranches)
+  return [schema as never]
+}
+
+/** Property names required in every branch of a (possibly `anyOf`-union) object schema. */
+const requiredInAllBranches = (schema: unknown): Set<string> => {
+  const {required, anyOf} = (schema || {}) as {required?: string[]; anyOf?: unknown[]}
+  if (Array.isArray(anyOf)) {
+    const sets = anyOf.map(requiredInAllBranches)
+    return new Set([...(sets[0] || [])].filter(key => sets.every(set => set.has(key))))
+  }
+  return new Set(required || [])
 }
 
 /**
@@ -786,8 +995,8 @@ const parseNamedSpecifiers = (
  * parameter list (names, optionality, type annotation text, inline jsdoc). Supports `export function f(...)`,
  * `export async function f(...)`, `export const f = (...) => ...` (parenthesized arrows only), and
  * `export default function f(...)` (or an anonymous default function, which becomes a command named `default`).
- * Returns one command per export name: TS function overloads extract once per declaration, and the first overload
- * *signature* wins (see the dedupe note inline).
+ * Returns one command per export name: TS function overloads extract once per declaration, and all the overload
+ * *signatures* become the command's calling conventions (see the grouping note inline).
  */
 export const extractModuleCommands = (source: string): ExtractedCommand[] => {
   const scan = scanSource(source)
@@ -844,24 +1053,54 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
   // matchAll over two patterns can't interleave, so restore source order - it determines command order in --help
   declarations.sort((a, b) => a.position - b.position)
 
-  // One command per name, first extraction wins - with one twist for TS function overloads. Overloads extract once
-  // per declaration: the body-less *signatures* come first and the *implementation* (whose params are typically
-  // widened, e.g. `options: any`) last. TS resolves calls against the signatures in order, so the FIRST signature
-  // is the primary documented shape - it becomes the command, and the implementation signature and later overloads
-  // are ignored (a CLI can only present one calling convention; a union of all signatures was considered and
-  // rejected, since it would advertise flag combinations no single overload accepts). The `hasBody` preference only
-  // matters if an implementation somehow precedes a signature - in valid TS, first-wins already picks the first
-  // signature. Params are parsed only for the winners, so an unannotated implementation (`function f(options) {`)
-  // can't poison a command whose signatures are fine.
-  const winners = new Map<string, (typeof declarations)[number]>()
+  // One command per name - with special handling for TS function overloads, which extract once per declaration:
+  // the body-less *signatures* come first and the *implementation* (whose params are typically widened, e.g.
+  // `options: any`) last. TS resolves calls against the signatures in order, so when signatures exist they ALL
+  // become the command's calling conventions, in declaration order: buildOverloadedProcedure turns
+  // single-object-parameter overloads into alternate flag sets validated first-match; any other overload shape
+  // falls back to just the first signature. The implementation signature is never used, so an unannotated
+  // implementation (`function f(options) {`) can't poison a command whose signatures are fine, and signatures
+  // whose params fail to parse are dropped individually rather than sinking the whole command.
+  return groupOverloadDeclarations(declarations).flatMap(({winners, implementation}): ExtractedCommand[] => {
+    const overloads = winners.flatMap(declaration => {
+      const params = tryParseParams(declaration.name, declaration.paramList)
+      return params ? [{description: declaration.description, params}] : []
+    })
+    if (overloads.length === 0) return []
+    const {name, exportName, default: defaultExport} = winners[0]
+    return [
+      {
+        name,
+        exportName,
+        default: defaultExport,
+        description: overloads[0].description,
+        params: overloads[0].params,
+        ...(overloads.length > 1 ? {overloads, implementationDescription: implementation?.description} : {}),
+      },
+    ]
+  })
+}
+
+/**
+ * Group declarations sharing a name. `winners` are the declarations defining the command's calling convention(s):
+ * all body-less overload signatures when any exist (in declaration order), otherwise the first implementation.
+ * The implementation declaration is kept separately - its jsdoc can describe an overloaded command as a whole.
+ */
+const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; description?: string | undefined}>(
+  declarations: D[],
+): Array<{winners: D[]; implementation: D | undefined}> => {
+  const groups = new Map<string, D[]>()
   for (const declaration of declarations) {
-    const existing = winners.get(declaration.name)
-    if (!existing || (existing.hasBody && !declaration.hasBody)) winners.set(declaration.name, declaration)
+    const group = groups.get(declaration.name)
+    if (group) group.push(declaration)
+    else groups.set(declaration.name, [declaration])
   }
-  return [...winners.values()].flatMap(({name, exportName, default: defaultExport, description, paramList}) => {
-    const params = tryParseParams(name, paramList)
-    if (!params) return []
-    return [{name, exportName, default: defaultExport, description, params}]
+  return [...groups.values()].map(group => {
+    const signatures = group.filter(declaration => !declaration.hasBody)
+    return {
+      winners: signatures.length > 0 ? signatures : group.slice(0, 1),
+      implementation: group.find(declaration => declaration.hasBody),
+    }
   })
 }
 
@@ -895,11 +1134,25 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
       if (hasConstructorParameters) continue
       if (hasBaseClass && !hasZeroArgConstructor) continue
       if (methodDeclarations.length === 0) continue
-      const methods = methodDeclarations.flatMap(({methodName, description, paramList}) => {
-        const params = tryParseParams(`${name}.${methodName}`, paramList)
-        if (!params) return []
-        return [{name: methodName, exportName: methodName, default: false, description, params}]
-      })
+      const methods = methodDeclarations.flatMap(
+        ({methodName, signatures, implementationDescription}): ExtractedCommand[] => {
+          const overloads = signatures.flatMap(signature => {
+            const params = tryParseParams(`${name}.${methodName}`, signature.paramList)
+            return params ? [{description: signature.description, params}] : []
+          })
+          if (overloads.length === 0) return []
+          return [
+            {
+              name: methodName,
+              exportName: methodName,
+              default: false,
+              description: overloads[0].description,
+              params: overloads[0].params,
+              ...(overloads.length > 1 ? {overloads, implementationDescription} : {}),
+            },
+          ]
+        },
+      )
       if (methods.length === 0) continue
       classes.push({name, exportName, default: defaultExport, methods})
     }
@@ -921,7 +1174,13 @@ const extractClassMethodDeclarations = (
   bodyStart: number,
   bodyEnd: number,
 ): {
-  methodDeclarations: Array<{methodName: string; description: string | undefined; paramList: string}>
+  methodDeclarations: Array<{
+    methodName: string
+    /** one per body-less overload signature, or a single entry for a plain method - same rule as `groupOverloadDeclarations` */
+    signatures: Array<{description: string | undefined; paramList: string}>
+    /** jsdoc of the overload implementation, when the method is overloaded */
+    implementationDescription: string | undefined
+  }>
   hasConstructorParameters: boolean
   hasZeroArgConstructor: boolean
 } => {
@@ -981,19 +1240,14 @@ const extractClassMethodDeclarations = (
   }
 
   declarations.sort((a, b) => a.position - b.position)
-  const winners = new Map<string, (typeof declarations)[number]>()
-  for (const declaration of declarations) {
-    const existing = winners.get(declaration.name)
-    if (!existing || (existing.hasBody && !declaration.hasBody)) winners.set(declaration.name, declaration)
-  }
 
   return {
     hasConstructorParameters,
     hasZeroArgConstructor,
-    methodDeclarations: [...winners.values()].map(({name, description, paramList}) => ({
-      methodName: name,
-      description,
-      paramList,
+    methodDeclarations: groupOverloadDeclarations(declarations).map(({winners, implementation}) => ({
+      methodName: winners[0].name,
+      signatures: winners.map(({description, paramList}) => ({description, paramList})),
+      implementationDescription: implementation?.description,
     })),
   }
 }

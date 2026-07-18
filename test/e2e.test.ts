@@ -399,8 +399,10 @@ test('migrations incompatible flags', async () => {
     Apply migrations. By default all pending migrations will be applied.
 
     Options:
-      --to [string]    Mark migrations up to this one as exectued
-      --step [number]  Mark this many migrations as executed; Exclusive minimum: 0
+      --to [string]    Mark migrations up to this one as exectued; Do not use with:
+                       --step
+      --step [number]  Mark this many migrations as executed; Exclusive minimum: 0;
+                       Do not use with: --to
       -h, --help       display help for command
     "
   `)
