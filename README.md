@@ -47,6 +47,7 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [oRPC](#orpc)
    - [Standalone Mode (No tRPC/oRPC Required) — Experimental](#standalone-mode-no-trpcorpc-required--experimental)
    - [Output and Lifecycle](#output-and-lifecycle)
+   - [How the CLI name is resolved](#how-the-cli-name-is-resolved)
    - [Testing your CLI](#testing-your-cli)
    - [CLI Context](#cli-context)
    - [Programmatic Usage](#programmatic-usage)
@@ -1254,14 +1255,14 @@ const withPermissions = withUser.use(async ({ctx, next}) => {
 
 ### Output and Lifecycle
 
-The output of the command will be logged if it is truthy. The log algorithm aims to be friendly for bash-piping, usage with jq etc.:
+The output of the command will be logged if it is truthy. The default logger is `yamlTableConsoleLogger`, which aims to be friendly for humans reading terminal output:
 
-- Arrays will be logged line be line
-- For each line logged:
-   - string, numbers and booleans are logged directly
-   - objects are logged with `JSON.stringify(___, null, 2)`
+- strings, numbers and booleans are logged directly
+- arrays of primitives are logged line by line
+- arrays of objects are rendered as a table
+- other objects are rendered as yaml
 
-So if the procedure returns `['one', 'two', 'three]` this will be written to stdout:
+So if the procedure returns `['one', 'two', 'three']` this will be written to stdout:
 
 ```
 one
@@ -1272,18 +1273,27 @@ three
 If the procedure returns `[{name: 'one'}, {name: 'two'}, {name: 'three'}]` this will be written to stdout:
 
 ```
-{
-  "name": "one"
-}
-{
-  "name": "two"
-}
-{
-  "name": "three"
-}
+┌───────┐
+│ name  │
+├───────┤
+│ one   │
+├───────┤
+│ two   │
+├───────┤
+│ three │
+└───────┘
 ```
 
-This is to make it as easy as possible to use with other command line tools like `xargs`, `jq` etc. via bash-piping. If you don't want to rely on this logging, you can always log inside your procedures however you like and avoid returning a value.
+If you're expecting output to be piped to other command line tools like `jq` or `xargs`, use `lineByLineConsoleLogger` instead - it logs primitives directly, arrays line by line, and objects with `JSON.stringify(___, null, 2)`:
+
+```ts
+import {createCli, lineByLineConsoleLogger} from 'trpc-cli'
+
+const cli = createCli({router: yourRouter})
+void cli.run({logger: lineByLineConsoleLogger})
+```
+
+If you don't want to rely on this logging, you can always log inside your procedures however you like and avoid returning a value.
 
 The process will exit with code 0 if the command was successful, or 1 otherwise. 
 
@@ -1307,6 +1317,18 @@ cli.run({
 ```
 
 You could also override `process.exit` to avoid killing the process at all - see [programmatic usage](#programmatic-usage) for an example.
+
+### How the CLI name is resolved
+
+The program name shown in help/usage output comes from the first of these that produces a value:
+
+1. **The `name` param**: `createCli({router, name: 'mycli'})`.
+2. **A matching `bin` entry in your package.json** - when running as an installed bin, the entry script (`process.argv[1]`) is realpath-resolved and compared against the `bin` entries of its nearest package.json. So a package with `"bin": {"mycli": "./dist/cli.js"}` shows `Usage: mycli` whether it's run as `mycli`, `npx mycli`, or `node dist/cli.js`. A string-form `bin` uses the package name (scope stripped).
+3. **The npm script name** - when run via `npm run dev` (or pnpm/yarn/bun equivalents), the script name (`npm_lifecycle_event`) is used, but only if the script's command actually mentions the entry file. That guard matters because npm sets `npm_lifecycle_event` for every child process: without it, a CLI merely *spawned by* `npm run build` would be named `build`.
+4. **The entry script's basename**, minus extension: `node ./scripts/deploy.ts` shows `Usage: deploy`.
+5. **The commands-file basename** (module mode only): `createCli(import.meta)` and `npx trpc-cli ./commands.ts` fall back to the module file's basename.
+
+Rules 2-4 read the process environment, so they only apply to environment-driven runs - a real `run()` reading `process.argv`. When you pass `argv` explicitly (programmatic usage, tests), `process.argv` and the npm env vars describe the host process rather than your CLI, so those rules are skipped and only an explicit `name` (or rule 5 in module mode) applies.
 
 ### Testing your CLI
 
@@ -1451,31 +1473,23 @@ const runCli = async (argv: string[]) => {
 
 ### Input Prompts
 
-You can enable built-in prompts for positional arguments and options with `prompts: true`:
+Built-in prompts for missing positional arguments and options are enabled by default - but only when the caller looks like an interactive human: stdin is a TTY and no coding-agent environment (Claude Code, Codex, opencode - see `isAgent`) is detected. Piped input, CI, and agents get regular "missing required argument" errors instead of a hanging prompt.
 
 ![](./docs/prompts-demo.gif)
+
+The user is asked to input any missing arguments or options. Booleans, numbers, enums etc. get appropriate user-friendly prompts, along with input validation. The built-in prompts intentionally use plain line input: selects are numbered and checkboxes accept comma-separated numbers.
+
+To disable prompting entirely, pass `prompts: false` (or `null`):
 
 ```ts
 import {createCli} from 'trpc-cli'
 
 const cli = createCli({router: myRouter})
 
-cli.run({prompts: true})
+await cli.run({prompts: false})
 ```
 
-The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation. The built-in prompts intentionally use plain line input: selects are numbered and checkboxes accept comma-separated numbers.
-
-You can pass a boolean expression too. `false` disables prompting, so this uses the built-in prompts unless trpc-cli detects a coding-agent environment:
-
-```ts
-import {createCli, isAgent} from 'trpc-cli'
-
-const cli = createCli({router: myRouter})
-
-await cli.run({
-  prompts: !isAgent(),
-})
-```
+`prompts: true` forces the built-in prompts on, skipping the TTY/agent heuristic.
 
 If you want a richer terminal UI, install and pass `enquirer`, `prompts`, `@clack/prompts`, or `@inquirer/prompts` instead:
 
@@ -1490,7 +1504,7 @@ await cli.run({
 })
 ```
 
-The `isAgent() ? null : prompts` pattern above skips prompting in known coding-agent environments like Claude Code, Codex, and opencode — passing `prompts: null` disables prompting entirely.
+The `isAgent() ? null : prompts` pattern above keeps the default behavior of skipping prompts in known coding-agent environments - when passing your own prompt library, the TTY/agent heuristic no longer applies, so guard it yourself if you need to.
 
 For tests or custom runtimes, use `createBuiltInPrompts` to inject streams:
 
@@ -1623,7 +1637,7 @@ npx trpc-cli ./commands.ts --help
 npx trpc-cli ./commands.ts add left-pad --dev
 ```
 
-The bin script runs with opinionated defaults: [`jsonInput: 'auto'`](#json-input) (every command also accepts its full input as `--json '{...}'`) and the yaml table logger for output. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+The bin script sets [`jsonInput: 'auto'`](#json-input) (commands that take input also accept it all at once as `--json '{...}'`); everything else - the yaml table logger, prompts for interactive humans, the CLI name - comes from the regular library defaults. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
 
 Note: the bin script no longer accepts files exporting trpc/orpc routers - if you have a router, create a CLI entrypoint with `createCli({router}).run()` instead (see [Quick Start](#quick-start)).
 
@@ -1632,7 +1646,7 @@ Note: the bin script no longer accepts files exporting trpc/orpc routers - if yo
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L181)
+#### [createCli](./src/index.ts#L183)
 
 Run a trpc router as a CLI.
 
@@ -1654,7 +1668,7 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 
 - Nested subrouters ([example](./test/fixtures/migrations.ts)) - procedures in nested routers will become subcommands will be dot separated e.g. `mycli search byId --id 123`
 - Middleware, `ctx`, multi-inputs work as normal
-- Return values are logged using `console.info` (can be configured to pass in a custom logger)
+- Return values are logged with the yaml/table logger by default (see [Output and Lifecycle](#output-and-lifecycle) - pass a custom `logger` to change)
 - `process.exit(...)` called with either 0 or 1 depending on successful resolve
 - Help text shown on invalid inputs
 - Support option aliases via `aliases` meta property (see migrations example below)

@@ -127,6 +127,12 @@ const renderYamlTableValue = (value: unknown, heading: string | undefined, seen:
     return withHeading(heading, renderYamlRowsTable(value))
   }
 
+  // a list of primitives is a list of results - print line by line like the other loggers, not as a yaml
+  // list (which would wrap strings containing `: ` in quotes)
+  if (Array.isArray(value) && value.length > 0 && value.every(isDisplayPrimitive)) {
+    return withHeading(heading, value.map(String).join('\n'))
+  }
+
   if (Array.isArray(value)) {
     return withHeading(heading, toYaml(value))
   }

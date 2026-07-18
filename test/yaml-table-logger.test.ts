@@ -190,7 +190,16 @@ test('handles circular values inside cells', () => {
   `)
 })
 
-test('renders primitive arrays as yaml fallback', () => {
+test('renders pure primitive arrays line by line', () => {
+  logger.info!(['one: executed', 'two: pending', 3])
+  expect(info).toMatchInlineSnapshot(`
+    one: executed
+    two: pending
+    3
+  `)
+})
+
+test('renders mixed primitive arrays as yaml fallback', () => {
   logger.info!(['a', 'b', {x: 1}])
   expect(info).toMatchInlineSnapshot(`
     - a
