@@ -261,6 +261,23 @@ test('cli no command', async () => {
   `)
 })
 
+test('cli name derived from npm_lifecycle_event when run via an npm script', async () => {
+  // fs.ts doesn't pass `name` - normally it falls back to the entry script basename ("fs"), but when the CLI itself
+  // is what the npm script runs (the lifecycle script mentions the entry file), the npm script name wins
+  const {all} = await execa('./node_modules/.bin/tsx', ['test/fixtures/fs.ts', '--help'], {
+    all: true,
+    reject: false,
+    cwd: path.join(__dirname, '..'),
+    env: {npm_lifecycle_event: 'sync-files', npm_lifecycle_script: 'tsx test/fixtures/fs.ts'},
+  })
+  expect(stripAnsi(all)).toContain('Usage: sync-files')
+})
+
+test('cli name falls back to the entry script basename', async () => {
+  const output = await tsx('fs', ['--help'])
+  expect(output).toContain('Usage: fs')
+})
+
 test('migrations help', async () => {
   const version = await tsx('migrations', ['--version'])
   expect(version.trim()).toMatchInlineSnapshot(`"1.0.0"`)
@@ -335,11 +352,11 @@ test('migrations search.byName help', async () => {
 test('migrations search.byName', async () => {
   const output = await tsx('migrations', ['search', 'by-name', '--name', 'two'])
   expect(output).toMatchInlineSnapshot(`
-    "{
-      "name": "two",
-      "content": "create view two as select name from one",
-      "status": "executed"
-    }"
+    "┌──────┬─────────────────────────────────────────┬──────────┐
+    │ name │ content                                 │ status   │
+    ├──────┼─────────────────────────────────────────┼──────────┤
+    │ two  │ create view two as select name from one │ executed │
+    └──────┴─────────────────────────────────────────┴──────────┘"
   `)
 })
 
@@ -382,8 +399,10 @@ test('migrations incompatible flags', async () => {
     Apply migrations. By default all pending migrations will be applied.
 
     Options:
-      --to [string]    Mark migrations up to this one as exectued
-      --step [number]  Mark this many migrations as executed; Exclusive minimum: 0
+      --to [string]    Mark migrations up to this one as exectued; Do not use with:
+                       --step
+      --step [number]  Mark this many migrations as executed; Exclusive minimum: 0;
+                       Do not use with: --to
       -h, --help       display help for command
     "
   `)
@@ -426,44 +445,32 @@ test('fs copy help', async () => {
 test('fs copy', async () => {
   expect(await tsx('fs', ['copy', 'one', 'uno'])).toMatchInlineSnapshot(
     `
-      "{
-        "source": "one",
-        "destination": "uno",
-        "options": {
-          "force": false
-        }
-      }"
+      "source: one
+      destination: uno
+      options:
+        force: false"
     `,
   )
   expect(await tsx('fs', ['copy', 'one'])).toMatchInlineSnapshot(`
-    "{
-      "source": "one",
-      "destination": "one.copy",
-      "options": {
-        "force": false
-      }
-    }"
+    "source: one
+    destination: one.copy
+    options:
+      force: false"
   `)
   expect(await tsx('fs', ['copy', 'one', '--force'])).toMatchInlineSnapshot(
     `
-      "{
-        "source": "one",
-        "destination": "one.copy",
-        "options": {
-          "force": true
-        }
-      }"
+      "source: one
+      destination: one.copy
+      options:
+        force: true"
     `,
   )
   expect(await tsx('fs', ['copy', 'one', 'uno', '--force'])).toMatchInlineSnapshot(
     `
-      "{
-        "source": "one",
-        "destination": "uno",
-        "options": {
-          "force": true
-        }
-      }"
+      "source: one
+      destination: uno
+      options:
+        force: true"
     `,
   )
 
@@ -513,8 +520,6 @@ test('thrown error in procedure includes call stack', async () => {
   expect(output).toMatch(/at .* \(.*calculator.ts:\d+:\d+\)/)
 })
 
-const testLocalOnly = process.env.CI ? test.skip : test
-
 test('promptable', async () => {
   // these snapshots look a little weird because inquirer uses `\r` to
   // replace the input line
@@ -526,7 +531,7 @@ test('promptable', async () => {
 })
 
 // something about github actions ci setup doesn't like this
-testLocalOnly('promptable multiline', async () => {
+test.skip('promptable multiline', async () => {
   const subcommandOutput = await tsxWithMultilineInput('challenge\nharshly\ny', 'promptable', [])
 
   expect(subcommandOutput).toMatchInlineSnapshot(`

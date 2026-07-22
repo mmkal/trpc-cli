@@ -6,6 +6,7 @@
   "extends": [
     "config:recommended"
   ],
+  "prConcurrentLimit": 2,
   "packageRules": [
     {
       "groupName": "orpc dependencies",

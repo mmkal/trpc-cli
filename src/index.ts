@@ -3,7 +3,9 @@ import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArg
 import {Option as BaseOption} from 'commander'
 import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
+import {isAgent} from './agent.js'
 import {addCompletions} from './completions.js'
+import {runWithCliContext} from './context.js'
 import {FailedToExitError, CliValidationError} from './errors.js'
 import {
   flattenedProperties,
@@ -14,22 +16,32 @@ import {
   getAllowedSchemas,
 } from './json-schema.js'
 import {commandToJSON} from './json.js'
-import {lineByLineConsoleLogger} from './logging.js'
-import {parseProcedureInputs} from './parse-procedure.js'
-import {promptify} from './prompts.js'
+import {yamlTableConsoleLogger} from './logging.js'
+import type {CliModuleInput} from './module-commands.js'
+import {
+  type AnyRouter,
+  type CreateCallerFactoryLike,
+  getParsedProcedure,
+  jsonProcedureInputs,
+  isNorpcRouter,
+  isTrpcRouter,
+  parseRouter,
+  type ProcedureInfo,
+} from './parse-router.js'
+import {CosmeticJsonOption, promptify} from './prompts.js'
+import {guessCliName, scriptBasename} from './resolve-name.js'
 import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {
-  type AnyProcedure,
-  type AnyRouter,
-  type CreateCallerFactoryLike,
-  isOrpcRouter,
-  type OrpcRouterLike,
-  type Trpc10RouterLike,
-  type Trpc11RouterLike,
-} from './trpc-compat.js'
-import {ParsedProcedure, TrpcCli, TrpcCliMeta, TrpcCliParams, TrpcCliRunParams} from './types.js'
-import {looksLikeInstanceof} from './util.js'
+  JsonInputMode,
+  ParsedProcedure,
+  TrpcCli,
+  TrpcCliAsync,
+  TrpcCliModuleParams,
+  TrpcCliParams,
+  TrpcCliRunParams,
+} from './types.js'
+import {kebabCase, looksLikeInstanceof} from './util.js'
 
 const orpcServerOrError = await import('@orpc/server').catch(String)
 const getOrpcServerModule = () => {
@@ -37,6 +49,34 @@ const getOrpcServerModule = () => {
     throw new Error(`@orpc/server must be installed. Error loading: ${orpcServerOrError}`)
   }
   return orpcServerOrError
+}
+
+type ImportMetaModuleParams = TrpcCliModuleParams & {main?: boolean; resolve?: unknown}
+
+const getModuleRunGuard = (params: ImportMetaModuleParams, moduleInput: CliModuleInput) => {
+  if (typeof params.main === 'boolean') return () => params.main
+  if (typeof params.resolve === 'function') return () => isMainModuleInput(moduleInput)
+  return () => true
+}
+
+const isMainModuleInput = async (moduleInput: CliModuleInput) => {
+  if (typeof moduleInput !== 'string' && !(moduleInput instanceof URL)) return true
+  if (typeof process === 'undefined' || !process.argv[1]) return false
+  const [fs, path, url] = await Promise.all([
+    import('node:fs/promises'),
+    // eslint-disable-next-line unicorn/import-style -- dynamic import: there's no "default import" syntax to use here
+    import('node:path').then(m => m.default),
+    import('node:url'),
+  ])
+  try {
+    const modulePath =
+      typeof moduleInput === 'string' ? path.resolve(process.cwd(), moduleInput) : url.fileURLToPath(moduleInput)
+    const argvPath = path.resolve(process.cwd(), process.argv[1])
+    const [moduleRealpath, argvRealpath] = await Promise.all([fs.realpath(modulePath), fs.realpath(argvPath)])
+    return moduleRealpath === argvRealpath
+  } catch {
+    return true
+  }
 }
 
 // @ts-ignore zod is an optional peer dependency so might not be installed. oh well, you still get this one interface
@@ -55,6 +95,10 @@ declare module 'zod/v4' {
      * Note: this is only valid for options, not positional arguments.
      */
     alias?: string
+    /**
+     * If true, this option will not appear in the --help output but will still be functional.
+     */
+    hidden?: boolean
   }
 }
 
@@ -74,10 +118,16 @@ declare module 'zod' {
      * Note: this is only valid for options, not positional arguments.
      */
     alias?: string
+    /**
+     * If true, this option will not appear in the --help output but will still be functional.
+     */
+    hidden?: boolean
   }
 }
 
 export * from './types.js'
+export {builtInPrompts, createBuiltInPrompts, type BuiltInPromptsOptions} from './built-in-prompts.js'
+export {isAgent, type AgentEnvironment} from './agent.js'
 
 /** @deprecated use `import * as trpcServer from '@trpc/server'` instead */
 export const trpcServer = "@deprecated use `import * as trpcServer from '@trpc/server'` instead"
@@ -95,110 +145,15 @@ export class Command extends BaseCommand {
   __input?: unknown
   /** @internal stash the return value of the underlying procedure on the command so to pass to `FailedToExitError` for use in a pinch */
   __result?: unknown
+  /** @internal stash the argv so it's accessible from action handlers via cli context */
+  __argv?: string[]
 }
 
 /** re-export of the @trpc/server package, just to avoid needing to install manually when getting started */
 
-export {type AnyRouter, type AnyProcedure} from './trpc-compat.js'
-
-/**
- * @internal takes a trpc router and returns an object that you **could** use to build a CLI, or UI, or a bunch of other things with.
- * Officially, just internal for building a CLI. GLHF.
- */
-// todo: maybe refactor to remove CLI-specific concepts like "positional parameters" and "options". Libraries like trpc-ui want to do basically the same thing, but here we handle lots more validation libraries and edge cases. We could share.
-export const parseRouter = <R extends AnyRouter>({router, ...params}: TrpcCliParams<R>) => {
-  if (isOrpcRouter(router)) return parseOrpcRouter({router, ...params})
-
-  return parseTrpcRouter({router, ...params})
-}
-
-const parseTrpcRouter = <R extends Trpc10RouterLike | Trpc11RouterLike>({router, ...params}: TrpcCliParams<R>) => {
-  const defEntries = Object.entries<AnyProcedure>(router._def.procedures as {})
-  return defEntries.map(([procedurePath, procedure]): [string, ProcedureInfo] => {
-    const meta = getMeta(procedure)
-    if (meta.jsonInput) {
-      return [procedurePath, {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure}]
-    }
-    const procedureInputsResult = parseProcedureInputs(procedure._def.inputs as unknown[], params)
-    if (!procedureInputsResult.success) {
-      const procedureInputs = jsonProcedureInputs(
-        `procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error}`,
-      )
-      return [procedurePath, {meta, parsedProcedure: procedureInputs, incompatiblePairs: [], procedure}]
-    }
-
-    const procedureInputs = procedureInputsResult.value
-    const incompatiblePairs = incompatiblePropertyPairs(procedureInputs.optionsJsonSchema)
-
-    return [procedurePath, {meta: getMeta(procedure), parsedProcedure: procedureInputs, incompatiblePairs, procedure}]
-  })
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const parseOrpcRouter = <R extends OrpcRouterLike<any>>(params: TrpcCliParams<R>) => {
-  const entries: [string, ProcedureInfo][] = []
-  const {traverseContractProcedures, isProcedure} = getOrpcServerModule()
-  const router = params.router as import('@orpc/server').AnyRouter
-  const lazyRoutes = traverseContractProcedures({path: [], router}, ({contract, path}) => {
-    let procedure: Record<string, unknown> = params.router
-    for (const p of path) procedure = procedure[p] as Record<string, unknown>
-    if (!isProcedure(procedure)) return // if it's contract-only, we can't run it via CLI (user may have passed an implemented contract router? should we tell them? it's undefined behaviour so kinda on them)
-
-    const procedureInputsResult = parseProcedureInputs([contract['~orpc'].inputSchema], {
-      '@valibot/to-json-schema': params['@valibot/to-json-schema'],
-      effect: params.effect,
-    })
-    const procedurePath = path.join('.')
-    const procedureish = {_def: {meta: contract['~orpc'].meta}} as AnyProcedure
-    const meta = getMeta(procedureish)
-
-    if (meta.jsonInput) {
-      entries.push([procedurePath, {meta, parsedProcedure: jsonProcedureInputs(), incompatiblePairs: [], procedure}])
-      return
-    }
-    if (!procedureInputsResult.success) {
-      const parsedProcedure = jsonProcedureInputs(
-        `procedure's schema couldn't be converted to CLI arguments: ${procedureInputsResult.error}`,
-      )
-      entries.push([procedurePath, {meta, parsedProcedure: parsedProcedure, incompatiblePairs: [], procedure}])
-      return
-    }
-
-    const parsedProcedure = procedureInputsResult.value
-    const incompatiblePairs = incompatiblePropertyPairs(parsedProcedure.optionsJsonSchema)
-
-    entries.push([procedurePath, {procedure, meta, incompatiblePairs, parsedProcedure}])
-  })
-  if (lazyRoutes.length) {
-    const suggestion = `Please use \`import {unlazyRouter} from '@orpc/server'\` to unlazy the router before passing it to trpc-cli`
-    const routes = lazyRoutes.map(({path}) => path.join('.')).join(', ')
-    throw new Error(`Lazy routers are not supported. ${suggestion}. Lazy routes detected: ${routes}`)
-  }
-  return entries
-}
-
-/** helper to create a "ParsedProcedure" that just accepts a JSON string - for when we failed to parse the input schema or the use set jsonInput: true */
-const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
-  let description = `Input formatted as JSON`
-  if (reason) description += ` (${reason})`
-  return {
-    positionalParameters: [],
-    optionsJsonSchema: {
-      type: 'object',
-      properties: {
-        input: {description}, // omit `type` - this is json input, it could be anything
-      },
-    },
-    getPojoInput: parsedCliParams => parsedCliParams.options.input,
-  }
-}
-
-type ProcedureInfo = {
-  meta: TrpcCliMeta
-  parsedProcedure: ParsedProcedure
-  incompatiblePairs: [string, string][]
-  procedure: {}
-}
+export {type AnyRouter, type AnyProcedure, type NorpcProcedureLike, type NorpcRouterLike} from './parse-router.js'
+export {parseRouter} from './parse-router.js'
+export {deepHelp} from './json.js'
 
 /**
  * Run a trpc router as a CLI.
@@ -208,12 +163,93 @@ type ProcedureInfo = {
  * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
  * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
  */
-export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParams<R>): TrpcCli {
+export function createCli<R extends AnyRouter>(params: TrpcCliParams<R>): TrpcCli
+/**
+ * @experimental Run a plain TypeScript module of exported functions as a CLI - no schema library, no router.
+ * See {@linkcode TrpcCliModuleParams} for details. Returns a {@linkcode TrpcCliAsync}: because the module is loaded
+ * asynchronously, `run`/`buildProgram`/`toJSON` all return promises (unlike the synchronous `buildProgram`/`toJSON`
+ * on the router-based {@linkcode TrpcCli}).
+ */
+export function createCli(params: TrpcCliModuleParams): TrpcCliAsync
+/**
+ * Run a trpc router as a CLI.
+ *
+ * @param router A trpc router
+ * @param context The context to use when calling the procedures - needed if your router requires a context
+ * @param trpcServer The trpc server module to use. Only needed if using trpc v10.
+ * @param filename (experimental) instead of `router`: derive the CLI from a plain TypeScript module of exported functions. Pass `import.meta`, a `URL`, an absolute/cwd-relative path string, or the `{source, exports}` escape hatch. See {@linkcode TrpcCliModuleParams}.
+ * @returns A CLI object with a `run` method that can be called to run the CLI. The `run` method will parse the command line arguments, call the appropriate trpc procedure, log the result and exit the process. On error, it will log the error and exit with a non-zero exit code.
+ */
+export function createCli<R extends AnyRouter>(
+  allParams: TrpcCliParams<R> | TrpcCliModuleParams,
+): TrpcCli | TrpcCliAsync {
+  // module mode is detected by any of its location keys - `filename`/`url` (also present on a passed-in `import.meta`)
+  // or the `{source, exports}` escape hatch. A router params object has none of these.
+  if ('filename' in allParams || 'url' in allParams || 'source' in allParams) {
+    const {filename, url, source, exports, ...params} = allParams
+    // the `{source, exports}` escape hatch wins; otherwise prefer an explicit filename and fall back to
+    // import.meta.url (e.g. node 18, where import.meta.filename is absent)
+    const moduleInput: CliModuleInput = source ? {source, exports: exports || {}} : filename || new URL(url as string)
+    const shouldRun = getModuleRunGuard(allParams, moduleInput)
+    // module mode has a natural fallback name that router mode doesn't: the commands file itself. It ranks below
+    // environment-derived names (see buildProgram) so an installed bin still wins over the file basename.
+    const defaultName = source ? undefined : scriptBasename(filename || new URL(url as string))
+    let cliPromise: Promise<TrpcCli> | undefined
+    const getCli = () => {
+      // node:fs / dynamic import / the vendored typebox parser are only needed (and only loaded) in this mode
+      cliPromise ||= import('./module-commands.js')
+        .then(mc => mc.moduleToRouter(moduleInput))
+        .then(router => createRouterCli({router, ...params}, {defaultName}))
+      return cliPromise
+    }
+    // module loading is async, so this mode's buildProgram/toJSON are async wrappers around the resolved router CLI
+    return {
+      run: async (runParams, program) => {
+        if (!(await shouldRun())) return
+        return (await getCli()).run(runParams, program)
+      },
+      buildProgram: async runParams => (await getCli()).buildProgram(runParams),
+      toJSON: async program => (await getCli()).toJSON(program),
+    }
+  }
+  // the module branch above returns, so this is the router case. The params keys are all optional, so TS can't
+  // narrow the union by their absence - assert the router shape explicitly.
+  return createRouterCli(allParams as TrpcCliParams<R>, {defaultName: undefined})
+}
+
+/**
+ * Router-mode implementation of {@linkcode createCli}. Not exported: the second parameter is internal plumbing -
+ * module mode passes the commands-file basename as a low-priority fallback name, which ranks below
+ * environment-derived names and so can't be expressed via the public `name` param.
+ */
+function createRouterCli<R extends AnyRouter>(
+  allParams: TrpcCliParams<R>,
+  internal: {defaultName: string | undefined},
+): TrpcCli {
+  const {router, ...params} = allParams
   const procedureEntries = parseRouter({router, ...params})
 
   function buildProgram(runParams?: TrpcCliRunParams) {
-    const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
-    const program = new Command(params.name)
+    const logger = {...yamlTableConsoleLogger, ...runParams?.logger}
+    // name resolution (readme "How the CLI name is resolved"): explicit name > environment-derived > module-mode
+    // commands-file basename. Environment-derived names only apply to environment-driven runs, i.e. a run() reading
+    // process.argv - when `argv` is passed explicitly (programmatic usage, tests, the trpc-cli bin), process.argv and
+    // the npm_* env vars describe the host process, not this CLI. Same reasoning as `jsonFlagSniffed` below: a bare
+    // buildProgram()/toJSON() call has no invocation to inspect, so it doesn't get an environment-derived name either.
+    const environmentDriven = runParams !== undefined && runParams.argv === undefined
+    const program = new Command(params.name || (environmentDriven ? guessCliName() : undefined) || internal.defaultName)
+
+    // Each leaf command resolves a `jsonInput` mode: `meta.jsonInput || params.jsonInput || 'never'`. 'always' builds
+    // the command JSON-only; 'never' (the default) builds it from its schema. 'auto' is secretly 'always' with a
+    // pre-parse: the program is built just-in-time per invocation, so we sniff the argv that will actually be parsed
+    // (`runParams.argv` when provided, falling back to `process.argv` minus the `node script.js` prefix) for a `--json`
+    // token. If it's there, 'auto' commands are built JSON-only (so schema-derived flags/positionals don't exist and
+    // passing them alongside `--json` is an unknown option error); if not, they're built from their schemas as usual,
+    // plus a help-only `--json` option which is unreachable by construction (any argv actually containing `--json`
+    // results in the JSON-only build). Calling `buildProgram()`/`toJSON()` with no runParams at all builds in flags
+    // mode - there's no invocation to sniff. Exception, schema-wins guard: an 'auto' command whose own schema already
+    // derives a `json` option is always built from its schema, so its `--json` flag keeps its schema meaning.
+    const jsonFlagSniffed = runParams !== undefined && argvIncludesJsonFlag(runParams.argv || process.argv.slice(2))
 
     if (params.version) program.version(params.version)
     if (params.description) program.description(params.description)
@@ -238,13 +274,36 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     > = {}
 
     const _process = runParams?.process || process
-    const configureCommand = (
-      command: Command,
-      procedurePath: string,
-      {meta, parsedProcedure, incompatiblePairs, procedure}: ProcedureInfo,
-    ) => {
+    const configureCommand = (command: Command, procedurePath: string, info: ProcedureInfo) => {
+      const {meta} = info
+      const jsonInputMode = resolveJsonInputMode(meta.jsonInput, params.jsonInput)
+      // parse the schema regardless of mode (neutralizing the meta 'always' shortcut inside getParsedProcedure,
+      // which is handled below) so we can tell whether the procedure accepts any input at all
+      const schemaDerived = getParsedProcedure({...info, meta: {...info.meta, jsonInput: undefined}})
+      const schemaProperties = flattenedProperties(schemaDerived.optionsJsonSchema)
+      const hasNoInputs = schemaDerived.positionalParameters.length === 0 && Object.keys(schemaProperties).length === 0
+      let parsedProcedure: ParsedProcedure
+      let addCosmeticJsonOption = false
+      if (hasNoInputs) {
+        // a procedure that accepts no input has nothing to provide as JSON - never offer `--json`, in any mode.
+        // (unparseable schemas don't land here: their fallback parse has a real `json` option, i.e. it HAS an input)
+        parsedProcedure = schemaDerived
+      } else if (jsonInputMode === 'always') {
+        parsedProcedure = jsonProcedureInputs()
+      } else {
+        // schema-wins guard: if the schema already derives a `json` option (including the unparseable-schema fallback,
+        // which *is* a real `--json` option), the schema keeps it - no JSON-only build, no cosmetic help option
+        const schemaHasJsonOption = Object.keys(schemaProperties).some(key => kebabCase(key) === 'json')
+        if (jsonInputMode === 'auto' && !schemaHasJsonOption && jsonFlagSniffed) {
+          parsedProcedure = jsonProcedureInputs()
+        } else {
+          parsedProcedure = schemaDerived
+          addCosmeticJsonOption = jsonInputMode === 'auto' && !schemaHasJsonOption
+        }
+      }
+      const incompatiblePairs = incompatiblePropertyPairs(parsedProcedure.optionsJsonSchema)
       // add meta to the commander command so we can access it in prompt.ts
-      Object.assign(command, {__trpcCli: {path: procedurePath, meta}})
+      Object.assign(command, {__trpcCli: {path: procedurePath, meta, originalInputSchema: info.originalInputSchema}})
       const optionJsonSchemaProperties = flattenedProperties(parsedProcedure.optionsJsonSchema)
       command.exitOverride(ec => {
         _process.exit(ec.exitCode)
@@ -260,7 +319,24 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
       })
       command.showHelpAfterError()
 
-      if (meta.usage) command.usage([meta.usage].flat().join('\n'))
+      if (meta.usage) {
+        const usageLines = [meta.usage].flat()
+        command.usage(usageLines.join('\n'))
+        if (usageLines.length > 1) {
+          // align each usage line under `Usage: `, repeating the full command prefix (like git's multi-line usage) -
+          // without this, commander renders continuation lines unindented at column 0
+          command.configureHelp({
+            commandUsage: cmd => {
+              let prefix = cmd.name()
+              if (cmd.aliases()[0]) prefix += `|${cmd.aliases()[0]}`
+              for (let ancestor = cmd.parent; ancestor; ancestor = ancestor.parent) {
+                prefix = `${ancestor.name()} ${prefix}`
+              }
+              return usageLines.map(line => `${prefix} ${line}`).join('\n' + ' '.repeat('Usage: '.length))
+            },
+          })
+        }
+      }
       if (meta.examples) command.addHelpText('after', `\nExamples:\n${[meta.examples].flat().join('\n')}`)
 
       meta?.aliases?.command?.forEach(alias => {
@@ -295,7 +371,21 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
             return propertyKey // by default commander uses camelcase(this.name()) which turns `use-mcp-server` into `useMcpServer` - when it might be `useMCPServer`
           }
         }
-        const description = getDescription(propertyValue)
+        // union inputs (including module-mode overloads) produce flags that can't be combined - say so in help,
+        // since commander's `conflicts` otherwise only surfaces at error time
+        const incompatibleWith = [
+          ...new Set(
+            incompatiblePairs.flatMap(pair => (pair.includes(propertyKey) ? pair.filter(p => p !== propertyKey) : [])),
+          ),
+        ]
+        const description = [
+          getDescription(propertyValue),
+          incompatibleWith.length > 0
+            ? `Do not use with: ${incompatibleWith.map(other => `--${kebabCase(other)}`).join(', ')}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('; ')
 
         const longOption = `--${kebabCase(propertyKey)}`
         let flags = longOption
@@ -312,11 +402,21 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           delete unusedOptionAliases[propertyKey]
         }
 
+        const isHidden = 'hidden' in propertyValue && propertyValue.hidden === true
+        const addOption = (opt: InstanceType<typeof BaseOption>) => {
+          if (isHidden) opt.hideHelp()
+          command.addOption(opt)
+        }
+
         const allowedSchemas = getAllowedSchemas(propertyValue)
         const firstSchemaWithDefault = allowedSchemas.find(subSchema => 'default' in subSchema)
-        const defaultValue = firstSchemaWithDefault
-          ? ({exists: true, value: firstSchemaWithDefault.default} as const)
-          : ({exists: false} as const)
+        // Check for default value - first in the allowed schemas, then on the root property itself
+        const defaultValue =
+          firstSchemaWithDefault && 'default' in firstSchemaWithDefault
+            ? ({exists: true, value: firstSchemaWithDefault.default} as const)
+            : 'default' in propertyValue
+              ? ({exists: true, value: propertyValue.default} as const)
+              : ({exists: false} as const)
 
         const rootTypes = getSchemaTypes(propertyValue).sort()
 
@@ -336,12 +436,23 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
 
         const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
 
+        // Check if this is an enum (including union of literals like z.union([z.literal('foo'), z.literal('bar')]))
+        // If so, handle it as a string with choices, not as a multi-type union
+        const enumChoices = getEnumChoices(propertyValue)
+        if (enumChoices?.type === 'string_enum') {
+          const option = new Option(`${flags} ${bracketise('string')}`, description)
+          option.choices(enumChoices.choices)
+          if (defaultValue.exists) option.default(defaultValue.value)
+          addOption(option)
+          return
+        }
+
         if (allowedSchemas.length > 1) {
           const option = new Option(`${flags} [value]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
           else if (rootTypes.includes('boolean')) option.default(false)
           option.argParser(getOptionValueParser(propertyValue))
-          command.addOption(option)
+          addOption(option)
           if (rootTypes.includes('boolean')) negate()
           return
         }
@@ -349,7 +460,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         if (rootTypes.length !== 1) {
           const option = new Option(`${flags} ${bracketise('json')}`, description)
           option.argParser(getOptionValueParser(propertyValue))
-          command.addOption(option)
+          addOption(option)
           return
         }
 
@@ -359,7 +470,7 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           // don't set a default value of `false`, because `undefined` is accepted by the procedure
           if (isValueRequired) option.default(false)
           else if (defaultValue.exists) option.default(defaultValue.value)
-          command.addOption(option)
+          addOption(option)
           negate()
           return
         }
@@ -404,9 +515,11 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           option.makeOptionMandatory()
         }
 
-        const enumChoices = getEnumChoices(propertyValue)
-        if (enumChoices?.type === 'string_enum') {
-          option.choices(enumChoices.choices)
+        // Note: enum choices for union of literals are handled earlier (before allowedSchemas.length > 1 check)
+        // This handles z.enum() style enums which don't go through the multi-schema path
+        const propertyEnumChoices = getEnumChoices(propertyValue)
+        if (propertyEnumChoices?.type === 'string_enum') {
+          option.choices(propertyEnumChoices.choices)
         }
 
         option.conflicts(
@@ -417,11 +530,24 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           }),
         )
 
-        command.addOption(option)
+        addOption(option)
         if (propertyType === 'boolean') negate() // just in case we refactor the code above and don't handle booleans as a special case
       }
 
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
+
+      if (addCosmeticJsonOption && !command.options.some(o => o.long === '--json')) {
+        // Help-only `--json` option: shows users JSON input is available, but is unreachable by construction - any
+        // invocation actually passing `--json` results in the JSON-only build (see `jsonFlagSniffed` above).
+        // The duplicate check is belt-and-braces: the schema-wins guard above already skips schemas deriving a `json`
+        // option, but option *aliases* can also produce a `--json` flag.
+        command.addOption(
+          new CosmeticJsonOption(
+            '--json <json>',
+            'Provide the complete procedure input as JSON - other flags and positional arguments are unavailable when using this option',
+          ),
+        )
+      }
 
       const invalidOptionAliases = Object.entries(unusedOptionAliases).map(([option, alias]) => `${option}: ${alias}`)
       if (invalidOptionAliases.length) {
@@ -454,19 +580,40 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
           const message = `Using deprecated \`createCallerFactory\` option. Use \`trpcServer\` instead. e.g. \`createCli({router: myRouter, trpcServer: import('@trpc/server')})\``
           logger.error?.(message)
           caller = deprecatedCreateCaller(router)(params.context)
-        } else if (isOrpcRouter(router)) {
-          const {call} = getOrpcServerModule()
-          // create an object which acts enough like a trpc caller to be used for this specific procedure
-          caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
-        } else {
-          const resolvedTrpcServer = await (params.trpcServer || (await import('@trpc/server')))
+        } else if (isNorpcRouter(router)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let proc = router as any
+          for (const part of procedurePath.split('.')) proc = proc[part]
+          caller = {[procedurePath]: (_input: unknown) => proc.call(_input, params.context) as unknown}
+        } else if (isTrpcRouter(router)) {
+          const resolvedTrpcServer = await (params.trpcServer ||
+            (await import('@trpc/server').catch(e => {
+              throw new Error(`@trpc/server must be installed when using tRPC-style routers. Error loading: ${e}`)
+            })))
           const createCallerFactor = resolvedTrpcServer.initTRPC.create().createCallerFactory as CreateCallerFactoryLike
           caller = createCallerFactor(router)(params.context)
+        } else {
+          const {call} = getOrpcServerModule()
+          // create an object which acts enough like a trpc caller to be used for this specific procedure
+          const procedure = procedurePath
+            .split('.')
+            .reduce((acc, part) => acc[part] as Record<string, unknown>, router as Record<string, unknown>)
+          caller = {[procedurePath]: (_input: unknown) => call(procedure as never, _input, {context: params.context})}
         }
 
-        const result = await (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-          throw transformError(err, command)
-        })
+        // Derive leaf command's argv from the program's argv by stripping the routing segments.
+        // e.g. for procedurePath 'math.add' and program.__argv ['math', 'add', '--a', '2'],
+        // the leaf command gets ['--a', '2'].
+        const leafSegmentCount = procedurePath.split('.').length
+        command.__argv = (program.__argv ?? []).slice(leafSegmentCount)
+
+        const cliContext = {program, command}
+
+        const result = await runWithCliContext(cliContext, () =>
+          (caller[procedurePath](input) as Promise<unknown>).catch(err => {
+            throw transformError(err, command)
+          }),
+        )
         command.__result = result
         if (result != null) logger.info?.(result)
       })
@@ -556,13 +703,13 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
     return program
   }
 
-  const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams)) => {
+  const run: TrpcCli['run'] = async (runParams?: TrpcCliRunParams, program = buildProgram(runParams || {})) => {
     if (!looksLikeInstanceof<Command>(program, 'Command')) throw new Error(`program is not a Command instance`)
     const opts = runParams?.argv ? ({from: 'user'} as const) : undefined
     const argv = [...(runParams?.argv || process.argv)]
 
     const _process = runParams?.process || process
-    const logger = {...lineByLineConsoleLogger, ...runParams?.logger}
+    const logger = {...yamlTableConsoleLogger, ...runParams?.logger}
 
     program.exitOverride(exit => {
       _process.exit(exit.exitCode)
@@ -588,9 +735,21 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
         return inspect(err)
       })
 
-    if (runParams?.prompts) {
-      program = promptify(program, runParams.prompts) as Command
+    // default prompts: prompt for missing inputs when the caller looks like an interactive human - a real terminal
+    // (TTY stdin) and not a coding agent. `prompts: false` (or `null`) disables prompting entirely; `prompts: true`
+    // forces the built-in prompts on even when the heuristic says no.
+    let prompts = runParams?.prompts
+    if (prompts === undefined) {
+      prompts = typeof process !== 'undefined' && Boolean(process.stdin?.isTTY) && !isAgent()
     }
+    if (prompts) {
+      program = promptify(program, prompts) as Command
+    }
+
+    // Store the argv that commander will parse in "user" mode.
+    // When argv is provided via run({argv}), it's used as-is (already "user" args).
+    // When falling back to process.argv, strip the `node script.js` prefix.
+    ;(program as Command).__argv = runParams?.argv ? argv : argv.slice(2)
 
     await program.parseAsync(argv, opts).catch(err => {
       if (err instanceof FailedToExitError) throw err
@@ -611,16 +770,29 @@ export function createCli<R extends AnyRouter>({router, ...params}: TrpcCliParam
   return {run, buildProgram, toJSON: (program = buildProgram()) => commandToJSON(program as Command)}
 }
 
-function getMeta(procedure: {_def: {meta?: {}}}): Omit<TrpcCliMeta, 'cliMeta'> {
-  const meta: Partial<TrpcCliMeta> | undefined = procedure._def.meta
-  return meta?.cliMeta || meta || {}
+export {kebabCase} from './util.js'
+
+/**
+ * Resolve the effective `jsonInput` mode for a procedure: meta overrides the CLI-wide param, defaulting to `'never'`.
+ * Booleans (the pre-1.0 form of this setting) are rejected with a migration message.
+ */
+const resolveJsonInputMode = (metaValue: unknown, paramsValue: unknown): JsonInputMode => {
+  for (const value of [metaValue, paramsValue]) {
+    if (typeof value === 'boolean') {
+      throw new Error(`jsonInput: ${value} is no longer supported - use '${value ? 'always' : 'never'}'`)
+    }
+  }
+  return (metaValue || paramsValue || 'never') as JsonInputMode
 }
 
-export const kebabCase = (str: string) =>
-  str
-    .replaceAll(/([\da-z])([A-Z])/g, '$1-$2')
-    .replaceAll(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
-    .toLowerCase()
+/** check if argv activates JSON input mode: a token that's exactly `--json` or starts with `--json=`, before any bare `--` terminator */
+const argvIncludesJsonFlag = (argv: string[]) => {
+  for (const token of argv) {
+    if (token === '--') return false
+    if (token === '--json' || token.startsWith('--json=')) return true
+  }
+  return false
+}
 
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
@@ -633,7 +805,7 @@ function transformError(err: unknown, command: Command) {
   }
 
   type TRPCErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
-  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError')) {
+  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError') || looksLikeInstanceof<TRPCErrorLike>(err, 'ORPCError')) {
     const cause = err.cause
     if (looksLikeStandardSchemaFailure(cause)) {
       const prettyMessage = prettifyStandardSchemaError(cause)
@@ -655,6 +827,18 @@ function transformError(err: unknown, command: Command) {
 }
 
 export {FailedToExitError, CliValidationError} from './errors.js'
+export {getCliContext, type CliContextValue, type CliCommand} from './context.js'
+export {
+  autoTableConsoleLogger,
+  autoTableLogger,
+  lineByLineConsoleLogger,
+  lineByLineLogger,
+  yamlConsoleLogger,
+  yamlTableConsoleLogger,
+  yamlTableLogger,
+  yamlLogger,
+} from './logging.js'
+export {toYaml} from './yaml.js'
 
 const numberParser = (val: string, {fallback = val as unknown} = {}) => {
   const number = Number(val)
@@ -720,3 +904,5 @@ const parseJson = (
     throw new ErrorClass(hint)
   }
 }
+
+export {t, os} from './norpc.js'

@@ -1,11 +1,23 @@
 {
   "name": "trpc-cli",
-  "version": "0.12.1",
+  "version": "0.15.1",
   "description": "Turn a tRPC router into a type-safe, fully-functional, documented CLI",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": "dist/bin.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./typebox": "./dist/typebox/index.js",
+    "./*": "./*"
+  },
+  "bin": {
+    "trpc-cli": "./src/bin.ts"
+  },
+  "publishConfig": {
+    "bin": {
+      "trpc-cli": "./dist/bin.js"
+    }
+  },
   "files": [
     "dist"
   ],
@@ -15,6 +27,7 @@
   "packageManager": "pnpm@10.29.3",
   "scripts": {
     "ztjs": "./cp-zod-to-json-schema.sh",
+    "typebox": "./cp-typebox.sh",
     "prepare": "pnpm build",
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
@@ -73,6 +86,7 @@
   "devDependencies": {
     "@clack/prompts": "0.11.0",
     "@inquirer/prompts": "8.2.0",
+    "@orpc/client": "1.10.0",
     "@orpc/contract": "1.13.5",
     "@orpc/server": "1.13.5",
     "@trpc/client": "11.10.0",
@@ -97,11 +111,13 @@
     "trpcserver10": "npm:@trpc/server@^10.45.2",
     "trpcserver11": "npm:@trpc/server@^11.1.1",
     "tsx": "4.21.0",
+    "typebox": "1.2.8",
     "typescript": "5.9.3",
     "valibot": "1.2.0",
     "vitest": "4.0.18",
-    "zod3": "npm:zod@3.25.76",
+    "yaml": "^2.8.2",
     "zod": "4.3.6",
-    "zod-to-json-schema": "3.25.1"
+    "zod-to-json-schema": "3.25.1",
+    "zod3": "npm:zod@3.25.76"
   }
 }
