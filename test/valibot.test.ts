@@ -3,6 +3,7 @@ import {inspect} from 'util'
 import * as v from 'valibot'
 import {expect, test} from 'vitest'
 import {createCli, TrpcCliMeta} from '../src/index.js'
+import {toJsonSchema as convertToJsonSchema} from '../src/json-schema.js'
 import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
@@ -591,6 +592,172 @@ test('defaults and negations', async () => {
   )
 })
 // codegen:end
+
+test('alias via valibot metadata', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        v.object({
+          foo: v.pipe(v.optional(v.string()), v.metadata({alias: 'f'})),
+          bar: v.optional(v.pipe(v.string(), v.metadata({alias: 'bb'}))),
+          abc: v.pipe(v.optional(v.string()), v.metadata({alias: '--something-else-entirely'})),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', '--foo', 'hello'])).toMatchInlineSnapshot(`"{"foo":"hello"}"`)
+  expect(await run(router, ['test', '-f', 'hello'])).toMatchInlineSnapshot(`"{"foo":"hello"}"`)
+  expect(await run(router, ['test', '--bar', 'hello'])).toMatchInlineSnapshot(`"{"bar":"hello"}"`)
+  expect(await run(router, ['test', '--bb', 'hello'])).toMatchInlineSnapshot(`"{"bar":"hello"}"`)
+  expect(await run(router, ['test', '--something-else-entirely', 'hello'])).toMatchInlineSnapshot(`"{"abc":"hello"}"`)
+})
+
+test('metadata inside a nullish valibot schema', () => {
+  const result = convertToJsonSchema(
+    v.nullish(
+      v.object({
+        foo: v.pipe(v.string(), v.metadata({alias: 'f'})),
+      }),
+    ),
+    {},
+  )
+
+  expect(result).toMatchObject({
+    success: true,
+    value: {
+      optional: true,
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            foo: {type: 'string', alias: 'f'},
+          },
+          required: ['foo'],
+        },
+        {type: 'null'},
+      ],
+    },
+  })
+})
+
+test('positional via valibot metadata', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        v.object({
+          foo: v.pipe(v.string(), v.metadata({positional: true})),
+          bar: v.optional(v.pipe(v.number(), v.metadata({positional: true}))),
+          abc: v.optional(v.string()),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', 'hello'])).toMatchInlineSnapshot(`"{"foo":"hello"}"`)
+  expect(await run(router, ['test', 'hello', '1'])).toMatchInlineSnapshot(`"{"foo":"hello","bar":1}"`)
+  expect(await run(router, ['test', 'hello', '1', '--abc', '2'])).toMatchInlineSnapshot(
+    `"{"foo":"hello","bar":1,"abc":"2"}"`,
+  )
+})
+
+test('merged positional via valibot metadata', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        v.object({
+          foo: v.pipe(v.string(), v.metadata({positional: true})),
+          bar: v.optional(v.pipe(v.number(), v.metadata({positional: true}))),
+          abc: v.optional(v.string()),
+        }),
+      )
+      .input(
+        v.object({
+          hello: v.pipe(v.string(), v.metadata({positional: true})),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['test', 'ff', '1', 'hh'])).toMatchInlineSnapshot(`"{"foo":"ff","bar":1,"hello":"hh"}"`)
+})
+
+test('array positional via valibot metadata', async () => {
+  const router = t.router({
+    stringArray: t.procedure
+      .input(
+        v.object({
+          foo: v.pipe(v.array(v.string()), v.metadata({positional: true})),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+    numberAndStringArray: t.procedure
+      .input(
+        v.object({
+          bar: v.pipe(v.number(), v.metadata({positional: true})),
+          foo: v.pipe(v.array(v.string()), v.metadata({positional: true})),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['string-array', 'hello', 'goodbye'])).toMatchInlineSnapshot(`"{"foo":["hello","goodbye"]}"`)
+  expect(await run(router, ['number-and-string-array', '123', 'hello', 'goodbye'])).toMatchInlineSnapshot(
+    `"{"bar":123,"foo":["hello","goodbye"]}"`,
+  )
+})
+
+test('hidden option via valibot metadata', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(
+        v.object({
+          visible: v.optional(v.string()),
+          secret: v.optional(v.pipe(v.string(), v.metadata({hidden: true}))),
+        }),
+      )
+      .mutation(({input}) => JSON.stringify(input)),
+  })
+
+  const help = await run(router, ['test', '--help'])
+  expect(help).toContain('--visible')
+  expect(help).not.toContain('--secret')
+
+  expect(await run(router, ['test', '--secret', 'shhh'])).toMatchInlineSnapshot(`"{"secret":"shhh"}"`)
+  expect(await run(router, ['test', '--visible', 'hi', '--secret', 'shhh'])).toMatchInlineSnapshot(
+    `"{"visible":"hi","secret":"shhh"}"`,
+  )
+})
+
+test('negatable boolean via valibot metadata', async () => {
+  const router = t.router({
+    test: t.procedure
+      .input(v.object({foo: v.pipe(v.boolean(), v.metadata({negatable: true}))}))
+      .query(({input}) => `${inspect(input)}`),
+  })
+
+  expect(await run(router, ['test', '--foo'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['test', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+  expect(await run(router, ['test', '--foo', 'true'])).toMatchInlineSnapshot(`"{ foo: true }"`)
+  expect(await run(router, ['test', '--foo', 'false'])).toMatchInlineSnapshot(`"{ foo: false }"`)
+})
+
+test('default negatable boolean can be disabled via valibot metadata', async () => {
+  const router = t.router({
+    test: t.procedure
+      .meta({negateBooleans: true})
+      .input(v.object({foo: v.boolean(), bar: v.pipe(v.boolean(), v.metadata({negatable: false}))}))
+      .query(({input}) => `${inspect(input)}`),
+  })
+
+  expect(await run(router, ['test', '--foo'])).toMatchInlineSnapshot(`"{ foo: true, bar: false }"`)
+  expect(await run(router, ['test', '--no-foo'])).toMatchInlineSnapshot(`"{ foo: false, bar: false }"`)
+  await expect(run(router, ['test', '--no-bar'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown option '--no-bar'
+    (Did you mean one of --bar, --no-foo?)
+  `)
+})
 
 test('valibot schemas to JSON schema', async () => {
   const vtjs = await import('@valibot/to-json-schema')
