@@ -1,10 +1,16 @@
 import type {JSONSchema7} from 'json-schema'
-import {CommandJSON} from './json.js'
-import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './trpc-compat.js'
+import type {Readable, Writable} from 'node:stream'
+import type {CommandJSON} from './json.js'
+import {AnyRouter, CreateCallerFactoryLike, inferRouterContext} from './parse-router.js'
 
 export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** A tRPC router. Procedures will become CLI commands. */
   router: R
+  /**
+   * Program name shown in help/usage output. When not set, a name is derived automatically - from the matching
+   * `bin` entry in your package.json when running as an installed bin, the npm script name when run via
+   * `npm run ...`, or the entry script's basename. See the readme section "How the CLI name is resolved".
+   */
   name?: string
   version?: string
   description?: string
@@ -19,7 +25,114 @@ export interface TrpcCliParams<R extends AnyRouter> extends Dependencies {
   /** The `@trpc/server` module to use for calling procedures. Required when using trpc v10. */
   // createCallerFactory?: CreateCallerFactoryLike
   trpcServer?: TrpcServerModuleLike | Promise<TrpcServerModuleLike>
+
+  /**
+   * Controls whether commands accept a `--json <json>` option supplying the complete procedure input as JSON.
+   *
+   * - `'never'` (default): commands don't accept `--json` (unless their schema defines a `json` property, or their schema couldn't be converted to CLI arguments, in which case `--json` is the only way to pass input).
+   * - `'auto'`: every command accepts `--json` as an alternative to its schema-derived flags and positional arguments. When `--json` is passed it must be the *only* input - combining it with other flags or positional arguments results in an unknown option error. Exception: if a procedure's schema already defines a `json` property, the schema wins - that command keeps its regular schema-derived `--json` flag.
+   * - `'always'`: every command *only* accepts `--json` - no schema-derived flags or positional arguments.
+   *
+   * Commands whose procedures accept no input at all never get `--json`, in any mode - there's nothing to provide.
+   *
+   * Individual procedures can override this with `jsonInput` in their meta.
+   */
+  jsonInput?: JsonInputMode
 }
+
+/**
+ * @experimental Derive a CLI from a plain TypeScript module of exported functions/classes instead of a router.
+ * Exported functions become commands: the jsdoc above each function becomes the command description, and the first
+ * parameter's object type annotation (parsed from the module's *source text* via the vendored `trpc-cli/typebox`
+ * `Type.Script`) becomes the input schema - property jsdoc comments become flag descriptions, and inputs are
+ * validated against the schema before the function runs. Exported functions whose signatures cannot be converted
+ * into CLI inputs are ignored as ordinary non-command exports. `@alias` tags in command/property jsdoc become
+ * command and option aliases. A default-exported function becomes the default command, equivalent to `{default:
+ * true}` in procedure meta. Exported classes become nested command groups when they have no constructor arguments
+ * and at least one public command method; default-exported classes put their methods at the current router level.
+ * Classes with `extends` must declare an explicit zero-argument constructor. Unsupported class shapes are ignored
+ * as ordinary non-command exports. Their public instance methods are lazily invoked on a fresh class instance. In
+ * file-backed module mode, `export * as foo from './foo'` becomes a nested sub-router named `foo`, `export * from './foo'`
+ * merges that module's named commands into the current router level, and `export {foo} from './foo'` re-exports
+ * selected commands.
+ *
+ * `import.meta` satisfies this shape (it carries `filename`/`url`), so the simplest setup is to call `createCli`
+ * from the bottom of the commands file itself:
+ *
+ * @example
+ * ```ts
+ * // commands.ts
+ * import {createCli} from 'trpc-cli'
+ *
+ * /** install dependencies from the lockfile *\/
+ * export async function install(options: {frozenLockfile?: boolean}) { ... }
+ *
+ * void createCli(import.meta).run() // <- at the BOTTOM of the file, and don't `await` it (see note below)
+ * ```
+ *
+ * Or point at a separate file from an entrypoint:
+ *
+ * @example
+ * ```ts
+ * import {createCli} from 'trpc-cli'
+ * void createCli({filename: '/path/to/commands.ts'}).run()
+ * ```
+ *
+ * Note on `createCli(import.meta)`: because trpc-cli only receives the file's location (not its exports), it
+ * re-imports the file to get the live functions. When the call lives in the commands file itself this is a
+ * self-import, which is fine **as long as** the call is at the bottom of the file (so all `export const` arrow
+ * functions above it are initialized) and is **not** top-level-`await`ed (a top-level `await` would suspend the
+ * module before the self-import can resolve, deadlocking). `void createCli(import.meta).run()` is the safe form.
+ * If another module imports this file, the `.run()` call is a no-op, so the exported command functions remain
+ * importable as plain functions.
+ */
+export interface TrpcCliModuleParams {
+  /**
+   * @experimental
+   * Where to find the commands module:
+   * - pass `import.meta` directly (it has `filename`/`url`) for the zero-config single-file setup
+   * - a `URL` like `new URL('./commands.ts', import.meta.url)` - resolved relative to the importing file, so the
+   *   CLI works no matter what directory it's run from (use this for anything you distribute)
+   * - an absolute path (e.g. `import.meta.filename`) or a path string - a relative string is resolved against
+   *   `process.cwd()`, so it's only reliable when the CLI is run from a known directory (fine for quick scripts)
+   *
+   * The file is read from disk and dynamically imported - for `.ts` files, run under tsx/bun/deno/node>=22.18.
+   * Re-exported command modules are resolved relative to this file.
+   */
+  filename?: string | URL
+  /**
+   * @experimental `import.meta.url`. Used as a fallback when `filename` isn't populated (e.g. older Node where
+   * `import.meta.filename` doesn't exist, or non-node runtimes), so that passing `import.meta` always works.
+   * Ignored when `filename` is set.
+   */
+  url?: string
+  /**
+   * @experimental Bundler/browser escape hatch (no filesystem, no dynamic import): the module's raw source text.
+   * Re-exported command modules are not supported in this form.
+   * Pass alongside {@linkcode TrpcCliModuleParams.exports}, e.g. `{source: rawSourceText, exports: await import('./commands.js')}`.
+   */
+  source?: string
+  /** @experimental Bundler/browser escape hatch: the module's live exports. Pass alongside {@linkcode TrpcCliModuleParams.source}. */
+  exports?: Record<string, unknown>
+  /**
+   * Program name shown in help/usage output. When not set, a name is derived automatically - falling back to the
+   * commands-file basename in this mode. See the readme section "How the CLI name is resolved".
+   */
+  name?: string
+  version?: string
+  description?: string
+  usage?: string | string[]
+  /** See {@linkcode TrpcCliParams.jsonInput} */
+  jsonInput?: JsonInputMode
+}
+
+/**
+ * Mode for the `jsonInput` setting (CLI-wide via `createCli({jsonInput: ...})` or per-procedure via meta):
+ * - `'never'` (default): the command doesn't accept `--json` at all
+ * - `'auto'`: the command accepts `--json <json>` as an alternative to its schema-derived flags/positional arguments
+ * - `'always'`: the command *only* accepts `--json <json>`
+ */
+export type JsonInputMode = 'never' | 'auto' | 'always'
 
 /** Rough shape of the `@trpc/server` (v10) module. Needed to pass in to `createCli` when using trpc v10. */
 export type TrpcServerModuleLike = {
@@ -52,8 +165,13 @@ export interface TrpcCliMeta {
     /** Aliases for the options. Note: take care to avoid conflicts with other options. An error will be thrown if an alias is defined for a non-existent option. */
     options?: Record<string, string>
   }
-  /** If true, will use a single CLI option expect the entire input to be parsed in as JSON, e.g. `--input '{"foo": "bar"}`. Can be useful to opt out of the default mapping of input schemas to CLI options. */
-  jsonInput?: boolean
+  /**
+   * Per-procedure override of the CLI-wide `jsonInput` setting (see `TrpcCliParams`).
+   * If `'always'`, this command uses a single `--json <json>` option expecting the entire input as JSON, e.g. `--json '{"foo": "bar"}'` - useful to opt out of the default mapping of input schemas to CLI options.
+   * If `'auto'`, this command accepts `--json` as an alternative to its schema-derived flags/positional arguments.
+   * If `'never'` (default), this command is always built from its schema and won't accept `--json`.
+   */
+  jsonInput?: JsonInputMode
   /** Sub-property for the CLI meta. If present, will take precedence over the top-level meta, to avoid conflicts with other tools. */
   cliMeta?: TrpcCliMeta
   /** If set to true, add a "--no-*" option to negate each boolean option by default. Can still be overriden by doing `z.boolean().meta({negatable: ...})` or equivalent. */
@@ -179,9 +297,16 @@ export type Promptable =
 
 export type TrpcCliRunParams = {
   argv?: string[]
+  /** Logger for command results and errors. Defaults to `yamlTableConsoleLogger`, which renders objects as yaml and arrays of objects as tables. */
   logger?: Logger
   completion?: OmeletteInstanceLike | (() => Promise<OmeletteInstanceLike>)
-  prompts?: Promptable
+  /**
+   * How to prompt for missing inputs. Pass a prompt library (`@inquirer/prompts`, `enquirer`, `prompts`,
+   * `@clack/prompts`) or a custom `Prompter`. `true` forces the built-in prompts; `false`/`null` disables prompting
+   * entirely. When not set, the built-in prompts are enabled iff the caller looks like an interactive human: stdin
+   * is a TTY and no coding-agent environment is detected (see `isAgent`).
+   */
+  prompts?: Promptable | boolean | null
   /** Format an error thrown by the root procedure before logging to `logger.error` */
   formatError?: (error: unknown) => string
   process?: {
@@ -197,6 +322,9 @@ export type CommanderProgramLike = {
   name: () => string
   parseAsync: (args: string[], options?: {from: 'user' | 'node' | 'electron'}) => Promise<unknown>
   helpInformation: () => string
+  commands?: readonly CommanderProgramLike[]
+  hidden?: boolean
+  _hidden?: boolean
 }
 
 export interface TrpcCli {
@@ -215,6 +343,22 @@ export interface TrpcCli {
   toJSON: (program?: CommanderProgramLike) => CommandJSON
 }
 
+export type TrpcCliAsync = {
+  /** run the CLI - gets args from `process.argv` by default */
+  run: (params?: TrpcCliRunParams, program?: CommanderProgramLike) => Promise<void>
+  /**
+   * Build a `Commander` program from the CLI - you can use this to manually customise the program before passing it to `.run(...)`.
+   * Note that you will need to cast the return value to `import('commander').Command` to use it as a `Command` instance.
+   */
+  buildProgram: (params?: TrpcCliRunParams) => Promise<CommanderProgramLike>
+  /**
+   * @experimental
+   * Get a JSON representation of the CLI - useful for generating documentation etc. This function returns basic information about the CLI
+   * and each command - to get any extra details you will need to use the `buildProgram` function and walk the tree of commands yourself.
+   */
+  toJSON: (program?: CommanderProgramLike) => Promise<CommandJSON>
+}
+
 // todo: allow these all to be async?
 export type Dependencies = {
   '@valibot/to-json-schema'?: {
@@ -227,10 +371,8 @@ export type Dependencies = {
 }
 
 export type PromptContext = {
-  // eslint-disable-next-line no-undef
-  input?: NodeJS.ReadableStream
-  // eslint-disable-next-line no-undef
-  output?: NodeJS.WritableStream
+  input?: Readable
+  output?: Writable
   clearPromptOnDone?: boolean
   signal?: AbortSignal
   /** The command that is being prompted for. Cast this to a `commander.Command` to access the command's name, description, options etc. */

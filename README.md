@@ -16,7 +16,8 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
 - ✅ Use advanced tRPC features like context and middleware in your CLI
 - ✅ Build multimodal applications - use the same router for a CLI and an HTTP server, and more
 - ✅ oRPC support
-- ✅ No configuration required. Run on an existing router with `npx trpc-cli src/your-router.ts`
+- ✅ Standalone mode (experimental) - build CLIs without `@trpc/server` or `@orpc/server`
+- ✅ No configuration required. Run a plain module of exported functions with `npx trpc-cli ./commands.ts`
 
 ---
 
@@ -36,19 +37,25 @@ trpc-cli transforms a [tRPC](https://trpc.io) (or [oRPC](#orpc)) router into a p
    - [arktype](#arktype)
    - [valibot](#valibot)
    - [effect](#effect)
+   - [typebox](#typebox)
+   - [CLI from a plain TypeScript module — Experimental](#cli-from-a-plain-typescript-module--experimental)
 - [Examples](#examples)
    - [Calculator Example](#calculator-example)
    - [Migrator Example](#migrator-example)
 - [Other Features](#other-features)
    - [tRPC v10 vs v11](#trpc-v10-vs-v11)
    - [oRPC](#orpc)
+   - [Standalone Mode (No tRPC/oRPC Required) — Experimental](#standalone-mode-no-trpcorpc-required--experimental)
    - [Output and Lifecycle](#output-and-lifecycle)
+   - [How the CLI name is resolved](#how-the-cli-name-is-resolved)
    - [Testing your CLI](#testing-your-cli)
+   - [CLI Context](#cli-context)
    - [Programmatic Usage](#programmatic-usage)
    - [Input Prompts](#input-prompts)
    - [Completions](#completions)
    - [`.toJSON()`](#tojson)
-   - [Using Existing Routers](#using-existing-routers)
+   - [`deepHelp(program)`](#deephelpprogram)
+   - [Running a file directly](#running-a-file-directly)
 - [Reference](#reference)
    - [API docs](#api-docs)
    - [Features and Limitations](#features-and-limitations)
@@ -382,9 +389,50 @@ const router = t.router({
 })
 ```
 
+#### JSON input
+
+Set `jsonInput: 'auto'` to make every command accept a `--json <json>` option supplying the *complete* procedure input as JSON, as an alternative to its regular flags and positional arguments:
+
+```ts
+const router = t.router({
+  add: t.procedure
+    .input(z.object({left: z.number(), right: z.number()}))
+    .query(({input}) => input.left + input.right),
+})
+
+const cli = createCli({router, jsonInput: 'auto'})
+
+// Both of these work:
+// mycli add --left 1 --right 2
+// mycli add --json '{"left": 1, "right": 2}'
+```
+
+When `--json` is passed, it must supply the *whole* input - schema-derived flags and positional arguments are unavailable, so something like `mycli add --left 1 --json '{"right": 2}'` results in an unknown option error. The JSON payload still goes through the procedure's own input validation. This is especially useful for machine-generated invocations (e.g. an LLM calling your CLI), where serialising one JSON blob is more reliable than building up an argv.
+
+If a procedure's input schema defines its own `json` property, the schema wins: that command keeps its regular schema-derived `--json` flag, and the JSON-input behavior is disabled for it.
+
+Commands whose procedures accept no input at all (no `.input(...)`, or an empty object schema) never get a `--json` option, in any mode - there's nothing to provide.
+
+The `jsonInput` setting accepts `'never'` (the default - commands don't accept `--json`), `'auto'` (described above) or `'always'`, either CLI-wide via `createCli({jsonInput: ...})` or per procedure in its meta (the meta value takes precedence):
+
+```ts
+const router = t.router({
+  add: t.procedure
+    .meta({jsonInput: 'never'}) // this command won't accept --json at all
+    .input(z.object({left: z.number(), right: z.number()}))
+    .query(({input}) => input.left + input.right),
+  complex: t.procedure
+    .meta({jsonInput: 'always'}) // this command *only* accepts --json - no schema-derived flags
+    .input(z.object({deeply: z.object({nested: z.string()})}))
+    .query(({input}) => input.deeply.nested),
+})
+```
+
+>Breaking changes (while trpc-cli is at major version 0): in previous versions this option was called `--input [json]` - it was renamed to `--json <json>`, and `jsonInput` accepted booleans - `jsonInput: true` is now `'always'` and `false` is `'never'` (booleans throw an error with a migration hint).
+
 #### Complex Inputs with JSON
 
-Procedures with inputs that cannot be cleanly mapped to positional arguments and CLI options are automatically configured to accept a JSON string via the `--input` option. This ensures that every procedure in your router is accessible via the CLI, even those with complex input types.
+Procedures with inputs that cannot be cleanly mapped to positional arguments and CLI options are automatically configured to *only* accept input via the `--json` option (regardless of the `jsonInput` setting). This ensures that every procedure in your router is accessible via the CLI, even those with complex input types.
 
 ```ts
 const router = t.router({
@@ -398,12 +446,10 @@ const router = t.router({
 const cli = createCli({router})
 
 // Even though the input isn't ideal for CLI, you can still use it:
-// mycli foo --input '["first", {"abc": "middle"}, "last"]'
+// mycli foo --json '["first", {"abc": "middle"}, "last"]'
 ```
 
 Rather than ignoring these procedures, trpc-cli makes them available through JSON input, allowing you to pass complex data structures that wouldn't work well with traditional CLI arguments.
-
-You can also explicitly opt into this behavior for any procedure by setting `jsonInput: true` in its meta, regardless of whether its input could be mapped to CLI arguments.
 
 #### Advanced Meta Configuration
 
@@ -426,7 +472,7 @@ const router = t.router({
 
 You can use any validator that [trpc supports](https://trpc.io/docs/server/validators), but for inputs to be converted into CLI arguments/options, they must be JSON schema compatible. The following validators are supported so far. Contributions are welcome for other validators - the requirement is that they must have a helper function that converts them into a JSON schema representation.
 
-Note that JSON schema representations are not in general perfect 1-1 mappings with every validator library's API, so some procedures may default to use the JSON `--input` option instead.
+Note that JSON schema representations are not in general perfect 1-1 mappings with every validator library's API, so some procedures may default to use the JSON `--json` option instead.
 
 ### zod
 
@@ -479,7 +525,7 @@ cli.run() // e.g. `mycli add --left 1 --right 2`
 ```
 
 - Note: you will need to install `arktype` as a dependency separately
-- Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--input` option to pass in a JSON string. Check your CLI help text to see if this is the case. See https://github.com/arktypeio/arktype/issues/1379 for more info.
+- Note: some arktype features result in types that can't be converted cleanly to CLI args/options, so for some procedures you may need to use the `--json` option to pass in a JSON string. Check your CLI help text to see if this is the case. See https://github.com/arktypeio/arktype/issues/1379 for more info.
 
 ### valibot
 
@@ -524,6 +570,238 @@ const cli = createCli({router, trpcServer: import('@trpc/server')})
 
 cli.run() // e.g. `mycli add 1 2`
 ```
+
+### typebox
+
+[TypeBox](https://github.com/sinclairzx81/typebox) is vendored into trpc-cli, so unlike the other validators it requires **no extra dependencies** - import it from `trpc-cli/typebox`:
+
+```ts
+import {createCli, t} from 'trpc-cli'
+import Type from 'trpc-cli/typebox'
+
+const router = t.router({
+  hello: t.procedure
+    .input(
+      Type.Script(`
+        {
+          /** a message to say hello to new users */
+          greeting: string
+          /** make it loud */
+          shout?: boolean
+        }
+      `),
+    )
+    .query(({input}) =>
+      input.shout ? input.greeting.toUpperCase() + '!!!' : input.greeting,
+    ),
+})
+
+const cli = createCli({router})
+
+cli.run() // e.g. `mycli hello --greeting hi --shout`
+```
+
+Schemas built via `trpc-cli/typebox` are plain TypeBox JSON Schema objects, but with two additions over the upstream package:
+
+1. They carry a (lazily-built, non-enumerable) `~standard` prop implementing [standard-schema](https://standardschema.dev) and [Standard JSON Schema](https://standardschema.dev/json-schema), so they can be passed straight to trpc/orpc/norpc `.input(...)` with no adapter. Upstream TypeBox [won't implement `~standard` natively](https://github.com/sinclairzx81/typebox/discussions/1152) on separation-of-concerns grounds - vendoring lets trpc-cli take that opinion on itself. One caveat: only schemas *returned by the builders* carry the prop at runtime - a sub-schema plucked from inside a `Type.Script(...)` result (e.g. `Input.properties.foo`) typechecks as having `~standard` but doesn't carry it; use the exported `attachStandardSchema(subSchema)` if you need to pass one to `.input(...)` directly. Similarly, with `Settings.Set({immutableTypes: true})` TypeBox freezes schemas at construction time, so `~standard` can't be attached at all - builders still work, but the frozen schemas they return won't be accepted by `.input(...)`.
+2. The vendored `Type.Script` parses `/** jsdoc comments */` preceding object properties into JSON Schema `description` fields (which become help text for flags, as in the example above). Upstream [treats comments as whitespace](https://github.com/sinclairzx81/typebox/issues/1597) for parser-performance reasons. Static type inference is unaffected - the type-level parser keeps ignoring comments.
+
+Since the example above uses the built-in norpc router (`t` from `trpc-cli` itself), it's a fully working CLI with **zero peer dependencies installed** - no zod, no `@trpc/server`, no `@orpc/server`.
+
+The vendored copy lives in `src/typebox/vendor` (pinned via `typebox` in devDependencies, upgraded with `cp-typebox.sh`) - all other `Type.*` builders, `Compile`, `Value` etc. work as documented upstream.
+
+### CLI from a plain TypeScript module — Experimental
+
+> **Note:** This API is experimental and may change in a future release.
+
+Going one step further than the vendored typebox: you can skip schemas *and* routers entirely and derive a CLI from a plain TypeScript module of exported functions:
+
+```ts
+// commands.ts
+/** install dependencies from the lockfile */
+export async function install(options: {
+  /** fail if the lockfile is out of date */
+  frozenLockfile?: boolean
+}) {
+  // do install stuff here
+}
+
+type AddOptions = {
+  /** the name of the package to add */
+  packageName: string
+  /** add to devDependencies instead of dependencies */
+  dev?: boolean
+}
+
+/** add a package to the dependencies */
+export async function add(options: AddOptions) {
+  return {added: options.packageName} // returned values are logged
+}
+```
+
+The simplest setup is to call `createCli` from the bottom of the commands file itself, passing `import.meta`:
+
+```ts
+// commands.ts (continued)
+import {createCli} from 'trpc-cli'
+
+void createCli(import.meta).run() // <- at the bottom of the file; don't `await` it (see below)
+```
+
+Or keep commands in their own file and point at it from an entrypoint:
+
+```ts
+// cli.ts
+import {createCli} from 'trpc-cli'
+
+void createCli({filename: '/path/to/commands.ts'}).run()
+```
+
+trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and parameter type annotations are parsed by the vendored `Type.Script` into real JSON schemas - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`). A default-exported function becomes the default command, so `export default function hola(...)` can be run as either `mycli ...` or `mycli hola ...`.
+
+Exported functions whose signatures cannot be converted into CLI inputs are ignored as ordinary non-command exports. This gives helper exports an escape hatch without adding trpc-cli-specific metadata:
+
+```ts
+export const loadSomeInternalThing = (params: NoInfer<{foo: string}>) => {
+  return loadIt(params.foo) // not a command
+}
+```
+
+Command and option aliases can be added with `@alias` tags in the same jsdoc comments:
+
+```ts
+/** install dependencies
+ * @alias i
+ */
+export function install(options: {
+  /** fail if the lockfile is out of date
+   * @alias f
+   */
+  frozenLockfile?: boolean
+}) {
+  // mycli i -f
+}
+```
+
+File-backed module mode can compose command modules too:
+
+```ts
+// commands.ts
+export * from './workspace.ts' // merges named commands into this level
+export {Users} from './users.ts' // re-exports one selected command/group
+export * as users from './users.ts' // creates a nested `users` sub-router
+```
+
+Relative re-export specifiers are resolved from the containing file. Exact paths win first (`'./users.ts'`, `'./users.mts'`, etc.); extensionless specifiers then probe common TypeScript/JavaScript extensions such as `.ts`, `.mts`, `.js`, and `.mjs`. `.js`/`.mjs`/`.cjs` specifiers may also resolve to sibling TypeScript source files such as `.ts`/`.mts`/`.cts`, matching the common TypeScript ESM pattern. `export * from './workspace.ts'` follows ESM semantics and does not merge that module's default export. `export {Users} from './users.ts'` exposes that child command/group at the current level. `export * as users from './users.ts'` keeps the child router intact, including a default export as the default command for `users`.
+
+Same-file subcommand groups can be written as exported classes. The class is not instantiated when help/schema information is built; trpc-cli creates a fresh instance only when one of the class's method commands runs.
+
+```ts
+// commands.ts
+export class Users {
+  /** invite a user */
+  invite(options: {
+    /** address to invite */
+    email: string
+  }) {
+    this.#audit('invite')
+    return `invite ${options.email}` // mycli users invite --email ada@example.com
+  }
+
+  #audit(action: string) {
+    // private implementation detail, not a command
+  }
+}
+```
+
+Run it like:
+
+```console
+$ tsx commands.ts users invite --email bob@example.com
+invite bob@example.com
+```
+
+Class command groups must be direct `export class Name { ... }` declarations. Classes without a base class may omit the constructor; classes with `extends` must declare an explicit zero-argument constructor. Classes with constructor parameters, unsupported inheritance, or no public command methods are ignored as ordinary exports. Public instance methods declared directly in the class body become commands. Static methods, inherited methods, private/protected methods, getters and setters are not commands. A default-exported class exposes its public methods at the current level instead of under a class-name subcommand:
+
+```ts
+export default class Commands {
+  invite(options: {email: string}) {
+    return `invite ${options.email}` // mycli invite --email ada@example.com
+  }
+}
+```
+
+Multi-parameter functions work too: leading string/number/boolean parameters become positional arguments, and a trailing object parameter becomes flags - the same convention as [tuple inputs](#combining-positional-arguments-and-options):
+
+```ts
+// commands.ts
+/** add two numbers */
+export async function add(left: number, right: number) {
+  return left + right // mycli add 2 3
+}
+
+/** copy a file */
+export async function copy(
+  source: string,
+  dest?: string,
+  options?: {force?: boolean},
+) {
+  // mycli copy a.txt b.txt --force
+  // optional parameters (and ones with defaults) become optional positionals: mycli copy a.txt
+}
+```
+
+Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becomes the positional argument's description.
+
+TypeScript function overloads become alternate calling conventions for a single command, when every signature takes a single object parameter:
+
+```ts
+// commands.ts
+/** resize by explicit dimensions */
+export function resize(params: {
+  input: string
+  width: number
+  height: number
+}): Promise<string>
+/** resize by scale factor, preserving aspect ratio */
+export function resize(params: {input: string; scale: number}): Promise<string>
+/** resize an image */
+export function resize(params: {
+  input: string
+  width?: number
+  height?: number
+  scale?: number
+}) {
+  // the implementation dispatches on the input's shape, as overload implementations always do.
+  // its jsdoc (if any) becomes the command's overall description
+}
+```
+
+Help shows one usage line per signature (with its jsdoc as a trailing comment):
+
+```console
+$ mycli resize --help
+Usage: mycli resize --input <string> --width <number> --height <number>  # resize by explicit dimensions
+       mycli resize --input <string> --scale <number>                    # resize by scale factor, preserving aspect ratio
+...
+```
+
+The flags list is the union of all signatures' flags, and flags that never appear in the same signature conflict (`--width` can't be combined with `--scale`) - their help descriptions are annotated with `Do not use with: ...`. At runtime, the input is validated against each signature's schema in declaration order - mirroring TypeScript's own overload resolution - and the first match is passed to the function. If nothing matches, the error reports each signature's issues, closest match first.
+
+jsdoc conventions for overloaded commands: each signature's jsdoc describes *its* calling convention (it becomes that usage line's `#` comment); a jsdoc on the *implementation* signature describes the command as a whole (shown as the command description - without one, the signatures' descriptions are joined). Property jsdoc works as usual, and a flag documented differently in different signatures (say, an `input` that means a URL in one and a file path in another) shows each distinct description, joined with `/`.
+
+Details and limitations:
+
+- `filename` accepts an absolute path (robust - works from any directory), `import.meta` (when the call lives in the commands file itself), or a `URL` like `new URL('./commands.ts', import.meta.url)` (resolves relative to the importing file, so a distributed CLI works wherever it's invoked). A *relative* path string is resolved against `process.cwd()`, so it's only reliable when the CLI is run from a known directory - fine for quick scripts, but it breaks the moment a globally-installed CLI runs somewhere else, so prefer `import.meta`/`URL` for anything you distribute. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+- `createCli(import.meta)` re-imports the commands file to read its exports, so when the call lives in that same file it's a *self-import*. That's fine as long as the call is at the **bottom** of the file (so all `export const` arrow functions above it are initialized) and is **not** top-level-`await`ed - `void createCli(import.meta).run()` is the safe form. A top-level `await createCli(import.meta).run()` would deadlock (the await suspends the module before the self-import can resolve). When another module imports this file, the `.run()` call is a no-op, so the exported command functions remain importable as plain functions.
+- Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`), references to a `type X = {...}`/`interface X {...}` declared in the same file, or relative file-backed type imports such as `import type {Options} from './types.ts'`. Interface `extends` clauses and intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags when possible. Functions with no parameters become commands with no arguments.
+- Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
+- Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed), `export default function f(...)` (anonymous default functions become a command named `default`), `export class Group { method(...) {} }`, `export default class Commands { method(...) {} }`, `export * as group from './group'`, `export * from './group'`, and `export {commandOrGroup} from './group'`. The module must export *only* commands: any other exported function - a local `export {f}` statement or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module.
+- Overloaded functions (and class methods) become alternate calling conventions as described above when every signature takes a single object parameter. Signatures involving positional parameters can't be presented as alternatives (commander has no way to show alternate positional layouts for one command), so those fall back to using only the *first* overload signature - the primary documented shape, since TypeScript resolves calls against signatures in order. The implementation signature is always ignored.
+- For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({source: rawSourceText, exports: await import('./commands.js')})`. Re-exported command modules are not supported in this form because trpc-cli has no filesystem location to resolve child modules from.
+- In this mode `run`/`buildProgram`/`toJSON` are all **async** (the module is loaded asynchronously): `const program = await createCli(import.meta).buildProgram()`. With a router, `buildProgram`/`toJSON` are synchronous.
+- Don't pass user-controlled strings as `filename` - the path is read and dynamically imported, i.e. executed.
+- Bundle-size note: the dynamic import of the module-commands machinery pulls the vendored typebox parser into bundles (~4MB unminified). Irrelevant for the normal Node CLI case; if you're bundling for size, prefer a router with explicit schemas.
 
 ---
 
@@ -706,12 +984,12 @@ const appRouter = trpc.router({
 Given a migrations router looking like this:
 
 <!-- codegen:start {preset: custom, require: tsx/cjs, source: ./readme-codegen.ts, export: dump, file: test/fixtures/migrations.ts} -->
-<!-- hash:aa4cd72750b41b9734014c462e0a4d8d -->
+<!-- hash:92ebb075b9458d9dbd888b4b643cc6dc -->
 ```ts
 import * as trpcServer from '@trpc/server'
 import {z} from 'zod/v4'
 import {createCli, type TrpcCliMeta} from '../../src/index.js'
-import * as trpcCompat from '../../src/trpc-compat.js'
+import * as parseRouter from '../../src/parse-router.js'
 
 const trpc = trpcServer.initTRPC.meta<TrpcCliMeta>().create()
 
@@ -815,7 +1093,7 @@ export const router = trpc.router({
         )
       }),
   }),
-}) satisfies trpcCompat.Trpc11RouterLike
+}) satisfies parseRouter.Trpc11RouterLike
 
 const cli = createCli({
   router,
@@ -938,16 +1216,90 @@ const cli = createCli({router: await unlazyRouter(router)})
 cli.run()
 ```
 
+### Standalone Mode (No tRPC/oRPC Required) — Experimental
+
+> **Note:** This API is experimental and may change in a future release.
+
+If you just want to build a CLI without depending on `@trpc/server` or `@orpc/server`, you can use the built-in `t` helper:
+
+```ts
+import {t, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const router = t.router({
+  greet: t.procedure
+    .input(z.object({name: z.string()}))
+    .handler(({input}) => `Hello, ${input.name}!`),
+})
+
+createCli({router}).run()
+```
+
+This works with any standard-schema compatible validator (zod, valibot, arktype, etc.).
+
+If you prefer oRPC's API style, you can use the `os` export instead:
+
+```ts
+import {os, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+const router = os.router({
+  greet: os
+    .input(z.object({name: z.string()}))
+    .handler(({input}) => `Hello, ${input.name}!`),
+})
+
+createCli({router}).run()
+```
+
+#### Middleware and Context
+
+The standalone helpers support middleware via `.use()` for context injection, similar to tRPC and oRPC:
+
+```ts
+import {t, createCli} from 'trpc-cli'
+import {z} from 'zod'
+
+// Create a reusable procedure with middleware
+const withUser = t.procedure.use(async ({next}) => {
+  return next({
+    ctx: {user: {id: 1, name: 'Alice'}}, // tRPC style uses `ctx`
+    // context: {...}  // oRPC style uses `context` - both work!
+  })
+})
+
+const router = t.router({
+  whoami: withUser.query(({ctx}) => `I am ${ctx.user.name}`),
+  greet: withUser
+    .input(z.object({greeting: z.string()}))
+    .mutation(({input, ctx}) => `${input.greeting}, ${ctx.user.name}!`),
+})
+
+createCli({router}).run()
+```
+
+You can chain multiple middleware to build up context:
+
+```ts
+const withPermissions = withUser.use(async ({ctx, next}) => {
+  return next({
+    ctx: {permissions: ctx.user.id === 1 ? ['admin'] : ['guest']},
+  })
+})
+```
+
+> Note: The standalone middleware is simpler than full tRPC/oRPC middleware. It doesn't support features like `path`, `procedure` params, or cleanup logic. If you need advanced middleware features, use `@trpc/server` or `@orpc/server` directly.
+
 ### Output and Lifecycle
 
-The output of the command will be logged if it is truthy. The log algorithm aims to be friendly for bash-piping, usage with jq etc.:
+The output of the command will be logged if it is truthy. The default logger is `yamlTableConsoleLogger`, which aims to be friendly for humans reading terminal output:
 
-- Arrays will be logged line be line
-- For each line logged:
-   - string, numbers and booleans are logged directly
-   - objects are logged with `JSON.stringify(___, null, 2)`
+- strings, numbers and booleans are logged directly
+- arrays of primitives are logged line by line
+- arrays of objects are rendered as a table
+- other objects are rendered as yaml
 
-So if the procedure returns `['one', 'two', 'three]` this will be written to stdout:
+So if the procedure returns `['one', 'two', 'three']` this will be written to stdout:
 
 ```
 one
@@ -958,18 +1310,27 @@ three
 If the procedure returns `[{name: 'one'}, {name: 'two'}, {name: 'three'}]` this will be written to stdout:
 
 ```
-{
-  "name": "one"
-}
-{
-  "name": "two"
-}
-{
-  "name": "three"
-}
+┌───────┐
+│ name  │
+├───────┤
+│ one   │
+├───────┤
+│ two   │
+├───────┤
+│ three │
+└───────┘
 ```
 
-This is to make it as easy as possible to use with other command line tools like `xargs`, `jq` etc. via bash-piping. If you don't want to rely on this logging, you can always log inside your procedures however you like and avoid returning a value.
+If you're expecting output to be piped to other command line tools like `jq` or `xargs`, use `lineByLineConsoleLogger` instead - it logs primitives directly, arrays line by line, and objects with `JSON.stringify(___, null, 2)`:
+
+```ts
+import {createCli, lineByLineConsoleLogger} from 'trpc-cli'
+
+const cli = createCli({router: yourRouter})
+void cli.run({logger: lineByLineConsoleLogger})
+```
+
+If you don't want to rely on this logging, you can always log inside your procedures however you like and avoid returning a value.
 
 The process will exit with code 0 if the command was successful, or 1 otherwise. 
 
@@ -993,6 +1354,18 @@ cli.run({
 ```
 
 You could also override `process.exit` to avoid killing the process at all - see [programmatic usage](#programmatic-usage) for an example.
+
+### How the CLI name is resolved
+
+The program name shown in help/usage output comes from the first of these that produces a value:
+
+1. **The `name` param**: `createCli({router, name: 'mycli'})`.
+2. **A matching `bin` entry in your package.json** - when running as an installed bin, the entry script (`process.argv[1]`) is realpath-resolved and compared against the `bin` entries of its nearest package.json. So a package with `"bin": {"mycli": "./dist/cli.js"}` shows `Usage: mycli` whether it's run as `mycli`, `npx mycli`, or `node dist/cli.js`. A string-form `bin` uses the package name (scope stripped).
+3. **The npm script name** - when run via `npm run dev` (or pnpm/yarn/bun equivalents), the script name (`npm_lifecycle_event`) is used, but only if the script's command actually mentions the entry file. That guard matters because npm sets `npm_lifecycle_event` for every child process: without it, a CLI merely *spawned by* `npm run build` would be named `build`.
+4. **The entry script's basename**, minus extension: `node ./scripts/deploy.ts` shows `Usage: deploy`.
+5. **The commands-file basename** (module mode only): `createCli(import.meta)` and `npx trpc-cli ./commands.ts` fall back to the module file's basename.
+
+Rules 2-4 read the process environment, so they only apply to environment-driven runs - a real `run()` reading `process.argv`. When you pass `argv` explicitly (programmatic usage, tests), `process.argv` and the npm env vars describe the host process rather than your CLI, so those rules are skipped and only an explicit `name` (or rule 5 in module mode) applies.
 
 ### Testing your CLI
 
@@ -1062,6 +1435,49 @@ This will give you strong types for inputs and outputs, and is essentially what 
 
 In general, you should rely on `trpc-cli` to correctly handle the lifecycle and output etc. when it's invoked as a CLI by end-users. If there are any problems there, they should be fixed on this repo - please raise an issue.
 
+### CLI Context
+
+You can access low-level CLI information from within your procedure handlers using `getCliContext()`. This uses `AsyncLocalStorage` under the hood, so it works from anywhere in the async call chain - procedures, middleware, nested helper functions, etc.
+
+```ts
+import {getCliContext} from 'trpc-cli'
+
+const router = t.router({
+  deploy: t.procedure
+    .input(z.object({env: z.enum(['staging', 'production'])}))
+    .mutation(({input}) => {
+      const ctx = getCliContext()
+      if (ctx) {
+        // Running as a CLI
+        console.log('Program argv:', ctx.program.__argv) // e.g. ['deploy', '--env', 'production']
+        console.log('Command argv:', ctx.command.__argv) // e.g. ['--env', 'production']
+        console.log('Command name:', ctx.command.name()) // 'deploy'
+        console.log('Help text:', ctx.command.helpInformation())
+      }
+      // ... deploy logic
+    }),
+})
+```
+
+`getCliContext()` returns `undefined` when called outside of a CLI invocation, so it's safe to use in routers that also serve as HTTP tRPC servers:
+
+```ts
+const myMiddleware = t.middleware(async ({next}) => {
+  const cliCtx = getCliContext()
+  if (cliCtx) {
+    // CLI-specific logic
+  }
+  return next()
+})
+```
+
+The context exposes two properties, both of which are commander `Command` instances (typed as the slim `CliCommand` interface to avoid coupling to commander's types - cast to `import('commander').Command` if you need full access):
+
+| Property | Description |
+|----------|-------------|
+| `program` | The root program. `program.__argv` has the full argv that was parsed (equivalent to what you'd pass to `run({argv})`). |
+| `command` | The leaf command being invoked. `command.__argv` has the args specific to that command, excluding parent routing segments. Also exposes `command.name()`, `command.helpInformation()`, `command.opts()`, etc. |
+
 ### Programmatic Usage
 
 This library should probably _not_ be used programmatically - the functionality all comes from a trpc router, which has [many other ways to be invoked](https://trpc.io/docs/community/awesome-trpc) (including the built-in `createCaller` helper bundled with `@trpc/server`).
@@ -1094,26 +1510,53 @@ const runCli = async (argv: string[]) => {
 
 ### Input Prompts
 
-You can enable prompts for positional arguments and options simply by installing `enquirer`, `prompts` or `@inquirer/prompts`:
+Built-in prompts for missing positional arguments and options are enabled by default - but only when the caller looks like an interactive human: stdin is a TTY and no coding-agent environment (Claude Code, Codex, opencode - see `isAgent`) is detected. Piped input, CI, and agents get regular "missing required argument" errors instead of a hanging prompt.
 
 ![](./docs/prompts-demo.gif)
 
-```bash
-npm install @inquirer/prompts
-```
+The user is asked to input any missing arguments or options. Booleans, numbers, enums etc. get appropriate user-friendly prompts, along with input validation. The built-in prompts intentionally use plain line input: selects are numbered and checkboxes accept comma-separated numbers.
 
-The pass it in when running your CLI:
+To disable prompting entirely, pass `prompts: false` (or `null`):
 
 ```ts
-import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer', or import * as prompts from 'prompts'
 import {createCli} from 'trpc-cli'
 
 const cli = createCli({router: myRouter})
 
-cli.run({prompts})
+await cli.run({prompts: false})
 ```
 
-The user will then be asked to input any missing arguments or options. Booleans, numbers, enums etc. will get appropriate user-friendly prompts, along with input validation.
+`prompts: true` forces the built-in prompts on, skipping the TTY/agent heuristic.
+
+If you want a richer terminal UI, install and pass `enquirer`, `prompts`, `@clack/prompts`, or `@inquirer/prompts` instead:
+
+```ts
+import * as prompts from '@inquirer/prompts' // or import * as prompts from 'enquirer', or import * as prompts from 'prompts'
+import {createCli, isAgent} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+await cli.run({
+  prompts: isAgent() ? null : prompts,
+})
+```
+
+The `isAgent() ? null : prompts` pattern above keeps the default behavior of skipping prompts in known coding-agent environments - when passing your own prompt library, the TTY/agent heuristic no longer applies, so guard it yourself if you need to.
+
+For tests or custom runtimes, use `createBuiltInPrompts` to inject streams:
+
+```ts
+import {createBuiltInPrompts, createCli} from 'trpc-cli'
+
+const cli = createCli({router: myRouter})
+
+cli.run({
+  prompts: createBuiltInPrompts({
+    input: myInputStream,
+    output: myOutputStream,
+  }),
+})
+```
 
 You can also pass in a custom "Prompter". This in theory enables you to prompt in *any way* you'd like. You will be passed a `Command` instance, and then must define `input`, `select`, `confirm` and `checkbox` prompts. You can also define `setup` and `teardown` functions which run before and after the individual prompts for arguments and options. This could be used to render an all-in-one form filling in inputs. See [the tests for an example](./test/prompts.test.ts).
 
@@ -1188,36 +1631,70 @@ cli.toJSON() // {"name":"mycli", "version": "1.2.3", "commands": [{"name"":"hell
 
 This is a _rough_ JSON representation of the CLI - useful for generating documentation etc. It returns basic information about the CLI and each command - to get any extra details you will need to use the `cli.buildProgram()` method and walk the tree of commands yourself.
 
-### Using Existing Routers
+### `deepHelp(program)`
 
-🚧 This feature is usable but likely to change. Right now, the trpc-cli bin script will import `tsx` before running your CLI in order to import routers written in typescript. This might change in future to allow for more ways of running typescript files (possibly checking if [`importx`](https://github.com/antfu-collective/importx) instead of tsx) 🚧
+If you want a single plain-text document containing help for every visible command, use `deepHelp` with a Commander program from `buildProgram()`:
 
-If you already have a trpc router (say, for a regular server rather), you can invoke it as a CLI without writing any additional code - just use the built in bin script:
+```ts
+import {createCli, deepHelp} from 'trpc-cli'
+
+const cli = createCli({router: myRouter, name: 'mycli'})
+
+console.log(deepHelp(cli.buildProgram()))
+```
+
+The output keeps Commander's normal `helpInformation()` formatting for each command and adds `=== full command path ===` headings in depth-first order. You can expose the string however you like, including from your own router:
+
+```ts
+import {createCli, deepHelp} from 'trpc-cli'
+
+const cli = createCli({router: appRouter, name: 'mycli'})
+
+const docsRouter = t.router({
+  help: t.procedure.query(() => deepHelp(cli.buildProgram())),
+})
+```
+
+### Running a file directly
+
+🚧 Experimental - this rides on the [plain TypeScript module](#cli-from-a-plain-typescript-module--experimental) feature and may change with it 🚧
+
+The `trpc-cli` bin script turns a plain module of exported functions into a CLI, with zero code and zero dependencies:
+
+```ts
+// commands.ts
+/** add a package to the dependencies */
+export async function add(packageName: string, options?: {dev?: boolean}) {
+  return {added: packageName, dev: options?.dev || false}
+}
+```
 
 ```
-npx trpc-cli src/your-router.ts
-npx trpc-cli src/your-router.ts --help
-npx trpc-cli src/your-router.ts yourprocedure --foo bar
+npx trpc-cli ./commands.ts --help
+npx trpc-cli ./commands.ts add left-pad --dev
 ```
 
-Note - in the above example `src/your-router.ts` will be imported, and then its exports will be checked to see if they match the shape of a tRPC router. If no routers or more than one router is found, an error will be thrown.
+The bin script sets [`jsonInput: 'auto'`](#json-input) (commands that take input also accept it all at once as `--json '{...}'`); everything else - the yaml table logger, prompts for interactive humans, the CLI name - comes from the regular library defaults. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
+
+Note: the bin script no longer accepts files exporting trpc/orpc routers - if you have a router, create a CLI entrypoint with `createCli({router}).run()` instead (see [Quick Start](#quick-start)).
 
 ## Reference
 
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L211)
+#### [createCli](./src/index.ts#L183)
 
 Run a trpc router as a CLI.
 
 ##### Params
 
-|name      |description                                                                              |
-|----------|-----------------------------------------------------------------------------------------|
-|router    |A trpc router                                                                            |
-|context   |The context to use when calling the procedures - needed if your router requires a context|
-|trpcServer|The trpc server module to use. Only needed if using trpc v10.                            |
+|name      |description                                                                                                                                                                                                                                              |
+|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|router    |A trpc router                                                                                                                                                                                                                                            |
+|context   |The context to use when calling the procedures - needed if your router requires a context                                                                                                                                                                |
+|trpcServer|The trpc server module to use. Only needed if using trpc v10.                                                                                                                                                                                            |
+|filename  |(experimental) instead of `router`: derive the CLI from a plain TypeScript module of exported functions. Pass `import.meta`, a `URL`, an absolute/cwd-relative path string, or the `{source, exports}` escape hatch. See {@linkcode TrpcCliModuleParams}.|
 
 ##### Returns
 
@@ -1228,7 +1705,7 @@ A CLI object with a `run` method that can be called to run the CLI. The `run` me
 
 - Nested subrouters ([example](./test/fixtures/migrations.ts)) - procedures in nested routers will become subcommands will be dot separated e.g. `mycli search byId --id 123`
 - Middleware, `ctx`, multi-inputs work as normal
-- Return values are logged using `console.info` (can be configured to pass in a custom logger)
+- Return values are logged with the yaml/table logger by default (see [Output and Lifecycle](#output-and-lifecycle) - pass a custom `logger` to change)
 - `process.exit(...)` called with either 0 or 1 depending on successful resolve
 - Help text shown on invalid inputs
 - Support option aliases via `aliases` meta property (see migrations example below)
