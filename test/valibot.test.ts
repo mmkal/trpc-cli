@@ -3,6 +3,7 @@ import {inspect} from 'util'
 import * as v from 'valibot'
 import {expect, test} from 'vitest'
 import {createCli, TrpcCliMeta} from '../src/index.js'
+import {toJsonSchema as convertToJsonSchema} from '../src/json-schema.js'
 import {run, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
@@ -610,6 +611,34 @@ test('alias via valibot metadata', async () => {
   expect(await run(router, ['test', '--bar', 'hello'])).toMatchInlineSnapshot(`"{"bar":"hello"}"`)
   expect(await run(router, ['test', '--bb', 'hello'])).toMatchInlineSnapshot(`"{"bar":"hello"}"`)
   expect(await run(router, ['test', '--something-else-entirely', 'hello'])).toMatchInlineSnapshot(`"{"abc":"hello"}"`)
+})
+
+test('metadata inside a nullish valibot schema', () => {
+  const result = convertToJsonSchema(
+    v.nullish(
+      v.object({
+        foo: v.pipe(v.string(), v.metadata({alias: 'f'})),
+      }),
+    ),
+    {},
+  )
+
+  expect(result).toMatchObject({
+    success: true,
+    value: {
+      optional: true,
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            foo: {type: 'string', alias: 'f'},
+          },
+          required: ['foo'],
+        },
+        {type: 'null'},
+      ],
+    },
+  })
 })
 
 test('positional via valibot metadata', async () => {

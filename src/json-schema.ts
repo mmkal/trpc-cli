@@ -296,18 +296,14 @@ type ValibotModule = {
 const getValibotCliMeta = (getMetadata: ValibotGetMetadata, schema: unknown): ValibotCliMeta => {
   if (!getMetadata || !schema) return {}
 
-  try {
-    const metadata = getMetadata(schema)
-    const cliMeta: ValibotCliMeta = {}
+  const metadata = getMetadata(schema)
+  const cliMeta: ValibotCliMeta = {}
 
-    for (const key of valibotCliMetaKeys) {
-      if (key in metadata) cliMeta[key] = metadata[key]
-    }
-
-    return cliMeta
-  } catch {
-    return {}
+  for (const key of valibotCliMetaKeys) {
+    if (key in metadata) cliMeta[key] = metadata[key]
   }
+
+  return cliMeta
 }
 
 const getValibotSchemaChain = (schema: unknown): unknown[] => {
@@ -346,14 +342,15 @@ const assignValibotCliMeta = (jsonSchema: JSONSchema7, cliMeta: ValibotCliMeta) 
   if (Object.keys(cliMeta).length > 0) Object.assign(jsonSchema, cliMeta)
 }
 
+const isEmptyNotSchema = (jsonSchema: JSONSchema7): boolean => {
+  const not = jsonSchema.not
+  return Object.keys(jsonSchema).length === 1 && !!not && typeof not === 'object' && Object.keys(not).length === 0
+}
+
 const primaryJsonSchemaShape = (jsonSchema: JSONSchema7): JSONSchema7 => {
   if (Array.isArray(jsonSchema.anyOf)) {
     const nonNot = jsonSchema.anyOf.find(subSchema => {
-      return (
-        subSchema &&
-        typeof subSchema === 'object' &&
-        !('not' in subSchema && Object.keys(subSchema).join(',') === 'not')
-      )
+      return subSchema && typeof subSchema === 'object' && !isEmptyNotSchema(subSchema)
     })
 
     if (nonNot && typeof nonNot === 'object') return {...jsonSchema, ...nonNot}
