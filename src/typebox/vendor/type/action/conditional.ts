@@ -1,0 +1,62 @@
+/*--------------------------------------------------------------------------
+
+TypeBox
+
+The MIT License (MIT)
+
+Copyright (c) 2017-2026 Haydn Paterson 
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+---------------------------------------------------------------------------*/
+
+// deno-lint-ignore-file ban-types
+// deno-fmt-ignore-file
+
+import { type TSchema, type TSchemaOptions } from '../types/schema.js'
+import { type TDeferred, Deferred } from '../types/deferred.js'
+import { type TConditionalAction, ConditionalAction } from '../engine/conditional/instantiate.js'
+import { type TState, State } from '../engine/instantiate.js'
+
+// ------------------------------------------------------------------
+// Deferred
+// ------------------------------------------------------------------
+/** Creates a deferred Conditional action. */
+export type TConditionalDeferred<Left extends TSchema, Right extends TSchema, True extends TSchema, False extends TSchema> = (
+  TDeferred<'Conditional', [Left, Right, True, False]> 
+)
+/** Creates a deferred Conditional action. */
+export function ConditionalDeferred<Left extends TSchema, Right extends TSchema, True extends TSchema, False extends TSchema>
+  (left: Left, right: Right, true_: True, false_: False, options: TSchemaOptions = {}): 
+    TConditionalDeferred<Left, Right, True, False> {
+  return Deferred('Conditional', [left, right, true_, false_], options) as never
+}
+// ------------------------------------------------------------------
+// Type
+// ------------------------------------------------------------------
+/** Applies a Conditional action to the given types. */
+export type TConditional<Left extends TSchema, Right extends TSchema, True extends TSchema, False extends TSchema> = (
+  TConditionalAction<{}, TState<[], []>, Left, Right, True, False>
+)
+/** Applies a Conditional action to the given types. */
+export function Conditional<Left extends TSchema, Right extends TSchema, True extends TSchema, False extends TSchema>
+  (left: Left, right: Right, true_: True, false_: False, options: TSchemaOptions = {}):
+  TConditional<Left, Right, True, False> {
+  return ConditionalAction({}, State([], []), left, right, true_, false_, options)
+}

@@ -4,7 +4,7 @@ import {expect, test} from 'vitest'
 import {z} from 'zod/v3'
 import {type TrpcCliMeta} from '../src/index.js'
 import {createCli} from '../src/index.js'
-import * as trpcCompat from '../src/trpc-compat.js'
+import * as trpcCompat from '../src/parse-router.js'
 
 expect.addSnapshotSerializer({
   test: () => true,
@@ -107,7 +107,7 @@ test('migrations toJSON', async () => {
               "negate": false,
               "variadic": false,
               "flags": "--to [string]",
-              "description": "Mark migrations up to this one as exectued",
+              "description": "Mark migrations up to this one as exectued; Do not use with: --step",
               "attributeName": "to"
             },
             {
@@ -117,7 +117,7 @@ test('migrations toJSON', async () => {
               "negate": false,
               "variadic": false,
               "flags": "--step [number]",
-              "description": "Mark this many migrations as executed; Exclusive minimum: 0",
+              "description": "Mark this many migrations as executed; Exclusive minimum: 0; Do not use with: --to",
               "attributeName": "step"
             }
           ],

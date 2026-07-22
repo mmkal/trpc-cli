@@ -4,6 +4,7 @@ import {createHTTPServer} from '@trpc/server/adapters/standalone'
 import {afterAll, beforeAll, expect, test} from 'vitest'
 import {z} from 'zod'
 import {TrpcCliMeta} from '../src/index.js'
+import {parseRouter} from '../src/parse-router.js'
 import {proxify} from '../src/proxify.js'
 import {run} from './test-run.js'
 
@@ -60,8 +61,21 @@ afterAll(async () => {
   server.close()
 })
 
-test('proxy', async () => {
+test('proxy with plain router', async () => {
   const proxiedRouter = proxify(router, async () => {
+    return createTRPCClient<typeof router>({
+      links: [httpLink({url: 'http://localhost:7500'})],
+    })
+  })
+  expect(await run(proxiedRouter, ['greeting', '--name', 'Bob'])).toMatchInlineSnapshot(`"Hello Bob"`)
+  expect(await run(proxiedRouter, ['deeply', 'nested', 'farewell', '--name', 'Bob'])).toMatchInlineSnapshot(
+    `"Goodbye Bob"`,
+  )
+})
+
+test('proxy with pre-parsed router', async () => {
+  const parsed = parseRouter({router})
+  const proxiedRouter = proxify(parsed, async () => {
     return createTRPCClient<typeof router>({
       links: [httpLink({url: 'http://localhost:7500'})],
     })

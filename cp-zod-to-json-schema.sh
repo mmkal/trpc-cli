@@ -59,6 +59,8 @@ import * as path from "path";
 let content = fs.readFileSync("{}", "utf8");
 
 content = content
+  // zod v4 contains zod v3 under "zod/v3", so replace all imports for that to reduce chances of type-errors.
+  .replaceAll(`from "zod"`, `from "zod/v3"`)
   .replaceAll(`from "../Refs";`, `from "../Refs.js";`)
   .replaceAll(`from "./Refs";`, `from "./Refs.js";`)
   .replaceAll(`from "./parseTypes";`, `from "./parseTypes.js";`)

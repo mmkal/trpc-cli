@@ -1,0 +1,199 @@
+/*--------------------------------------------------------------------------
+
+TypeBox
+
+The MIT License (MIT)
+
+Copyright (c) 2017-2026 Haydn Paterson 
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+---------------------------------------------------------------------------*/
+
+// deno-fmt-ignore-file
+
+import { Guard } from '../../guard/index.js'
+import { Memory } from '../../system/memory/index.js'
+import { type TSchema } from '../types/schema.js'
+import { type TProperties } from '../types/properties.js'
+import { type TAny, IsAny } from '../types/any.js'
+import { type TDependent, IsDependent } from '../types/dependent.js'
+import { type TEnum, type TEnumValue, IsEnum } from '../types/enum.js'
+import { type TInfer, IsInfer } from '../types/infer.js'
+import { type TIntersect, IsIntersect } from '../types/intersect.js'
+import { type TTemplateLiteral, IsTemplateLiteral } from '../types/template_literal.js'
+import { type TUnion, IsUnion } from '../types/union.js'
+import { type TUnknown, IsUnknown } from '../types/unknown.js'
+import { type TExtendsLeft, ExtendsLeft } from './extends_left.js'
+
+import * as Result from './result.js'
+
+import { type TEvaluateEnum, EvaluateEnum } from '../engine/evaluate/evaluate.js'
+import { type TEvaluateTemplateLiteral, EvaluateTemplateLiteral } from '../engine/evaluate/evaluate.js'
+
+// ----------------------------------------------------------------------------
+// ExtendsRightInfer
+//
+// We support something TypeScript doesn't seem to with RightInfer, that is the
+// interior inference of S when embedded in a exterior infer context.
+//
+// { x: 1 } extends infer T extends { x: infer S } ? [T, S] : false
+//                        ^                    ^
+//                    (exterior)           (interior)
+//
+// ----------------------------------------------------------------------------
+type TExtendsRightInfer<Inferred extends TProperties, Name extends string, Left extends TSchema, Right extends TSchema,
+  Result extends Result.TResult = (
+    TExtendsLeft<Inferred, Left, Right> extends Result.TExtendsTrueLike<infer CheckInferred extends TProperties>
+      ? Result.TExtendsTrue<Memory.TAssign<Memory.TAssign<Inferred, CheckInferred>, { [_ in Name]: Left }>>
+      : Result.TExtendsFalse
+  )
+> = Result
+function ExtendsRightInfer<Inferred extends TProperties, Name extends string, Left extends TSchema, Right extends TSchema>
+  (inferred: Inferred, name: Name, left: Left, right: Right):
+  TExtendsRightInfer<Inferred, Name, Left, Right> {
+  return Result.Match(ExtendsLeft(inferred, left, right) as never, checkInferred =>
+    Result.ExtendsTrue(Memory.Assign(Memory.Assign(inferred, checkInferred), { [name]: left })),
+    () => Result.ExtendsFalse()) as never
+}
+// ----------------------------------------------------------------------------
+// ExtendsRightAny
+// ----------------------------------------------------------------------------
+type TExtendsRightAny<Inferred extends TProperties, _Left extends TSchema,
+  Result extends Result.TResult = Result.TExtendsTrue<Inferred>
+> = Result
+function ExtendsRightAny<Inferred extends TProperties, Left extends TSchema>
+  (inferred: Inferred, _left: Left): 
+    TExtendsRightAny<Inferred, Left> {
+  return Result.ExtendsTrue(inferred)
+}
+// ----------------------------------------------------------------------------
+// ExtendsRightDependent
+// ----------------------------------------------------------------------------
+type TExtendsRightDependent<Inferred extends TProperties, Left extends TSchema, If extends TSchema, Then extends TSchema, Else extends TSchema,
+  Result extends Result.TResult = TExtendsLeft<Inferred, Left, If> extends Result.TExtendsTrueLike<infer Inferred extends TProperties>
+    ? (TExtendsLeft<Inferred, Left, Then> extends Result.TExtendsTrueLike<infer Inferred extends TProperties> // excessive-stack-depth-prevention
+      ? Result.TExtendsTrue<Inferred>
+      : Result.TExtendsFalse) // excessive-stack-depth-prevention
+    : (TExtendsLeft<Inferred, Left, Else> extends Result.TExtendsTrueLike<infer Inferred extends TProperties> // excessive-stack-depth-prevention
+      ? Result.TExtendsTrue<Inferred>
+      : Result.TExtendsFalse) // excessive-stack-depth-prevention
+> = Result
+function ExtendsRightDependent<Inferred extends TProperties, Left extends TSchema, If extends TSchema, Then extends TSchema, Else extends TSchema>
+  (inferred: Inferred, left: Left, if_: If, then_: Then, else_: Else): 
+    TExtendsRightDependent<Inferred, Left, If, Then, Else> {
+  return Result.Match(ExtendsLeft(inferred, left, if_), inferred => 
+    Result.Match(ExtendsLeft(inferred, left, then_), inferred => 
+      Result.ExtendsTrue(inferred),
+      () => Result.ExtendsFalse()),
+    () => Result.Match(ExtendsLeft(inferred, left, else_), inferred => 
+      Result.ExtendsTrue(inferred),
+      () => Result.ExtendsFalse())) as never
+}
+// ----------------------------------------------------------------------------
+// ExtendsRightEnum
+// ----------------------------------------------------------------------------
+type TExtendsRightEnum<Inferred extends TProperties, Left extends TSchema, Right extends TEnumValue[],
+  Evaluated extends TSchema = TEvaluateEnum<Right>
+> = TExtendsLeft<Inferred, Left, Evaluated>
+function ExtendsRightEnum<Inferred extends TProperties, Left extends TSchema, Right extends TEnumValue[]>
+  (inferred: Inferred, left: Left, right: Right): 
+    TExtendsRightEnum<Inferred, Left, Right> {
+  const evaluated = EvaluateEnum(right)
+  return ExtendsLeft(inferred, left, evaluated) as never
+}
+// ----------------------------------------------------------------------------
+// ExtendsRightIntersect
+// ----------------------------------------------------------------------------
+type TExtendsRightIntersect<Inferred extends TProperties, Left extends TSchema, Right extends TSchema[]> = (
+  Right extends [infer Head extends TSchema, ...infer Tail extends TSchema[]]
+  ? TExtendsLeft<Inferred, Left, Head> extends Result.TExtendsTrueLike<infer Inferred extends TProperties> 
+    ? TExtendsRightIntersect<Inferred, Left, Tail>
+    : Result.TExtendsFalse
+  : Result.TExtendsTrue<Inferred>
+)
+function ExtendsRightIntersect<Inferred extends TProperties, Left extends TSchema, Right extends TSchema[]>
+  (inferred: Inferred, left: Left, right: Right): 
+    TExtendsRightIntersect<Inferred, Left, Right> {
+  return Guard.TakeLeft(right, (head, tail) => 
+    Result.Match(ExtendsLeft(inferred, left, head),
+      inferred => ExtendsRightIntersect(inferred, left, tail),
+      () => Result.ExtendsFalse()),
+    () => Result.ExtendsTrue(inferred)) as never
+}
+// ----------------------------------------------------------------------------
+// ExtendsRightTemplateLiteral
+// ----------------------------------------------------------------------------
+type TExtendsRightTemplateLiteral<Inferred extends TProperties, Left extends TSchema, Right extends string,
+  Evaluated extends TSchema = TEvaluateTemplateLiteral<Right>
+> = TExtendsLeft<Inferred, Left, Evaluated>
+function ExtendsRightTemplateLiteral<Inferred extends TProperties, Left extends TSchema, Right extends string>
+  (inferred: Inferred, left: Left, right: Right): 
+    TExtendsRightTemplateLiteral<Inferred, Left, Right> {
+  const evaluated = EvaluateTemplateLiteral(right)
+  return ExtendsLeft(inferred, left, evaluated) as never
+}
+// ----------------------------------------------------------------------------
+// ExtendsRightUnion
+// ----------------------------------------------------------------------------
+type TExtendsRightUnion<Inferred extends TProperties, Left extends TSchema, Right extends TSchema[]> = (
+  Right extends [infer Head extends TSchema, ...infer Tail extends TSchema[]]
+    ? TExtendsLeft<Inferred, Left, Head> extends Result.TExtendsTrueLike<infer Inferred extends TProperties> 
+      ? Result.TExtendsTrue<Inferred>
+      : TExtendsRightUnion<Inferred, Left, Tail>
+    : Result.TExtendsFalse
+)
+function ExtendsRightUnion<Inferred extends TProperties, Left extends TSchema, Right extends TSchema[]>
+  (inferred: Inferred, left: Left, right: Right):
+  TExtendsRightUnion<Inferred, Left, Right> {
+  return Guard.TakeLeft(right, (head, tail) =>
+    Result.Match(ExtendsLeft(inferred, left, head),
+      inferred => Result.ExtendsTrue(inferred),
+      () => ExtendsRightUnion(inferred, left, tail)),
+    () => Result.ExtendsFalse()) as never
+}
+// ----------------------------------------------------------------------------
+// ExtendsRight
+// ----------------------------------------------------------------------------
+export type TExtendsRight<Inferred extends TProperties, Left extends TSchema, Right extends TSchema> = (
+  Right extends TAny ? TExtendsRightAny<Inferred, Left> :
+  Right extends TDependent<infer If extends TSchema, infer Then extends TSchema, infer Else extends TSchema> ? TExtendsRightDependent<Inferred, Left, If, Then, Else> :
+  Right extends TEnum<infer Values extends TEnumValue[]> ? TExtendsRightEnum<Inferred, Left, Values> :
+  Right extends TInfer<infer Name extends string, infer Type extends TSchema> ? TExtendsRightInfer<Inferred, Name, Left, Type> :
+  Right extends TTemplateLiteral<infer Pattern extends string> ? TExtendsRightTemplateLiteral<Inferred, Left, Pattern> :
+  Right extends TIntersect<infer Types extends TSchema[]> ? TExtendsRightIntersect<Inferred, Left, Types> :
+  Right extends TUnion<infer Types extends TSchema[]> ? TExtendsRightUnion<Inferred, Left, Types> :
+  Right extends TUnknown ? Result.TExtendsTrue<Inferred> :
+  Result.TExtendsFalse
+)
+export function ExtendsRight<Inferred extends TProperties, Left extends TSchema, Right extends TSchema>
+  (inferred: Inferred, left: Left, right: Right): 
+    TExtendsRight<Inferred, Left, Right> {
+  return (
+    IsAny(right) ? ExtendsRightAny(inferred, left) :
+    IsDependent(right) ? ExtendsRightDependent(inferred, left, right.if, right.then, right.else) :
+    IsEnum(right) ? ExtendsRightEnum(inferred, left, right.enum) :
+    IsInfer(right) ? ExtendsRightInfer(inferred, right.name, left, right.extends) :
+    IsIntersect(right) ? ExtendsRightIntersect(inferred, left, right.allOf) :
+    IsTemplateLiteral(right) ? ExtendsRightTemplateLiteral(inferred, left, right.pattern) :
+    IsUnion(right) ? ExtendsRightUnion(inferred, left, right.anyOf) :
+    IsUnknown(right) ? Result.ExtendsTrue(inferred) :
+    Result.ExtendsFalse()
+  ) as never
+}

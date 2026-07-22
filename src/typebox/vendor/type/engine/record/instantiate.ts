@@ -1,0 +1,69 @@
+/*--------------------------------------------------------------------------
+
+TypeBox
+
+The MIT License (MIT)
+
+Copyright (c) 2017-2026 Haydn Paterson 
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+---------------------------------------------------------------------------*/
+
+// deno-fmt-ignore-file
+// deno-lint-ignore-file
+
+import { Memory } from '../../../system/memory/index.js'
+import { type TSchema, type TSchemaOptions } from '../../types/schema.js'
+import { type TProperties } from '../../types/properties.js'
+import { type TRecordDeferred, RecordDeferred } from '../../types/record.js'
+import { type TFromKey, FromKey } from './from_key.js'
+import { type TState, type TInstantiateType, type TCanInstantiate, InstantiateType, CanInstantiate } from '../instantiate.js'
+
+// ------------------------------------------------------------------
+// Action
+// ------------------------------------------------------------------
+export type TRecordAction<Key extends TSchema, Value extends TSchema,
+  Result extends TSchema = TCanInstantiate<[Key]> extends true
+    ? TFromKey<Key, Value>
+    : TRecordDeferred<Key, Value>
+> = Result
+export function RecordAction<Key extends TSchema, Value extends TSchema>
+  (key: Key, value: Value, options: TSchemaOptions): 
+    TRecordAction<Key, Value> {
+  const result = CanInstantiate([key])
+    ? Memory.Update(FromKey(key, value), {}, options)
+    : RecordDeferred(key, value, options)
+  return result as never
+}
+// ------------------------------------------------------------------
+// Instantiate
+// ------------------------------------------------------------------
+export type TRecordInstantiate<Context extends TProperties, State extends TState, Key extends TSchema, Value extends TSchema,
+  InstantiatedKey extends TSchema = TInstantiateType<Context, State, Key>,
+  InstantiatedValue extends TSchema = TInstantiateType<Context, State, Value>,
+> = TRecordAction<InstantiatedKey, InstantiatedValue>
+
+export function RecordInstantiate<Context extends TProperties, State extends TState, Key extends TSchema, Value extends TSchema>
+  (context: Context, state: State, key: Key, value: Value, options: TSchemaOptions): 
+    TRecordInstantiate<Context, State, Key, Value> {
+  const instantiatedKey = InstantiateType(context, state, key)
+  const instantiatedValue = InstantiateType(context, state, value)
+  return RecordAction(instantiatedKey, instantiatedValue, options) as never
+}

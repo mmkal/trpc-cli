@@ -54,6 +54,23 @@ test('orpc-cli', async () => {
   expect(await run(router, ['deeply', 'nested', 'greeting', 'hi'])).toMatchInlineSnapshot(`"hello hi"`)
 })
 
+test('orpc validation errors are prettified', async () => {
+  const router = o.router({
+    test: o
+      .input(
+        z.object({
+          foo: z.array(z.enum(['abc', 'def'])),
+        }),
+      )
+      .handler(({input}) => JSON.stringify(input)),
+  })
+
+  await expect(run(router, ['test', '--foo', 'wrong'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: ✖ Invalid option: expected one of "abc"|"def" → at foo[0]
+  `)
+})
+
 test('lazy router', async () => {
   const lazyRouter = os.router({
     greeting: {
@@ -122,14 +139,14 @@ test('orpc unjsonifiable schema', async () => {
     "Usage: program hello [options]
 
     Options:
-      --input [json]  Input formatted as JSON (procedure's schema couldn't be
-                      converted to CLI arguments: Invalid input type { '$schema':
-                      'https://json-schema.org/draft/2020-12/schema' }, expected
-                      object or tuple.)
-      -h, --help      display help for command
+      --json <json>  Input formatted as JSON (procedure's schema couldn't be
+                     converted to CLI arguments: Invalid input type { '$schema':
+                     'https://json-schema.org/draft/2020-12/schema' }, expected
+                     object or tuple.)
+      -h, --help     display help for command
     "
   `)
-  expect(await run(router, ['hello', '--input', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
+  expect(await run(router, ['hello', '--json', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
     `"foo is world and bar is 42"`,
   )
 })
@@ -137,7 +154,7 @@ test('orpc unjsonifiable schema', async () => {
 test('orpc json input via meta', async () => {
   const router = o.router({
     hello: o
-      .meta({jsonInput: true})
+      .meta({jsonInput: 'always'})
       .input(z.object({foo: z.string(), bar: z.number()}))
       .handler(({input}) => `foo is ${input.foo} and bar is ${input.bar}`),
   })
@@ -146,11 +163,11 @@ test('orpc json input via meta', async () => {
     "Usage: program hello [options]
 
     Options:
-      --input [json]  Input formatted as JSON
-      -h, --help      display help for command
+      --json <json>  Input formatted as JSON
+      -h, --help     display help for command
     "
   `)
-  expect(await run(router, ['hello', '--input', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
+  expect(await run(router, ['hello', '--json', '{"foo": "world", "bar": 42}'])).toMatchInlineSnapshot(
     `"foo is world and bar is 42"`,
   )
 })
