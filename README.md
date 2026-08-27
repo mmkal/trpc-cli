@@ -790,6 +790,35 @@ The flags list is the union of all signatures' flags, and flags that never appea
 
 jsdoc conventions for overloaded commands: each signature's jsdoc describes *its* calling convention (it becomes that usage line's `#` comment); a jsdoc on the *implementation* signature describes the command as a whole (shown as the command description - without one, the signatures' descriptions are joined). Property jsdoc works as usual, and a flag documented differently in different signatures (say, an `input` that means a URL in one and a file path in another) shows each distinct description, joined with `/`.
 
+#### Module mode with zod functions
+
+Parsing TypeScript types has limits: no runtime transforms, no `.default()`s, no custom metadata beyond jsdoc. If you'd rather write real schemas, export [`z.function()`](https://zod.dev/api#functions) implementations instead - zod ≥4.5 attaches the function schema to the implemented function (see [colinhacks/zod#6104](https://github.com/colinhacks/zod/issues/6104)), so trpc-cli reads the input schemas straight from the exports and skips source parsing entirely:
+
+```ts
+// commands.ts
+import {z} from 'zod'
+
+/** greet someone */
+export const sayHello = z
+  .function({
+    input: [
+      z.string().meta({title: 'name', description: 'who to greet'}), // positional
+      z
+        .object({
+          enthusiasm: z.number().int().positive().describe('how many !s'),
+        })
+        .optional(), // flags
+    ],
+  })
+  .implement(
+    (name, options) => `Hello, ${name}${'!'.repeat(options?.enthusiasm || 0)}`,
+  )
+
+void createCli(import.meta).run() // mycli say-hello bob --enthusiasm 3
+```
+
+The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `z.function()` with no `input` is a command with no arguments. `.describe()`/`.meta({title, description})`/`.default()` drive help text. Command descriptions and `@alias` tags still come from the jsdoc above `export const <name>`, and source order determines command order. A module must be all-or-nothing: mixing `z.function()` exports with plain functions or classes in one file is an error (re-export a separate module instead). Rest arguments (`input: z.array(...)` or a tuple rest) and default-exported zod functions aren't supported.
+
 Details and limitations:
 
 - `filename` accepts an absolute path (robust - works from any directory), `import.meta` (when the call lives in the commands file itself), or a `URL` like `new URL('./commands.ts', import.meta.url)` (resolves relative to the importing file, so a distributed CLI works wherever it's invoked). A *relative* path string is resolved against `process.cwd()`, so it's only reliable when the CLI is run from a known directory - fine for quick scripts, but it breaks the moment a globally-installed CLI runs somewhere else, so prefer `import.meta`/`URL` for anything you distribute. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
