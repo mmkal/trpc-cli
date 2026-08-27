@@ -65,3 +65,4 @@ and trpc-cli can read `sayHello._zod.def.input` (a `ZodTuple`) instead of parsin
 - `z.function()` without `input` defaults to `z.array(z.unknown())` - treated as "no arguments" rather than an unsupported array input.
 
 ## Implementation log
+- CI: `test_tgz` matrix jobs are red in the `bundle` step (`npm install tsdown` → `Cannot read properties of null (reading 'edgesOut')`). Pre-existing/environmental - main's own commit fails identically on a fresh run (2026-08-27). Core test/build/lint jobs pass.
