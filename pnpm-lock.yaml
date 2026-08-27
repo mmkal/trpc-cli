@@ -11,9 +11,6 @@ importers:
       commander:
         specifier: ^14.0.0
         version: 14.0.2
-      zod:
-        specifier: ^3.24.0 || ^4.0.0
-        version: 4.3.5
     devDependencies:
       '@clack/prompts':
         specifier: 0.11.0
@@ -111,9 +108,12 @@ importers:
       yaml:
         specifier: ^2.8.2
         version: 2.8.2
+      zod:
+        specifier: 4.5.0-canary.20260827T054049
+        version: 4.5.0-canary.20260827T054049
       zod-to-json-schema:
         specifier: 3.24.6
-        version: 3.24.6(zod@4.3.5)
+        version: 3.24.6(zod@4.5.0-canary.20260827T054049)
       zod3:
         specifier: npm:zod@3.25.76
         version: zod@3.25.76
@@ -4073,8 +4073,8 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.3.5:
-    resolution: {integrity: sha512-k7Nwx6vuWx1IJ9Bjuf4Zt1PEllcwe7cls3VNzm4CQ1/hgtFUK2bRNG3rvnpPUhFjmqJKAKtjV576KnUkHocg/g==}
+  zod@4.5.0-canary.20260827T054049:
+    resolution: {integrity: sha512-XfFOLVICUBZQkaBDOvznaMOfPUFVy28SClMEwRfVfV/s9iURFpK03ByfcrfPLNU/tNfd+a5tu4RQGCS4ULbRow==}
 
   zx@8.8.5:
     resolution: {integrity: sha512-SNgDF5L0gfN7FwVOdEFguY3orU5AkfFZm9B5YSHog/UDHv+lvmd82ZAsOenOkQixigwH2+yyH198AwNdKhj+RA==}
@@ -8473,12 +8473,12 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  zod-to-json-schema@3.24.6(zod@4.3.5):
+  zod-to-json-schema@3.24.6(zod@4.5.0-canary.20260827T054049):
     dependencies:
-      zod: 4.3.5
+      zod: 4.5.0-canary.20260827T054049
 
   zod@3.25.76: {}
 
-  zod@4.3.5: {}
+  zod@4.5.0-canary.20260827T054049: {}
 
   zx@8.8.5: {}
