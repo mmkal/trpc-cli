@@ -88,7 +88,7 @@
     "@inquirer/prompts": "8.2.0",
     "@orpc/client": "1.13.6",
     "@orpc/contract": "1.13.5",
-    "@orpc/server": "1.13.5",
+    "@orpc/server": "1.14.8",
     "@trpc/client": "11.10.0",
     "@trpc/server": "11.10.0",
     "@types/json-schema": "7.0.15",
