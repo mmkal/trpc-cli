@@ -50,6 +50,28 @@ test('basic boolean option', async () => {
   expect(result).toMatchInlineSnapshot(`"{"input":{"foo":true}}"`)
 })
 
+test('optional trailing object in tuple makes its flags optional and is omitted when no flags are passed', async () => {
+  const router = t.router({
+    greet: t.procedure
+      .input(z.tuple([z.string().describe('name'), z.object({enthusiasm: z.number()}).optional()]))
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['greet', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program greet [options] <name>
+
+    Arguments:
+      name                   name (required)
+
+    Options:
+      --enthusiasm [number]
+      -h, --help             display help for command
+    "
+  `)
+  expect(await run(router, ['greet', 'bob'])).toMatchInlineSnapshot(`"["bob"]"`)
+  expect(await run(router, ['greet', 'bob', '--enthusiasm', '2'])).toMatchInlineSnapshot(`"["bob",{"enthusiasm":2}]"`)
+})
+
 // codegen:start {preset: custom, source: ./validation-library-codegen.ts, export: testSuite}
 // NOTE: the below tests are ✨generated✨ based on the hand-written tests in ../zod3.test.ts
 // But the zod types are expected to be replaced with equivalent types (written by hand).

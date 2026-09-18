@@ -16,6 +16,10 @@
  * command modules: `export * as group from './group'` creates a nested router, `export * from './group'` merges
  * named child commands into the current router, and `export {Foo} from './foo'` re-exports selected commands.
  *
+ * Alternatively, when every exported function is a `z.function(...).implement(...)` result, the input schemas are read
+ * from the functions themselves (zod >=4.5 attaches them as `_zod`) and none of the type parsing below is used - see
+ * `buildZodFunctionProcedures`.
+ *
  * The source "parser" here is deliberately a lightweight hand-rolled extractor, not the TypeScript compiler API:
  * it only needs to find exported function/class method declarations, the jsdoc immediately preceding them, and each
  * parameter's name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type
@@ -243,7 +247,10 @@ export const buildRouterFromModule = (resolved: {
     )
   }
 
-  const procedures = buildLocalProcedures(resolved, buildDeclarationContext(resolved.source))
+  const zodFunctions = detectZodFunctionModule(resolved.exports, new Set())
+  const procedures = zodFunctions
+    ? buildZodFunctionProcedures(resolved.source, zodFunctions)
+    : buildLocalProcedures(resolved, buildDeclarationContext(resolved.source))
   assertHasProcedures(procedures)
   return t.router(procedures)
 }
@@ -257,11 +264,20 @@ const buildRouterFromFileModule = async (
     throw new Error(`Circular module re-export detected: ${[...ancestors, resolved.filepath].join(' -> ')}`)
   }
 
-  const context = await buildFileDeclarationContext(resolved, loader)
-  const procedures = buildLocalProcedures(resolved, context)
-  const childAncestors = [...ancestors, resolved.filepath]
+  const children: Array<{reexport: ModuleReexport; child: FileCliModule}> = []
   for (const reexport of extractModuleReexports(resolved.source)) {
-    const child = await loader.loadSpecifier(resolved.filepath, reexport.specifier)
+    children.push({reexport, child: await loader.loadSpecifier(resolved.filepath, reexport.specifier)})
+  }
+
+  // `export * from './child'` puts the child's live exports on this module's namespace too - those aren't local
+  // declarations, so they must not count towards zod-function detection (they're handled by the child's router)
+  const reexportedValues = new Set(children.flatMap(({child}) => Object.values(child.exports)))
+  const zodFunctions = detectZodFunctionModule(resolved.exports, reexportedValues)
+  const procedures = zodFunctions
+    ? buildZodFunctionProcedures(resolved.source, zodFunctions)
+    : buildLocalProcedures(resolved, await buildFileDeclarationContext(resolved, loader))
+  const childAncestors = [...ancestors, resolved.filepath]
+  for (const {reexport, child} of children) {
     const childRouter = await buildRouterFromFileModule(child, loader, childAncestors)
 
     if (reexport.kind === 'namespace') {
@@ -288,6 +304,124 @@ const buildRouterFromFileModule = async (
 
   assertHasProcedures(procedures)
   return t.router(procedures)
+}
+
+// ------------------------------------------------------------------
+// zod function modules - schemas read from `z.function().implement(...)` exports, no source parsing
+// ------------------------------------------------------------------
+
+/**
+ * The runtime shape of a `z.function(...).implement(fn)` result: zod >=4.5 attaches the function schema's
+ * internals as a non-enumerable `_zod` property (https://github.com/colinhacks/zod/issues/6104). Duck-typed
+ * rather than imported from zod, which is an optional peer dependency.
+ */
+interface ZodImplementedFunction {
+  (...args: unknown[]): unknown
+  _zod: {
+    def: {
+      type: 'function'
+      /** a `ZodTuple` when `input: [...]` was given; zod defaults to `z.array(z.unknown())` when it wasn't */
+      input: {_zod: {def: {type: string; items?: unknown[]; rest?: unknown; element?: {_zod: {def: {type: string}}}}}}
+    }
+  }
+}
+
+interface ZodFunctionExport {
+  name: string
+  fn: ZodImplementedFunction
+}
+
+const isZodImplementedFunction = (value: unknown): value is ZodImplementedFunction =>
+  typeof value === 'function' &&
+  '_zod' in value &&
+  (value as {_zod?: {def?: {type?: unknown}}})._zod?.def?.type === 'function'
+
+/**
+ * A module is a "zod function module" when every function-valued export (ignoring `reexportedValues`, which come
+ * from `export * from` children) is a `z.function().implement(...)` result. Returns `undefined` for modules with
+ * no zod functions, so the caller falls back to the source-parsing typebox flow; mixing the two is an error
+ * rather than silently ignoring one side.
+ */
+const detectZodFunctionModule = (
+  exports: Record<string, unknown>,
+  reexportedValues: Set<unknown>,
+): ZodFunctionExport[] | undefined => {
+  const zodFunctions: ZodFunctionExport[] = []
+  const plainFunctions: string[] = []
+  for (const [name, value] of Object.entries(exports)) {
+    if (typeof value !== 'function' || reexportedValues.has(value)) continue
+    if (isZodImplementedFunction(value)) zodFunctions.push({name, fn: value})
+    else plainFunctions.push(name)
+  }
+  if (zodFunctions.length === 0) return undefined
+  if (plainFunctions.length > 0) {
+    const list = (names: string[]) => names.map(name => JSON.stringify(name)).join(', ')
+    throw new Error(
+      `Module mixes zod functions (${list(zodFunctions.map(z => z.name))}) with plain functions (${list(plainFunctions)}). Either make every exported function a \`z.function().implement(...)\`, or move the zod functions into a separate module and re-export it.`,
+    )
+  }
+  return zodFunctions
+}
+
+/**
+ * Build procedures from zod functions. The tuple input schema is handed to `.input(...)` as-is, so the usual
+ * tuple convention applies (leading scalars become positionals, a trailing object becomes flags) and zod's own
+ * `.describe()`/`.default()` metadata drives help. Source text is only consulted for the jsdoc immediately before
+ * each `export const <name>` (description and `@alias`) and for source order. The implemented function validates
+ * its arguments with the same schema again when called - harmless, and it means calling the function directly
+ * from other code gets the same validation.
+ */
+const buildZodFunctionProcedures = (source: string, zodFunctions: ZodFunctionExport[]) => {
+  const scan = scanSource(source)
+  const declarations = zodFunctions.map(({name, fn}) => {
+    if (name === 'default') {
+      throw new Error(
+        `Default-exported zod functions aren't supported - export it with a name, e.g. \`export const greet = z.function(...).implement(...)\`.`,
+      )
+    }
+    const pattern = new RegExp(`(?<![.\\w$])export\\s+(?:const|let|var)\\s+${name}(?![\\w$])`, 'g')
+    const match = [...source.matchAll(pattern)].find(m => !scan.masked[m.index])
+    return {
+      name,
+      fn,
+      position: match ? match.index : Number.POSITIVE_INFINITY,
+      description: match ? jsdocBefore(source, scan, match.index) : undefined,
+    }
+  })
+  declarations.sort((a, b) => a.position - b.position) // stable, so undeclared names keep export order at the end
+
+  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
+  for (const declaration of declarations) {
+    addLocalProcedureOrRouter(procedures, declaration.name, buildZodFunctionProcedure(declaration))
+  }
+  return procedures
+}
+
+const buildZodFunctionProcedure = (declaration: {
+  name: string
+  fn: ZodImplementedFunction
+  description: string | undefined
+}): NorpcProcedureLike => {
+  const {name, fn} = declaration
+  const commandDoc = parseCliJsdoc(declaration.description)
+  const meta = {
+    ...(commandDoc.description ? {description: commandDoc.description} : {}),
+    ...(commandDoc.aliases.length > 0 ? {aliases: {command: commandDoc.aliases}} : {}),
+  }
+  const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
+
+  const input = fn._zod.def.input
+  const inputDef = input._zod.def
+  if (inputDef.type === 'array' && inputDef.element?._zod.def.type === 'unknown') {
+    return builder.handler(() => fn()) // `z.function()` with no `input` - zod defaults to z.array(z.unknown())
+  }
+  if (inputDef.type !== 'tuple' || inputDef.rest) {
+    throw new Error(
+      `Zod function ${JSON.stringify(name)} has ${inputDef.type === 'tuple' ? 'rest arguments in its' : `an ${inputDef.type}`} input, which isn't supported. Use a tuple input like \`z.function({input: [z.string(), z.object({...})]})\` so parameters can map to positional arguments and flags.`,
+    )
+  }
+  if (!inputDef.items || inputDef.items.length === 0) return builder.handler(() => fn())
+  return builder.input(input as never).handler(({input: args}) => fn(...(args as unknown[])))
 }
 
 const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string, unknown>) => {
@@ -659,7 +793,10 @@ const buildPositionalProcedure = (
     // inside the tuple too - flatten it the same way so flag derivation sees a single object schema
     schema.items[params.length - 1] = mergeIntersection(schema.items[params.length - 1])
   }
-  schema.minItems = cliOptional.includes(true) ? cliOptional.indexOf(true) : params.length
+  // the flags object is always passed (possibly empty), so it's never an optional tuple element - parse-procedure
+  // would otherwise treat `minItems` below its index as "the flags object is optional"
+  const firstOptional = cliOptional.indexOf(true)
+  schema.minItems = lastIsFlagsObject || firstOptional === -1 ? params.length : firstOptional
 
   applySchemaJsdocMetadata(schema)
   return builder.input(schema as never).handler(({input}) => fn(...(input as unknown[])))
