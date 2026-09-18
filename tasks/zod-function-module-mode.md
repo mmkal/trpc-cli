@@ -5,7 +5,7 @@ size: medium
 
 # Module mode from `z.function()` exports
 
-**Status:** implemented, tests + README done. Blocked on a stable zod release for the peer range (currently pinned to a canary dev dep).
+**Status:** done. Implemented, tests + README written, zod dev dependency on stable 4.6.5 (the feature shipped in zod 4.5.0).
 
 Module mode (`createCli(import.meta)`) currently derives each command's input schema by parsing the module's
 *source text* with the vendored/patched typebox `Type.Script`. That's neat but lossy: no runtime transforms,
@@ -56,13 +56,12 @@ and trpc-cli can read `sayHello._zod.def.input` (a `ZodTuple`) instead of parsin
 - [x] optional trailing flags object handling in `parseTupleInput` _`flagsOptional` in src/parse-procedure.ts; typebox module flow now sets `minItems` so it's unaffected_
 - [x] tests _test/zod-function-module-commands.test.ts + fixtures; router-mode case in test/zod4.test.ts (above the codegen marker)_
 - [x] README section under module mode _"Module mode with zod functions"_
-- [ ] once zod ships `_zod` on `.implement()` in a stable release, note the minimum version in the README and drop the canary pin
+- [x] once zod ships `_zod` on `.implement()` in a stable release, note the minimum version in the README and drop the canary pin _zod 4.5.0 went stable 2026-09-13; dev dep now `4.6.5`, README already says ≥4.5_
 
 ## Implementation log
 
 - The `{source, exports}` escape hatch treated `source: ''` as "not module mode" (`source ? ...`). Fixed to `typeof source === 'string'` in src/index.ts - zod function modules don't need any source.
 - Zod's `_zod` on the implemented function is the *schema's* internals (`inst._zod`), not the schema, so `.describe()` on the function schema (stored in `z.globalRegistry` keyed by instance) is unreachable. Hence jsdoc for command descriptions.
 - `z.function()` without `input` defaults to `z.array(z.unknown())` - treated as "no arguments" rather than an unsupported array input.
-
-## Implementation log
 - CI: `test_tgz` matrix jobs are red in the `bundle` step (`npm install tsdown` → `Cannot read properties of null (reading 'edgesOut')`). Pre-existing/environmental - main's own commit fails identically on a fresh run (2026-08-27). Core test/build/lint jobs pass.
+- CI (2026-09-18): re-running the failed `test_tgz` jobs three weeks later passed all 24 - the npm `edgesOut` crash was transient on the runner's bundled npm, nothing in this repo changed.
