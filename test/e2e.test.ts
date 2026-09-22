@@ -390,7 +390,7 @@ test('migrations search.byContent', async () => {
 test('migrations incompatible flags', async () => {
   const output = await tsx('migrations', ['up', '--to', 'four', '--step', '1'])
   expect(output).toMatchInlineSnapshot(`
-    "error: option '--to [string]' cannot be used with option '--step [number]'
+    "error: option '--to [string]' cannot be used with option '--step [integer]'
 
 
 
@@ -399,11 +399,11 @@ test('migrations incompatible flags', async () => {
     Apply migrations. By default all pending migrations will be applied.
 
     Options:
-      --to [string]    Mark migrations up to this one as exectued; Do not use with:
-                       --step
-      --step [number]  Mark this many migrations as executed; Exclusive minimum: 0;
-                       Do not use with: --to
-      -h, --help       display help for command
+      --to [string]     Mark migrations up to this one as exectued; Do not use with:
+                        --step
+      --step [integer]  Mark this many migrations as executed; positive; Do not use
+                        with: --to
+      -h, --help        display help for command
     "
   `)
 })

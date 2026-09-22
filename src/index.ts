@@ -482,7 +482,8 @@ function createRouterCli<R extends AnyRouter>(
         } else if (propertyType === 'boolean') {
           option = new Option(flags, description)
         } else if (propertyType === 'number' || propertyType === 'integer') {
-          option = new Option(`${flags} ${bracketise('number')}`, description)
+          option = new Option(`${flags} ${bracketise(propertyType)}`, description)
+          // non-integers are passed through for the schema library to reject, so the user gets its "expected int" message
           option.argParser(value => numberParser(value, {fallback: null}))
         } else if (propertyType === 'array') {
           option = new Option(`${flags} [values...]`, description)

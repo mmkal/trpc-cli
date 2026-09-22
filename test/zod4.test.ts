@@ -70,13 +70,13 @@ test('integer flags do not show safe-integer bounds in help', async () => {
     "Usage: program say-hello [options] <parameter_1>
 
     Arguments:
-      parameter_1            (required)
+      parameter_1             (required)
 
     Options:
-      --enthusiasm <number>
-      --volume <number>      Exclusive minimum: 0
-      --repeats <number>     Minimum: 5
-      -h, --help             display help for command
+      --enthusiasm <integer>
+      --volume <integer>      positive
+      --repeats <integer>     Minimum: 5
+      -h, --help              display help for command
     "
   `)
 })

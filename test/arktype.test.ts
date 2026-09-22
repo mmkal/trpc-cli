@@ -24,7 +24,7 @@ test('safe number flags do not show safe-integer bounds in help', async () => {
 
     Options:
       --enthusiasm <number>
-      --volume <number>      Exclusive minimum: 0
+      --volume <integer>     positive
       -h, --help             display help for command
     "
   `)
@@ -617,7 +617,7 @@ test('optional object input exposes options when unioned with undefined', async 
   })
 
   expect(await run(router, ['serve', '--port', '56081'])).toMatchInlineSnapshot(`"{"port":56081}"`)
-  expect(await run(router, ['serve', '--help'])).toContain('--port [number]')
+  expect(await run(router, ['serve', '--help'])).toContain('--port [integer]')
 })
 
 test('arktype issues', () => {

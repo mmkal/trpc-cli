@@ -94,8 +94,8 @@ test('deepHelp renders full help blocks depth-first for visible command nodes', 
     Show audit events.
 
     Options:
-      --limit [number]  Number of audit events to show (default: 10)
-      -h, --help        display help for command
+      --limit [integer]  Number of audit events to show (default: 10)
+      -h, --help         display help for command
 
     === ops status ===
     Usage: ops status [options]

@@ -28,6 +28,23 @@ const isSafeIntegerBound = (key: string, value: unknown) => {
   return false
 }
 
+/**
+ * `positive`, `non-negative` etc. read much better than `Exclusive minimum: 0` for the very common zero-bounded number types.
+ * Only used when there's no bound on the other side - `Minimum: 0; Maximum: 10` reads better as a range than `non-negative; Maximum: 10`.
+ */
+const signBoundWord = (schema: JSONSchema7, key: string, value: unknown) => {
+  if (value !== 0) return undefined
+  const hasRealBound = (k: 'minimum' | 'maximum' | 'exclusiveMinimum' | 'exclusiveMaximum') =>
+    typeof schema[k] === 'number' && !isSafeIntegerBound(k, schema[k])
+  const hasMax = hasRealBound('maximum') || hasRealBound('exclusiveMaximum')
+  const hasMin = hasRealBound('minimum') || hasRealBound('exclusiveMinimum')
+  if (key === 'exclusiveMinimum' && !hasMax) return 'positive'
+  if (key === 'minimum' && !hasMax) return 'non-negative'
+  if (key === 'exclusiveMaximum' && !hasMin) return 'negative'
+  if (key === 'maximum' && !hasMin) return 'non-positive'
+  return undefined
+}
+
 export const flattenedProperties = (sch: JSONSchema7): Record<string, JSONSchema7> => {
   if ('properties' in sch) {
     return sch.properties as Record<string, JSONSchema7>
@@ -143,6 +160,8 @@ export const getDescription = (v: JSONSchema7, depth = 0): string => {
       if (k === 'type' && Array.isArray(vv)) return `type: ${vv.join(' or ')}`
       if (k === 'description' && i === 0) return String(vv)
       if (k === 'properties') return `Object (json formatted)`
+      const signWord = signBoundWord(v, k, vv)
+      if (signWord) return signWord
       if (typeof vv === 'object') return `${capitaliseFromCamelCase(k)}: ${JSON.stringify(vv)}`
       return `${capitaliseFromCamelCase(k)}: ${vv}`
     })
