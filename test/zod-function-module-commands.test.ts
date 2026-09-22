@@ -108,13 +108,41 @@ test('zod function module: {source, exports} escape hatch only needs the export 
     Available subcommands: greet
 
     Options:
-      -h, --help           display help for command
+      -h, --help      display help for command
 
     Commands:
-      greet <parameter_1>
-      help [command]       display help for command
+      greet <name>
+      help [command]  display help for command
     "
   `)
+})
+
+test('zod function module: positionals are named after the .implement() callback parameters', async () => {
+  const source = `
+    export const sayHello = z
+      .function({input: [z.string(), z.object({shout: z.boolean(), enthusiasm: z.number()})]})
+      .implement((name, options) => name)
+  `
+  const exports = {
+    sayHello: z
+      .function({input: [z.string(), z.object({shout: z.boolean(), enthusiasm: z.number()})]})
+      .implement((name, options) => `${options.shout ? name.toUpperCase() : name}${'!'.repeat(options.enthusiasm)}`),
+  }
+  expect(await runWith({source, exports}, ['say-hello', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program say-hello [options] <name>
+
+    Arguments:
+      name                   (required)
+
+    Options:
+      --shout [boolean]      (default: false)
+      --enthusiasm <number>
+      -h, --help             display help for command
+    "
+  `)
+  expect(await runWith({source, exports}, ['say-hello', 'bob', '--shout', '--enthusiasm', '2'])).toMatchInlineSnapshot(
+    `"BOB!!"`,
+  )
 })
 
 test('zod function module: export names containing $ still get their jsdoc description', async () => {
@@ -131,11 +159,11 @@ test('zod function module: export names containing $ still get their jsdoc descr
     Available subcommands: $greet
 
     Options:
-      -h, --help            display help for command
+      -h, --help      display help for command
 
     Commands:
-      $greet <parameter_1>  greet with a dollar
-      help [command]        display help for command
+      $greet <name>   greet with a dollar
+      help [command]  display help for command
     "
   `)
 })

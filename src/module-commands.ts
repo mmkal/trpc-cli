@@ -25,9 +25,9 @@
  * parameter's name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type
  * syntax into JSON Schema - is all `Type.Script`.
  */
-import {flattenedProperties, getEnumChoices} from './json-schema.js'
+import {flattenedProperties, getEnumChoices, toJsonSchema} from './json-schema.js'
 import {t} from './norpc.js'
-import {isOptional} from './parse-procedure.js'
+import {isOptional, tupleItemsSchemas} from './parse-procedure.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 import {toDotPath} from './standard-schema/errors.js'
@@ -311,9 +311,14 @@ interface ZodImplementedFunction {
     def: {
       type: 'function'
       /** a `ZodTuple` when `input: [...]` was given; zod defaults to `z.array(z.unknown())` when it wasn't */
-      input: {_zod: {def: {type: string; items?: unknown[]; rest?: unknown; element?: {_zod: {def: {type: string}}}}}}
+      input: ZodTupleLike
     }
   }
+}
+
+interface ZodTupleLike {
+  '~standard': StandardSchemaV1.Props
+  _zod: {def: {type: string; items?: unknown[]; rest?: unknown; element?: {_zod: {def: {type: string}}}}}
 }
 
 const isZodImplementedFunction = (value: unknown): value is ZodImplementedFunction =>
@@ -323,14 +328,82 @@ const isZodImplementedFunction = (value: unknown): value is ZodImplementedFuncti
 
 /**
  * Find the `export const <name> = ...` (or `export default ...`) declaration of a zod function export, for its jsdoc
- * (description, `@alias`) and its source position (command order). Undefined when this file doesn't declare it -
- * e.g. it arrived via `export * from './child'`, in which case the child's router owns it.
+ * (description, `@alias`), its source position (command order) and its `.implement()` callback's parameter names.
+ * Undefined when this file doesn't declare it - e.g. it arrived via `export * from './child'`, in which case the
+ * child's router owns it.
  */
 const findExportDeclaration = (source: string, scan: SourceScan, name: string) => {
   // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
   const pattern = /(?<![.\w$])export\s+(?:(default)(?![\w$])|(?:const|let|var)\s+([A-Za-z_$][\w$]*))/g
   const match = [...source.matchAll(pattern)].find(m => (m[1] || m[2]) === name && !scan.masked[m.index])
-  return match && {position: match.index, description: jsdocBefore(source, scan, match.index)}
+  if (!match) return undefined
+  return {
+    position: match.index,
+    description: jsdocBefore(source, scan, match.index),
+    paramNames: extractImplementParamNames(source, scan, match.index),
+  }
+}
+
+/**
+ * Parameter names of the `.implement((name, options) => ...)` callback in the declaration starting at `start` - zod
+ * tuple items carry no names of their own, so these name the positional arguments in help. Best effort: undefined
+ * when the declaration has no inline `.implement(` before the next export (e.g. `export const a = makeCommand()`),
+ * and an undefined entry for a destructured or rest parameter.
+ */
+const extractImplementParamNames = (
+  source: string,
+  scan: SourceScan,
+  start: number,
+): Array<string | undefined> | undefined => {
+  const firstUnmaskedAfterStart = (pattern: RegExp) =>
+    [...source.matchAll(pattern)].find(m => m.index > start && !scan.masked[m.index])
+  const implement = firstUnmaskedAfterStart(/\.implement(?:Async)?\s*\(/g)
+  const nextExport = firstUnmaskedAfterStart(/(?<![.\w$])export\s/g)
+  if (!implement || (nextExport && nextExport.index < implement.index)) return undefined
+
+  let i = implement.index + implement[0].length
+  i += /^\s*(?:async\s+)?(?:function\b(?:\s+[A-Za-z_$][\w$]*)?\s*)?/.exec(source.slice(i))![0].length
+  if (source[i] !== '(') {
+    const bare = /^([A-Za-z_$][\w$]*)\s*=>/.exec(source.slice(i)) // `name => ...`
+    return bare ? [bare[1]] : undefined
+  }
+  const paramList = source.slice(i + 1, findBalancedEnd(source, scan, i, '(', ')') - 1)
+  return splitTopLevelCommas(paramList, scanSource(paramList)).map(({start: from, end}) => {
+    const text = paramList
+      .slice(from, end)
+      .replaceAll(/\/\*[\S\s]*?\*\//g, '')
+      .trim()
+    return /^([A-Za-z_$][\w$]*)/.exec(text)?.[1]
+  })
+}
+
+/**
+ * zod tuple items have no parameter names, so a bare `z.string()` positional would show as `<parameter_1>`. Name
+ * the positionals after the `.implement()` callback's parameters: convert the tuple to JSON schema once, add a
+ * `title` (which parse-procedure uses as the positional name) to each scalar item that doesn't already have one
+ * from `.meta({title})`, and hand back a schema that still validates via the original tuple - the same shape the
+ * typebox flow produces. Falls back to the tuple itself when there's nothing to name.
+ */
+const withParameterNames = (input: ZodTupleLike, paramNames: Array<string | undefined> | undefined): unknown => {
+  if (!paramNames?.some(Boolean)) return input
+  const converted = toJsonSchema(input, {})
+  if (!converted.success) return input
+  // shallow copy: zod stamps its output with a non-enumerable, non-configurable `~standard` claiming vendor `zod`,
+  // which would route the plain JSON schema back into the zod converter
+  const schema = {...converted.value}
+  const items = tupleItemsSchemas(schema) // zod 4 emits draft 2020-12 `prefixItems`; older converters use `items`
+  if (!items) return input
+  items.forEach((item, i) => {
+    const paramName = paramNames[i]
+    if (!paramName || typeof item !== 'object' || item.title || isObjectLikeSchema(item)) return
+    item.title = kebabCase(paramName)
+  })
+  Object.defineProperty(schema, '~standard', {
+    configurable: true,
+    enumerable: false,
+    value: {...input['~standard'], vendor: 'trpc-cli', jsonSchema: {input: () => schema, output: () => schema}},
+  })
+  return schema
 }
 
 /**
@@ -343,9 +416,9 @@ const findExportDeclaration = (source: string, scan: SourceScan, name: string) =
 const buildZodFunctionProcedure = (
   name: string,
   fn: ZodImplementedFunction,
-  description: string | undefined,
+  declaration: {description: string | undefined; paramNames: Array<string | undefined> | undefined},
 ): NorpcProcedureLike => {
-  const commandDoc = parseCliJsdoc(description)
+  const commandDoc = parseCliJsdoc(declaration.description)
   const meta = {
     ...(commandDoc.description ? {description: commandDoc.description} : {}),
     ...(name === 'default' ? {default: true} : {}), // `export default z.function(...)` - the CLI's default command, like a default-exported plain function
@@ -364,7 +437,8 @@ const buildZodFunctionProcedure = (
     )
   }
   if (!inputDef.items || inputDef.items.length === 0) return builder.handler(() => fn())
-  return builder.input(input as never).handler(({input: args}) => fn(...(args as unknown[])))
+  const named = withParameterNames(input, declaration.paramNames)
+  return builder.input(named as never).handler(({input: args}) => fn(...(args as unknown[])))
 }
 
 const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string, unknown>) => {
@@ -383,7 +457,7 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
     if (!isZodImplementedFunction(value)) continue
     const declaration = findExportDeclaration(source, scan, name)
     if (!declaration) continue // not declared in this file (e.g. `export * from './child'`) - the child's router owns it
-    const procedure = buildZodFunctionProcedure(name, value, declaration.description)
+    const procedure = buildZodFunctionProcedure(name, value, declaration)
     entries.push({name, position: declaration.position, procedure})
   }
 
@@ -1427,10 +1501,8 @@ const tryParseParams = (functionName: string, paramList: string): ExtractedParam
   }
 }
 
-const parseParams = (functionName: string, paramList: string): ExtractedParam[] => {
-  const scan = scanSource(paramList)
-
-  // split at top-level commas into [start, end) segments, one per parameter
+/** split a parameter list at top-level commas into [start, end) segments, one per parameter */
+const splitTopLevelCommas = (paramList: string, scan: SourceScan): Array<{start: number; end: number}> => {
   const segments: Array<{start: number; end: number}> = []
   let depth = 0
   let segmentStart = 0
@@ -1446,14 +1518,19 @@ const parseParams = (functionName: string, paramList: string): ExtractedParam[] 
     }
   }
   segments.push({start: segmentStart, end: paramList.length})
+  return segments
+}
 
-  return segments.flatMap((segment): ExtractedParam[] => {
+const parseParams = (functionName: string, paramList: string): ExtractedParam[] => {
+  const scan = scanSource(paramList)
+
+  return splitTopLevelCommas(paramList, scan).flatMap((segment): ExtractedParam[] => {
     if (!paramList.slice(segment.start, segment.end).trim()) return [] // no parameters at all, or a trailing comma
 
     // find the top-level `:` (start of the type annotation) and `=` (start of a default value) within the segment
     let colon = -1
     let eq = -1
-    depth = 0
+    let depth = 0
     for (let i = segment.start; i < segment.end; i++) {
       if (scan.masked[i]) continue
       const ch = paramList[i]

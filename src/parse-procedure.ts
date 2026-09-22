@@ -303,7 +303,7 @@ function isNullable(schema: JSONSchema7) {
   return false
 }
 
-const tupleItemsSchemas = (schema: JSONSchema7Definition): JSONSchema7Definition[] | undefined => {
+export const tupleItemsSchemas = (schema: JSONSchema7Definition): JSONSchema7Definition[] | undefined => {
   if (!schema || typeof schema !== 'object') return undefined
   if (Array.isArray(schema.items)) return schema.items
   if ('prefixItems' in schema && Array.isArray(schema.prefixItems)) return schema.prefixItems as JSONSchema7Definition[]
