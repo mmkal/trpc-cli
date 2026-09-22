@@ -42,12 +42,12 @@ test('fn module: positionals are named after the callback parameters, flags come
     greet someone
 
     Arguments:
-      name                   who to greet (required)
+      name                    who to greet (required)
 
     Options:
       --shout [boolean]
-      --enthusiasm [number]  Exclusive minimum: 0 (default: 1)
-      -h, --help             display help for command
+      --enthusiasm [integer]  positive (default: 1)
+      -h, --help              display help for command
     "
   `)
   expect(await runWith({filename: modulePath}, ['say-hello', 'bob'])).toMatchInlineSnapshot(`"Hello, bob!"`)
