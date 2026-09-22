@@ -39,11 +39,11 @@ test('zod function module: positionals and flags come from the tuple input schem
     greet someone
 
     Arguments:
-      name                   who to greet (required)
+      name                    who to greet (required)
 
     Options:
-      --enthusiasm [number]  number of exclamation marks; Exclusive minimum: 0
-      -h, --help             display help for command
+      --enthusiasm [integer]  number of exclamation marks; positive
+      -h, --help              display help for command
     "
   `)
   expect(await runWith({filename: modulePath}, ['say-hello', 'bob'])).toMatchInlineSnapshot(`"Hello, bob"`)

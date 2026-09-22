@@ -50,6 +50,37 @@ test('basic boolean option', async () => {
   expect(result).toMatchInlineSnapshot(`"{"input":{"foo":true}}"`)
 })
 
+test('integer flags do not show safe-integer bounds in help', async () => {
+  const router = t.router({
+    sayHello: t.procedure
+      .input(
+        z.tuple([
+          z.string(),
+          z.object({
+            enthusiasm: z.number().int(),
+            volume: z.number().int().positive(),
+            repeats: z.number().int().min(5),
+          }),
+        ]),
+      )
+      .query(({input}) => input),
+  })
+
+  expect(await run(router, ['say-hello', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program say-hello [options] <parameter_1>
+
+    Arguments:
+      parameter_1             (required)
+
+    Options:
+      --enthusiasm <integer>
+      --volume <integer>      positive
+      --repeats <integer>     Minimum: 5
+      -h, --help              display help for command
+    "
+  `)
+})
+
 test('optional trailing object in tuple makes its flags optional and is omitted when no flags are passed', async () => {
   const router = t.router({
     greet: t.procedure

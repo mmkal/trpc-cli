@@ -18,6 +18,33 @@ const capitaliseFromCamelCase = (camel: string) => {
 
 const capitalise = (s: string) => s.slice(0, 1).toUpperCase() + s.slice(1)
 
+/**
+ * zod 4's `toJSONSchema` (and arktype's `number.safe`) emit `minimum: Number.MIN_SAFE_INTEGER` / `maximum: Number.MAX_SAFE_INTEGER`
+ * for integer types. Those are implementation details of "safe integer", not constraints a user would care to see in `--help`.
+ */
+const isSafeIntegerBound = (key: string, value: unknown) => {
+  if (key === 'minimum' || key === 'exclusiveMinimum') return value === Number.MIN_SAFE_INTEGER
+  if (key === 'maximum' || key === 'exclusiveMaximum') return value === Number.MAX_SAFE_INTEGER
+  return false
+}
+
+/**
+ * `positive`, `non-negative` etc. read much better than `Exclusive minimum: 0` for the very common zero-bounded number types.
+ * Only used when there's no bound on the other side - `Minimum: 0; Maximum: 10` reads better as a range than `non-negative; Maximum: 10`.
+ */
+const signBoundWord = (schema: JSONSchema7, key: string, value: unknown) => {
+  if (value !== 0) return undefined
+  const hasRealBound = (k: 'minimum' | 'maximum' | 'exclusiveMinimum' | 'exclusiveMaximum') =>
+    typeof schema[k] === 'number' && !isSafeIntegerBound(k, schema[k])
+  const hasMax = hasRealBound('maximum') || hasRealBound('exclusiveMaximum')
+  const hasMin = hasRealBound('minimum') || hasRealBound('exclusiveMinimum')
+  if (key === 'exclusiveMinimum' && !hasMax) return 'positive'
+  if (key === 'minimum' && !hasMax) return 'non-negative'
+  if (key === 'exclusiveMaximum' && !hasMin) return 'negative'
+  if (key === 'maximum' && !hasMin) return 'non-positive'
+  return undefined
+}
+
 export const flattenedProperties = (sch: JSONSchema7): Record<string, JSONSchema7> => {
   if ('properties' in sch) {
     return sch.properties as Record<string, JSONSchema7>
@@ -117,7 +144,7 @@ export const getDescription = (v: JSONSchema7, depth = 0): string => {
       if (k === 'default' || k === 'additionalProperties' || k === 'optional') return false
       if (k === 'type' && typeof vv === 'string') return depth > 0 // don't show type: string at depth 0, that's the default
       if (k.startsWith('$')) return false // helpers props to add on to a few different external library output formats
-      if (k === 'maximum' && vv === Number.MAX_SAFE_INTEGER) return false // zod adds this for `z.number().int().positive()`
+      if (isSafeIntegerBound(k, vv)) return false // zod 4 emits ±MAX_SAFE_INTEGER for `.int()`; carries no info for the user
       if (depth <= 1 && k === 'enum' && getEnumChoices(v)?.type === 'string_enum') return false // don't show Enum: ["a","b"], that's handled by commander's `choices`
       // don't show anyOf: [...] when it's enum choices handled by commander
       if (depth <= 1 && k === 'anyOf' && getEnumChoices(v)?.type === 'string_enum') return false
@@ -133,6 +160,8 @@ export const getDescription = (v: JSONSchema7, depth = 0): string => {
       if (k === 'type' && Array.isArray(vv)) return `type: ${vv.join(' or ')}`
       if (k === 'description' && i === 0) return String(vv)
       if (k === 'properties') return `Object (json formatted)`
+      const signWord = signBoundWord(v, k, vv)
+      if (signWord) return signWord
       if (typeof vv === 'object') return `${capitaliseFromCamelCase(k)}: ${JSON.stringify(vv)}`
       return `${capitaliseFromCamelCase(k)}: ${vv}`
     })
