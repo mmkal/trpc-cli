@@ -145,6 +145,40 @@ test('zod function module: positionals are named after the .implement() callback
   )
 })
 
+test('zod function module: @param tags document positionals named after the .implement() callback parameters', async () => {
+  const source = `
+    /**
+     * greet someone
+     * @param name who to greet
+     * @param options.shout this loses to the schema's own .describe()
+     * @param options.enthusiasm how many exclamation marks to add
+     * @returns the greeting
+     */
+    export const sayHello = z
+      .function({input: [z.string(), z.object({shout: z.boolean().describe('SHOUT'), enthusiasm: z.number()})]})
+      .implement((name, options) => name)
+  `
+  const exports = {
+    sayHello: z
+      .function({input: [z.string(), z.object({shout: z.boolean().describe('SHOUT'), enthusiasm: z.number()})]})
+      .implement((name, options) => `${options.shout ? name.toUpperCase() : name}${'!'.repeat(options.enthusiasm)}`),
+  }
+  expect(await runWith({source, exports}, ['say-hello', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program say-hello [options] <name>
+
+    greet someone
+
+    Arguments:
+      name                   who to greet (required)
+
+    Options:
+      --shout [boolean]      SHOUT (default: false)
+      --enthusiasm <number>  how many exclamation marks to add
+      -h, --help             display help for command
+    "
+  `)
+})
+
 test('zod function module: export names containing $ still get their jsdoc description', async () => {
   const source = `
     /** greet with a dollar */

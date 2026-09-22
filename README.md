@@ -751,7 +751,29 @@ export async function copy(
 }
 ```
 
-Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becomes the positional argument's description.
+Standard jsdoc tags work the way you'd expect: `@param name description` documents a positional argument (or a flag, via `@param options.force ...`), and the command description is the free text before the first tag.
+
+```ts
+/**
+ * If you have some apples and someone gives you more, this tells you how many you have afterwards
+ * @param a how many apples you had before
+ * @param b how many apples the guy gave you
+ * @returns number of apples you end up with
+ */
+export const add = (a: number, b: number) => a + b
+```
+
+```
+Usage: mycli add [options] <a> <b>
+
+If you have some apples and someone gives you more, this tells you how many you have afterwards
+
+Arguments:
+  a           number how many apples you had before (required)
+  b           number how many apples the guy gave you (required)
+```
+
+The `@param {type} name desc`, `@param name - desc` and `@param [name]` spellings are all accepted (the jsdoc type is ignored - the TypeScript annotation is what counts). Inline jsdoc before a parameter (`/** the file to copy */ source: string`) also becomes the positional argument's description, and wins over a `@param` tag for the same parameter; likewise a property's own jsdoc wins over `@param options.prop`. A `@param options` line describing the trailing options object itself has no home in help and is dropped. `@returns` and every other tag (`@example`, `@see`, `@deprecated`, ...) are stripped from the description - they're for documentation tooling, not CLI help.
 
 TypeScript function overloads become alternate calling conventions for a single command, when every signature takes a single object parameter:
 
@@ -817,7 +839,7 @@ export const sayHello = z
 void createCli(import.meta).run() // mycli say-hello bob --enthusiasm 3
 ```
 
-The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `z.function()` with no `input` is a command with no arguments. `.describe()`/`.meta({title, description})`/`.default()` drive help text. Positional arguments are named after the `.implement((name, options) => ...)` callback's parameters (a `.meta({title})` on the item schema wins if present). Command descriptions and `@alias` tags still come from the jsdoc above `export const <name>`, and source order determines command order. Plain functions, classes and `z.function()` exports can be mixed freely in one file. `export default z.function(...).implement(...)` becomes the default command, as with a default-exported plain function. Rest arguments (`input: z.array(...)` or a tuple rest) aren't supported.
+The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `z.function()` with no `input` is a command with no arguments. `.describe()`/`.meta({title, description})`/`.default()` drive help text. Positional arguments are named after the `.implement((name, options) => ...)` callback's parameters (a `.meta({title})` on the item schema wins if present). Command descriptions, `@alias` tags and `@param` tags (by callback parameter name, losing to `.describe()`) still come from the jsdoc above `export const <name>`, and source order determines command order. Plain functions, classes and `z.function()` exports can be mixed freely in one file. `export default z.function(...).implement(...)` becomes the default command, as with a default-exported plain function. Rest arguments (`input: z.array(...)` or a tuple rest) aren't supported.
 
 Details and limitations:
 

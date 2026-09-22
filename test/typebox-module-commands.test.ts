@@ -637,6 +637,171 @@ test('module commands: jsdoc aliases create command and option aliases without l
   expect(installHelp).not.toContain('@alias')
 })
 
+test('module commands: @param and @returns tags document positionals without leaking into help', async () => {
+  const params = {
+    source: `
+      /**
+       * If you have some apples and someone gives you more, this will tell you how many you have afterwards
+       * @param a how many apples you had before
+       * @param b how many apples the guy gave you
+       * @returns number of apples you end up with
+       */
+      export const add = (a: number, b: number) => a + b
+    `,
+    exports: {add: (a: number, b: number) => a + b},
+  }
+
+  expect(await runWith(params, ['--help'])).toMatchInlineSnapshot(`
+    "Usage: program [options] [command]
+
+    Available subcommands: add
+
+    Options:
+      -h, --help      display help for command
+
+    Commands:
+      add <a> <b>     If you have some apples and someone gives you more, this will
+                      tell you how many you have afterwards
+      help [command]  display help for command
+    "
+  `)
+  expect(await runWith(params, ['add', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program add [options] <a> <b>
+
+    If you have some apples and someone gives you more, this will tell you how many
+    you have afterwards
+
+    Arguments:
+      a           number how many apples you had before (required)
+      b           number how many apples the guy gave you (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
+  expect(await runWith(params, ['add', '2', '3'])).toMatchInlineSnapshot(`"5"`)
+})
+
+test('module commands: @param spellings, precedence, and other standard tags', async () => {
+  const params = {
+    source: `
+      /**
+       * copy a file
+       *
+       * Overwrites nothing unless asked to.
+       *
+       * @param {string} source - this loses to the inline comment before the parameter
+       * @param [dest] where to copy it
+       *   (defaults to \`<source>.bak\`)
+       * @param options the options object itself has no home in help, so this line is dropped
+       * @param options.force overwrite the destination if it exists
+       * @param options.verbose this loses to the property's own jsdoc
+       * @return the destination path
+       * @example
+       * copy('a.txt', 'b.txt', {force: true})
+       * @see https://example.com/copy
+       * @deprecated use \`cp\` instead
+       */
+      export function copy(
+        /** the file to copy */ source: string,
+        dest?: string,
+        options: {
+          force?: boolean
+          /** print what's happening */
+          verbose?: boolean
+        } = {},
+      ) {
+        return \`copied \${source} to \${dest || source + '.bak'}\`
+      }
+    `,
+    exports: {copy: (source: string, dest?: string) => `copied ${source} to ${dest || source + '.bak'}`},
+  }
+
+  expect(await runWith(params, ['copy', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program copy [options] <source> [dest]
+
+    copy a file
+
+    Overwrites nothing unless asked to.
+
+    Arguments:
+      source               the file to copy (required)
+      dest                 where to copy it
+                           (defaults to \`<source>.bak\`)
+
+    Options:
+      --force [boolean]    overwrite the destination if it exists
+      --verbose [boolean]  print what's happening
+      -h, --help           display help for command
+    "
+  `)
+})
+
+test('module commands: @param documents the properties of a single options-object parameter', async () => {
+  const params = {
+    source: `
+      /**
+       * install dependencies
+       * @param options.frozenLockfile fail if the lockfile is out of date
+       * @param options.nope not a real flag - ignored
+       */
+      export function install(options: {frozenLockfile?: boolean}) {
+        return options.frozenLockfile ? 'frozen' : 'normal'
+      }
+    `,
+    exports: {install: (options: any) => (options.frozenLockfile ? 'frozen' : 'normal')},
+  }
+
+  expect(await runWith(params, ['install', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program install [options]
+
+    install dependencies
+
+    Options:
+      --frozen-lockfile [boolean]  fail if the lockfile is out of date
+      -h, --help                   display help for command
+    "
+  `)
+})
+
+test('module commands: @param tags work on class methods too', async () => {
+  class Users {
+    login(email: string, password: string) {
+      return `login ${email} with ${password.length} chars`
+    }
+  }
+  const params = {
+    source: `
+      export class Users {
+        /**
+         * log a user in
+         * @param email the user's email address
+         * @param password their password
+         * @returns a session summary
+         */
+        login(email: string, password: string) {
+          return \`login \${email} with \${password.length} chars\`
+        }
+      }
+    `,
+    exports: {Users},
+  }
+
+  expect(await runWith(params, ['users', 'login', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program users login [options] <email> <password>
+
+    log a user in
+
+    Arguments:
+      email       the user's email address (required)
+      password    their password (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
+})
+
 test('module commands: union-of-objects parameter derives union flags', async () => {
   const params = {
     // regression (caught in review): the flags-object decision briefly only accepted plain objects,
