@@ -379,8 +379,9 @@ const buildZodFunctionProcedures = (source: string, zodFunctions: ZodFunctionExp
         `Default-exported zod functions aren't supported - export it with a name, e.g. \`export const greet = z.function(...).implement(...)\`.`,
       )
     }
-    const pattern = new RegExp(`(?<![.\\w$])export\\s+(?:const|let|var)\\s+${name}(?![\\w$])`, 'g')
-    const match = [...source.matchAll(pattern)].find(m => !scan.masked[m.index])
+    // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
+    const pattern = /(?<![.\w$])export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g
+    const match = [...source.matchAll(pattern)].find(m => m[1] === name && !scan.masked[m.index])
     return {
       name,
       fn,

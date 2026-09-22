@@ -115,6 +115,29 @@ test('zod function module: {source, exports} escape hatch works with no source p
   `)
 })
 
+test('zod function module: export names containing $ still get their jsdoc description', async () => {
+  const source = `
+    /** greet with a dollar */
+    export const $greet = z.function({input: [z.string()]}).implement(name => 'hi ' + name)
+  `
+  const exports = {
+    $greet: z.function({input: [z.string()]}).implement(name => `hi ${name}`),
+  }
+  expect(await runWith({source, exports}, ['--help'])).toMatchInlineSnapshot(`
+    "Usage: program [options] [command]
+
+    Available subcommands: $greet
+
+    Options:
+      -h, --help            display help for command
+
+    Commands:
+      $greet <parameter_1>  greet with a dollar
+      help [command]        display help for command
+    "
+  `)
+})
+
 test('zod function module: mixing zod functions with plain functions is an error', async () => {
   const source = `
     export const greet = z.function({input: [z.string()]}).implement(name => 'hi ' + name)
