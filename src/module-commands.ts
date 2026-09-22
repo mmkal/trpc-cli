@@ -373,7 +373,7 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
 
   // exported functions become commands in source order, whether their schemas come from parsed types or from zod
   const entries: Array<{name: string; position: number; procedure: NorpcProcedureLike}> = []
-  for (const command of extractModuleCommands(source)) {
+  for (const command of extractModuleCommands(scan)) {
     const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
     const procedure = tryBuildProcedure(command, fn as AnyFn, context)
@@ -854,6 +854,7 @@ const isArrayOfPrimitives = (schema: unknown): boolean => {
 // ------------------------------------------------------------------
 
 interface SourceScan {
+  source: string
   /** for each index of the source: true if inside a comment or string/template literal */
   masked: boolean[]
   /** line and block comments in order of appearance, with their raw text */
@@ -921,7 +922,7 @@ const scanSource = (source: string): SourceScan => {
       i++
     }
   }
-  return {masked, comments}
+  return {source, masked, comments}
 }
 
 /** Returns the index just *after* the bracket closing the opening bracket at `start`. Comment/string positions are skipped. */
@@ -1090,8 +1091,7 @@ const parseNamedSpecifiers = (
  * Returns one command per export name: TS function overloads extract once per declaration, and all the overload
  * *signatures* become the command's calling conventions (see the grouping note inline).
  */
-export const extractModuleCommands = (source: string): ExtractedCommand[] => {
-  const scan = scanSource(source)
+export const extractModuleCommands = (scan: SourceScan): ExtractedCommand[] => {
   const declarations: Array<{
     name: string
     exportName: string
@@ -1122,6 +1122,7 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       default: false,
     },
   ]
+  const {source} = scan
   for (const {pattern, canBeSignature, default: defaultExport} of declarationPatterns) {
     for (const match of source.matchAll(pattern)) {
       if (scan.masked[match.index]) continue
