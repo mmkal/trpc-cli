@@ -332,15 +332,16 @@ const isZodImplementedFunction = (value: unknown): value is ZodImplementedFuncti
  * Undefined when this file doesn't declare it - e.g. it arrived via `export * from './child'`, in which case the
  * child's router owns it.
  */
-const findExportDeclaration = (source: string, scan: SourceScan, name: string) => {
+const findExportDeclaration = (scan: SourceScan, name: string) => {
+  const {source} = scan
   // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
   const pattern = /(?<![.\w$])export\s+(?:(default)(?![\w$])|(?:const|let|var)\s+([A-Za-z_$][\w$]*))/g
   const match = [...source.matchAll(pattern)].find(m => (m[1] || m[2]) === name && !scan.masked[m.index])
   if (!match) return undefined
   return {
     position: match.index,
-    description: jsdocBefore(source, scan, match.index),
-    paramNames: extractImplementParamNames(source, scan, match.index),
+    description: jsdocBefore(scan, match.index),
+    paramNames: extractImplementParamNames(scan, match.index),
   }
 }
 
@@ -350,11 +351,8 @@ const findExportDeclaration = (source: string, scan: SourceScan, name: string) =
  * when the declaration has no inline `.implement(` before the next export (e.g. `export const a = makeCommand()`),
  * and an undefined entry for a destructured or rest parameter.
  */
-const extractImplementParamNames = (
-  source: string,
-  scan: SourceScan,
-  start: number,
-): Array<string | undefined> | undefined => {
+const extractImplementParamNames = (scan: SourceScan, start: number): Array<string | undefined> | undefined => {
+  const {source} = scan
   const firstUnmaskedAfterStart = (pattern: RegExp) =>
     [...source.matchAll(pattern)].find(m => m.index > start && !scan.masked[m.index])
   const implement = firstUnmaskedAfterStart(/\.implement(?:Async)?\s*\(/g)
@@ -367,8 +365,8 @@ const extractImplementParamNames = (
     const bare = /^([A-Za-z_$][\w$]*)\s*=>/.exec(source.slice(i)) // `name => ...`
     return bare ? [bare[1]] : undefined
   }
-  const paramList = source.slice(i + 1, findBalancedEnd(source, scan, i, '(', ')') - 1)
-  return splitTopLevelCommas(paramList, scanSource(paramList)).map(({start: from, end}) => {
+  const paramList = source.slice(i + 1, findBalancedEnd(scan, i, '(', ')') - 1)
+  return splitTopLevelCommas(scanSource(paramList)).map(({start: from, end}) => {
     const text = paramList
       .slice(from, end)
       .replaceAll(/\/\*[\S\s]*?\*\//g, '')
@@ -455,7 +453,7 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
   }
   for (const [name, value] of Object.entries(exports)) {
     if (!isZodImplementedFunction(value)) continue
-    const declaration = findExportDeclaration(source, scan, name)
+    const declaration = findExportDeclaration(scan, name)
     if (!declaration) continue // not declared in this file (e.g. `export * from './child'`) - the child's router owns it
     const procedure = buildZodFunctionProcedure(name, value, declaration)
     entries.push({name, position: declaration.position, procedure})
@@ -465,7 +463,7 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
   for (const entry of entries.sort((a, b) => a.position - b.position)) {
     addLocalProcedureOrRouter(procedures, entry.name, entry.procedure)
   }
-  for (const extractedClass of extractModuleClasses(source)) {
+  for (const extractedClass of extractModuleClasses(scan)) {
     const ClassCtor = exports[extractedClass.exportName]
     if (typeof ClassCtor !== 'function') continue
     if (ClassCtor.length > 0) continue
@@ -1000,7 +998,8 @@ const scanSource = (source: string): SourceScan => {
 }
 
 /** Returns the index just *after* the bracket closing the opening bracket at `start`. Comment/string positions are skipped. */
-const findBalancedEnd = (source: string, scan: SourceScan, start: number, open: string, close: string): number => {
+const findBalancedEnd = (scan: SourceScan, start: number, open: string, close: string): number => {
+  const {source} = scan
   let depth = 0
   for (let i = start; i < source.length; i++) {
     if (scan.masked[i]) continue
@@ -1020,7 +1019,8 @@ const findBalancedEnd = (source: string, scan: SourceScan, start: number, open: 
  * side of the newline means it continues - covering multi-line unions/intersections with leading or trailing
  * operators). Tracks `{}[]()<>` depth with the usual exception for the `>` of `=>`.
  */
-const findTypeAliasEnd = (source: string, scan: SourceScan, start: number): number => {
+const findTypeAliasEnd = (scan: SourceScan, start: number): number => {
+  const {source} = scan
   const isComment = (i: number) => scan.comments.some(c => i >= c.start && i < c.end)
   const nextSignificant = (from: number): string => {
     for (let j = from; j < source.length; j++) {
@@ -1052,7 +1052,8 @@ const findTypeAliasEnd = (source: string, scan: SourceScan, start: number): numb
 }
 
 /** Finds the cleaned text of the nearest preceding jsdoc block comment, skipping whitespace and any intervening line comments. */
-const jsdocBefore = (source: string, scan: SourceScan, index: number): string | undefined => {
+const jsdocBefore = (scan: SourceScan, index: number): string | undefined => {
+  const {source} = scan
   let i = index - 1
   let comment: SourceScan['comments'][number] | undefined
   while (true) {
@@ -1202,18 +1203,18 @@ export const extractModuleCommands = (scan: SourceScan): ExtractedCommand[] => {
       if (scan.masked[match.index]) continue
       const name = match[1] || 'default'
       let parenIndex = match.index + match[0].length
-      if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>') // skip generic type params
+      if (source[parenIndex] === '<') parenIndex = findBalancedEnd(scan, parenIndex, '<', '>') // skip generic type params
       while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
       if (source[parenIndex] !== '(') continue // not a function shape after all, e.g. `export function` matched inside something weird
-      const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
+      const parenEnd = findBalancedEnd(scan, parenIndex, '(', ')')
       declarations.push({
         name,
         exportName: defaultExport ? 'default' : name,
         default: defaultExport,
         position: match.index,
-        hasBody: canBeSignature ? hasFunctionBody(source, scan, parenEnd) : true,
+        hasBody: canBeSignature ? hasFunctionBody(scan, parenEnd) : true,
         paramList: source.slice(parenIndex + 1, parenEnd - 1),
-        description: jsdocBefore(source, scan, match.index),
+        description: jsdocBefore(scan, match.index),
       })
     }
   }
@@ -1272,8 +1273,8 @@ const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; de
   })
 }
 
-export const extractModuleClasses = (source: string): ExtractedClass[] => {
-  const scan = scanSource(source)
+export const extractModuleClasses = (scan: SourceScan): ExtractedClass[] => {
+  const {source} = scan
   const classes: ExtractedClass[] = []
 
   const patterns = [
@@ -1287,14 +1288,13 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
       const name = match[1] || 'default'
       const exportName = defaultExport ? 'default' : name
       let headerIndex = match.index + match[0].length
-      if (source[headerIndex] === '<') headerIndex = findBalancedEnd(source, scan, headerIndex, '<', '>')
-      const braceIndex = findNextUnmasked(source, scan, headerIndex, '{')
+      if (source[headerIndex] === '<') headerIndex = findBalancedEnd(scan, headerIndex, '<', '>')
+      const braceIndex = findNextUnmasked(scan, headerIndex, '{')
       const header = source.slice(headerIndex, braceIndex)
       const hasBaseClass = /\bextends\b/.test(header)
 
-      const classEnd = findBalancedEnd(source, scan, braceIndex, '{', '}')
+      const classEnd = findBalancedEnd(scan, braceIndex, '{', '}')
       const {methodDeclarations, hasConstructorParameters, hasZeroArgConstructor} = extractClassMethodDeclarations(
-        source,
         scan,
         braceIndex + 1,
         classEnd - 1,
@@ -1330,7 +1330,8 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
   return classes
 }
 
-const findNextUnmasked = (source: string, scan: SourceScan, start: number, char: string): number => {
+const findNextUnmasked = (scan: SourceScan, start: number, char: string): number => {
+  const {source} = scan
   for (let i = start; i < source.length; i++) {
     if (!scan.masked[i] && source[i] === char) return i
   }
@@ -1338,7 +1339,6 @@ const findNextUnmasked = (source: string, scan: SourceScan, start: number, char:
 }
 
 const extractClassMethodDeclarations = (
-  source: string,
   scan: SourceScan,
   bodyStart: number,
   bodyEnd: number,
@@ -1354,6 +1354,7 @@ const extractClassMethodDeclarations = (
   hasConstructorParameters: boolean
   hasZeroArgConstructor: boolean
 } => {
+  const {source} = scan
   const body = source.slice(bodyStart, bodyEnd)
   const declarations: Array<{
     name: string
@@ -1369,7 +1370,7 @@ const extractClassMethodDeclarations = (
   for (const match of body.matchAll(pattern)) {
     const absoluteIndex = bodyStart + match.index
     if (scan.masked[absoluteIndex]) continue
-    if (!isTopLevelClassMember(source, scan, bodyStart, absoluteIndex)) continue
+    if (!isTopLevelClassMember(scan, bodyStart, absoluteIndex)) continue
 
     const visibility = match[1]
     const staticModifier = match[2]
@@ -1388,11 +1389,11 @@ const extractClassMethodDeclarations = (
     if (declarationStart.startsWith('set ')) continue
 
     let parenIndex = bodyStart + match.index + match[0].length
-    if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>')
+    if (source[parenIndex] === '<') parenIndex = findBalancedEnd(scan, parenIndex, '<', '>')
     while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
     if (source[parenIndex] !== '(') continue
 
-    const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
+    const parenEnd = findBalancedEnd(scan, parenIndex, '(', ')')
     const paramList = source.slice(parenIndex + 1, parenEnd - 1)
     if (name === 'constructor') {
       if (paramList.trim()) hasConstructorParameters = true
@@ -1403,9 +1404,9 @@ const extractClassMethodDeclarations = (
     declarations.push({
       name,
       position: absoluteIndex,
-      hasBody: hasFunctionBody(source, scan, parenEnd),
+      hasBody: hasFunctionBody(scan, parenEnd),
       paramList,
-      description: jsdocBefore(source, scan, absoluteIndex),
+      description: jsdocBefore(scan, absoluteIndex),
     })
   }
 
@@ -1423,7 +1424,8 @@ const extractClassMethodDeclarations = (
   }
 }
 
-const isTopLevelClassMember = (source: string, scan: SourceScan, bodyStart: number, index: number): boolean => {
+const isTopLevelClassMember = (scan: SourceScan, bodyStart: number, index: number): boolean => {
+  const {source} = scan
   let depth = 0
   for (let i = bodyStart; i < index; i++) {
     if (scan.masked[i]) continue
@@ -1441,7 +1443,8 @@ const isTopLevelClassMember = (source: string, scan: SourceScan, bodyStart: numb
  * full type parser - an exotic depth-0 return type (e.g. a conditional type with a bare `extends {...}`) could
  * misclassify, which only matters when the same name is declared more than once.
  */
-const hasFunctionBody = (source: string, scan: SourceScan, parenEnd: number): boolean => {
+const hasFunctionBody = (scan: SourceScan, parenEnd: number): boolean => {
+  const {source} = scan
   const isComment = (i: number) => scan.comments.some(c => i >= c.start && i < c.end)
   const nextSignificant = (from: number): string => {
     for (let j = from; j < source.length; j++) {
@@ -1502,7 +1505,8 @@ const tryParseParams = (functionName: string, paramList: string): ExtractedParam
 }
 
 /** split a parameter list at top-level commas into [start, end) segments, one per parameter */
-const splitTopLevelCommas = (paramList: string, scan: SourceScan): Array<{start: number; end: number}> => {
+const splitTopLevelCommas = (scan: SourceScan): Array<{start: number; end: number}> => {
+  const {source: paramList} = scan
   const segments: Array<{start: number; end: number}> = []
   let depth = 0
   let segmentStart = 0
@@ -1524,7 +1528,7 @@ const splitTopLevelCommas = (paramList: string, scan: SourceScan): Array<{start:
 const parseParams = (functionName: string, paramList: string): ExtractedParam[] => {
   const scan = scanSource(paramList)
 
-  return splitTopLevelCommas(paramList, scan).flatMap((segment): ExtractedParam[] => {
+  return splitTopLevelCommas(scan).flatMap((segment): ExtractedParam[] => {
     if (!paramList.slice(segment.start, segment.end).trim()) return [] // no parameters at all, or a trailing comma
 
     // find the top-level `:` (start of the type annotation) and `=` (start of a default value) within the segment
@@ -1655,7 +1659,7 @@ const buildDeclarationContext = (source: string): Record<string, unknown> => {
     // slice to the end of the whole statement, not just the first balanced `{}` - aliases like
     // `type Opts = {mode: string} & {extra: string}` or multi-line unions must keep their tails,
     // otherwise the schema would silently lose properties/variants
-    const end = findTypeAliasEnd(source, scan, start)
+    const end = findTypeAliasEnd(scan, start)
     const text = `type ${match[1]} = ${source.slice(start, end).replace(/;\s*$/, '').trim()}`
     declarations.push({name: match[1], text})
   }
@@ -1664,7 +1668,7 @@ const buildDeclarationContext = (source: string): Record<string, unknown> => {
   )) {
     if (scan.masked[match.index]) continue
     const braceIndex = match.index + match[0].length - 1
-    const end = findBalancedEnd(source, scan, braceIndex, '{', '}')
+    const end = findBalancedEnd(scan, braceIndex, '{', '}')
     declarations.push({name: match[1], text: source.slice(match.index, end).replace(/^export\s+/, '')})
   }
 
