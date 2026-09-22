@@ -189,11 +189,12 @@ export function createCli<R extends AnyRouter>(
     const {filename, url, source, exports, ...params} = allParams
     // the `{source, exports}` escape hatch wins; otherwise prefer an explicit filename and fall back to
     // import.meta.url (e.g. node 18, where import.meta.filename is absent)
-    const moduleInput: CliModuleInput = source ? {source, exports: exports || {}} : filename || new URL(url as string)
+    const moduleInput: CliModuleInput =
+      typeof source === 'string' ? {source, exports: exports || {}} : filename || new URL(url as string)
     const shouldRun = getModuleRunGuard(allParams, moduleInput)
     // module mode has a natural fallback name that router mode doesn't: the commands file itself. It ranks below
     // environment-derived names (see buildProgram) so an installed bin still wins over the file basename.
-    const defaultName = source ? undefined : scriptBasename(filename || new URL(url as string))
+    const defaultName = typeof source === 'string' ? undefined : scriptBasename(filename || new URL(url as string))
     let cliPromise: Promise<TrpcCli> | undefined
     const getCli = () => {
       // node:fs / dynamic import / the vendored typebox parser are only needed (and only loaded) in this mode

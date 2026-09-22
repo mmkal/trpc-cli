@@ -16,14 +16,18 @@
  * command modules: `export * as group from './group'` creates a nested router, `export * from './group'` merges
  * named child commands into the current router, and `export {Foo} from './foo'` re-exports selected commands.
  *
+ * Exported `z.function(...).implement(...)` results skip the type parsing: their input schemas are read from the
+ * functions themselves (zod >=4.5 attaches them as `_zod`), and only their jsdoc comes from source - see
+ * `buildZodFunctionProcedure`. Plain and zod functions can be mixed freely in one module.
+ *
  * The source "parser" here is deliberately a lightweight hand-rolled extractor, not the TypeScript compiler API:
  * it only needs to find exported function/class method declarations, the jsdoc immediately preceding them, and each
  * parameter's name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type
  * syntax into JSON Schema - is all `Type.Script`.
  */
-import {flattenedProperties, getEnumChoices} from './json-schema.js'
+import {flattenedProperties, getEnumChoices, toJsonSchema} from './json-schema.js'
 import {t} from './norpc.js'
-import {isOptional} from './parse-procedure.js'
+import {isOptional, tupleItemsSchemas} from './parse-procedure.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 import {toDotPath} from './standard-schema/errors.js'
@@ -76,6 +80,8 @@ export interface ExtractedCommand {
   exportName: string
   /** true for a default export, which becomes the CLI's default command */
   default: boolean
+  /** source offset of the declaration - commands are ordered by it in `--help` */
+  position: number
   /** cleaned jsdoc text from the comment immediately preceding the export - becomes the command description */
   description: string | undefined
   /** the function's parameters, in declaration order. Empty = command with no args. For overloaded functions, the first signature's parameters */
@@ -290,19 +296,174 @@ const buildRouterFromFileModule = async (
   return t.router(procedures)
 }
 
+// ------------------------------------------------------------------
+// zod function exports - schemas read from `z.function().implement(...)` results, no type parsing
+// ------------------------------------------------------------------
+
+/**
+ * The runtime shape of a `z.function(...).implement(fn)` result: zod >=4.5 attaches the function schema's
+ * internals as a non-enumerable `_zod` property (https://github.com/colinhacks/zod/issues/6104). Duck-typed
+ * rather than imported from zod, which is an optional peer dependency.
+ */
+interface ZodImplementedFunction {
+  (...args: unknown[]): unknown
+  _zod: {
+    def: {
+      type: 'function'
+      /** a `ZodTuple` when `input: [...]` was given; zod defaults to `z.array(z.unknown())` when it wasn't */
+      input: ZodTupleLike
+    }
+  }
+}
+
+interface ZodTupleLike {
+  '~standard': StandardSchemaV1.Props
+  _zod: {def: {type: string; items?: unknown[]; rest?: unknown; element?: {_zod: {def: {type: string}}}}}
+}
+
+const isZodImplementedFunction = (value: unknown): value is ZodImplementedFunction =>
+  typeof value === 'function' &&
+  '_zod' in value &&
+  (value as {_zod?: {def?: {type?: unknown}}})._zod?.def?.type === 'function'
+
+/**
+ * Find the `export const <name> = ...` (or `export default ...`) declaration of a zod function export, for its jsdoc
+ * (description, `@alias`), its source position (command order) and its `.implement()` callback's parameter names.
+ * Undefined when this file doesn't declare it - e.g. it arrived via `export * from './child'`, in which case the
+ * child's router owns it.
+ */
+const findExportDeclaration = (scan: SourceScan, name: string) => {
+  const {source} = scan
+  // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
+  const pattern = /(?<![.\w$])export\s+(?:(default)(?![\w$])|(?:const|let|var)\s+([A-Za-z_$][\w$]*))/g
+  const match = [...source.matchAll(pattern)].find(m => (m[1] || m[2]) === name && !scan.masked[m.index])
+  if (!match) return undefined
+  return {
+    position: match.index,
+    description: jsdocBefore(scan, match.index),
+    paramNames: extractImplementParamNames(scan, match.index),
+  }
+}
+
+/**
+ * Parameter names of the `.implement((name, options) => ...)` callback in the declaration starting at `start` - zod
+ * tuple items carry no names of their own, so these name the positional arguments in help. Best effort: undefined
+ * when the declaration has no inline `.implement(` before the next export (e.g. `export const a = makeCommand()`),
+ * and an undefined entry for a destructured or rest parameter.
+ */
+const extractImplementParamNames = (scan: SourceScan, start: number): Array<string | undefined> | undefined => {
+  const {source} = scan
+  const firstUnmaskedAfterStart = (pattern: RegExp) =>
+    [...source.matchAll(pattern)].find(m => m.index > start && !scan.masked[m.index])
+  const implement = firstUnmaskedAfterStart(/\.implement(?:Async)?\s*\(/g)
+  const nextExport = firstUnmaskedAfterStart(/(?<![.\w$])export\s/g)
+  if (!implement || (nextExport && nextExport.index < implement.index)) return undefined
+
+  let i = implement.index + implement[0].length
+  i += /^\s*(?:async\s+)?(?:function\b(?:\s+[A-Za-z_$][\w$]*)?\s*)?/.exec(source.slice(i))![0].length
+  if (source[i] !== '(') {
+    const bare = /^([A-Za-z_$][\w$]*)\s*=>/.exec(source.slice(i)) // `name => ...`
+    return bare ? [bare[1]] : undefined
+  }
+  const paramList = source.slice(i + 1, findBalancedEnd(scan, i, '(', ')') - 1)
+  return splitTopLevelCommas(scanSource(paramList)).map(({start: from, end}) => {
+    const text = paramList
+      .slice(from, end)
+      .replaceAll(/\/\*[\S\s]*?\*\//g, '')
+      .trim()
+    return /^([A-Za-z_$][\w$]*)/.exec(text)?.[1]
+  })
+}
+
+/**
+ * zod tuple items have no parameter names, so a bare `z.string()` positional would show as `<parameter_1>`. Name
+ * the positionals after the `.implement()` callback's parameters: convert the tuple to JSON schema once, add a
+ * `title` (which parse-procedure uses as the positional name) to each scalar item that doesn't already have one
+ * from `.meta({title})`, and hand back a schema that still validates via the original tuple - the same shape the
+ * typebox flow produces. Falls back to the tuple itself when there's nothing to name.
+ */
+const withParameterNames = (input: ZodTupleLike, paramNames: Array<string | undefined> | undefined): unknown => {
+  if (!paramNames?.some(Boolean)) return input
+  const converted = toJsonSchema(input, {})
+  if (!converted.success) return input
+  // shallow copy: zod stamps its output with a non-enumerable, non-configurable `~standard` claiming vendor `zod`,
+  // which would route the plain JSON schema back into the zod converter
+  const schema = {...converted.value}
+  const items = tupleItemsSchemas(schema) // zod 4 emits draft 2020-12 `prefixItems`; older converters use `items`
+  if (!items) return input
+  items.forEach((item, i) => {
+    const paramName = paramNames[i]
+    if (!paramName || typeof item !== 'object' || item.title || isObjectLikeSchema(item)) return
+    item.title = kebabCase(paramName)
+  })
+  Object.defineProperty(schema, '~standard', {
+    configurable: true,
+    enumerable: false,
+    value: {...input['~standard'], vendor: 'trpc-cli', jsonSchema: {input: () => schema, output: () => schema}},
+  })
+  return schema
+}
+
+/**
+ * Build a procedure from a zod function. The tuple input schema is handed to `.input(...)` as-is, so the usual
+ * tuple convention applies (leading scalars become positionals, a trailing object becomes flags) and zod's own
+ * `.describe()`/`.default()` metadata drives help. The implemented function validates its arguments with the same
+ * schema again when called - harmless, and it means calling the function directly from other code gets the same
+ * validation.
+ */
+const buildZodFunctionProcedure = (
+  name: string,
+  fn: ZodImplementedFunction,
+  declaration: {description: string | undefined; paramNames: Array<string | undefined> | undefined},
+): NorpcProcedureLike => {
+  const commandDoc = parseCliJsdoc(declaration.description)
+  const meta = {
+    ...(commandDoc.description ? {description: commandDoc.description} : {}),
+    ...(name === 'default' ? {default: true} : {}), // `export default z.function(...)` - the CLI's default command, like a default-exported plain function
+    ...(commandDoc.aliases.length > 0 ? {aliases: {command: commandDoc.aliases}} : {}),
+  }
+  const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
+
+  const input = fn._zod.def.input
+  const inputDef = input._zod.def
+  if (inputDef.type === 'array' && inputDef.element?._zod.def.type === 'unknown') {
+    return builder.handler(() => fn()) // `z.function()` with no `input` - zod defaults to z.array(z.unknown())
+  }
+  if (inputDef.type !== 'tuple' || inputDef.rest) {
+    throw new Error(
+      `Zod function ${JSON.stringify(name)} has ${inputDef.type === 'tuple' ? 'rest arguments in its' : `an ${inputDef.type}`} input, which isn't supported. Use a tuple input like \`z.function({input: [z.string(), z.object({...})]})\` so parameters can map to positional arguments and flags.`,
+    )
+  }
+  if (!inputDef.items || inputDef.items.length === 0) return builder.handler(() => fn())
+  const named = withParameterNames(input, declaration.paramNames)
+  return builder.input(named as never).handler(({input: args}) => fn(...(args as unknown[])))
+}
+
 const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string, unknown>) => {
   const {source, exports} = resolved
-  const commands = extractModuleCommands(source)
-  const classes = extractModuleClasses(source)
+  const scan = scanSource(source)
 
-  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
-  for (const command of commands) {
+  // exported functions become commands in source order, whether their schemas come from parsed types or from zod
+  const entries: Array<{name: string; position: number; procedure: NorpcProcedureLike}> = []
+  for (const command of extractModuleCommands(scan)) {
     const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
     const procedure = tryBuildProcedure(command, fn as AnyFn, context)
-    if (procedure) addLocalProcedureOrRouter(procedures, command.name, procedure)
+    if (procedure) entries.push({name: command.name, position: command.position, procedure})
   }
-  for (const extractedClass of classes) {
+  for (const [name, value] of Object.entries(exports)) {
+    if (!isZodImplementedFunction(value)) continue
+    const declaration = findExportDeclaration(scan, name)
+    if (!declaration) continue // not declared in this file (e.g. `export * from './child'`) - the child's router owns it
+    const procedure = buildZodFunctionProcedure(name, value, declaration)
+    entries.push({name, position: declaration.position, procedure})
+  }
+
+  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
+  for (const entry of entries.sort((a, b) => a.position - b.position)) {
+    addLocalProcedureOrRouter(procedures, entry.name, entry.procedure)
+  }
+  for (const extractedClass of extractModuleClasses(scan)) {
     const ClassCtor = exports[extractedClass.exportName]
     if (typeof ClassCtor !== 'function') continue
     if (ClassCtor.length > 0) continue
@@ -353,7 +514,7 @@ const tryBuildProcedure = (
 const assertHasProcedures = (procedures: Record<string, NorpcProcedureLike | NorpcRouterLike>) => {
   if (Object.keys(procedures).length === 0) {
     throw new Error(
-      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`, or export a command-group-shaped class.`,
+      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\`, \`export const name = z.function(...).implement(...)\` or \`export default function name(...)\`, or export a command-group-shaped class.`,
     )
   }
 }
@@ -659,7 +820,10 @@ const buildPositionalProcedure = (
     // inside the tuple too - flatten it the same way so flag derivation sees a single object schema
     schema.items[params.length - 1] = mergeIntersection(schema.items[params.length - 1])
   }
-  schema.minItems = cliOptional.includes(true) ? cliOptional.indexOf(true) : params.length
+  // the flags object is always passed (possibly empty), so it's never an optional tuple element - parse-procedure
+  // would otherwise treat `minItems` below its index as "the flags object is optional"
+  const firstOptional = cliOptional.indexOf(true)
+  schema.minItems = lastIsFlagsObject || firstOptional === -1 ? params.length : firstOptional
 
   applySchemaJsdocMetadata(schema)
   return builder.input(schema as never).handler(({input}) => fn(...(input as unknown[])))
@@ -762,6 +926,7 @@ const isArrayOfPrimitives = (schema: unknown): boolean => {
 // ------------------------------------------------------------------
 
 interface SourceScan {
+  source: string
   /** for each index of the source: true if inside a comment or string/template literal */
   masked: boolean[]
   /** line and block comments in order of appearance, with their raw text */
@@ -829,11 +994,12 @@ const scanSource = (source: string): SourceScan => {
       i++
     }
   }
-  return {masked, comments}
+  return {source, masked, comments}
 }
 
 /** Returns the index just *after* the bracket closing the opening bracket at `start`. Comment/string positions are skipped. */
-const findBalancedEnd = (source: string, scan: SourceScan, start: number, open: string, close: string): number => {
+const findBalancedEnd = (scan: SourceScan, start: number, open: string, close: string): number => {
+  const {source} = scan
   let depth = 0
   for (let i = start; i < source.length; i++) {
     if (scan.masked[i]) continue
@@ -853,7 +1019,8 @@ const findBalancedEnd = (source: string, scan: SourceScan, start: number, open: 
  * side of the newline means it continues - covering multi-line unions/intersections with leading or trailing
  * operators). Tracks `{}[]()<>` depth with the usual exception for the `>` of `=>`.
  */
-const findTypeAliasEnd = (source: string, scan: SourceScan, start: number): number => {
+const findTypeAliasEnd = (scan: SourceScan, start: number): number => {
+  const {source} = scan
   const isComment = (i: number) => scan.comments.some(c => i >= c.start && i < c.end)
   const nextSignificant = (from: number): string => {
     for (let j = from; j < source.length; j++) {
@@ -885,7 +1052,8 @@ const findTypeAliasEnd = (source: string, scan: SourceScan, start: number): numb
 }
 
 /** Finds the cleaned text of the nearest preceding jsdoc block comment, skipping whitespace and any intervening line comments. */
-const jsdocBefore = (source: string, scan: SourceScan, index: number): string | undefined => {
+const jsdocBefore = (scan: SourceScan, index: number): string | undefined => {
+  const {source} = scan
   let i = index - 1
   let comment: SourceScan['comments'][number] | undefined
   while (true) {
@@ -998,8 +1166,7 @@ const parseNamedSpecifiers = (
  * Returns one command per export name: TS function overloads extract once per declaration, and all the overload
  * *signatures* become the command's calling conventions (see the grouping note inline).
  */
-export const extractModuleCommands = (source: string): ExtractedCommand[] => {
-  const scan = scanSource(source)
+export const extractModuleCommands = (scan: SourceScan): ExtractedCommand[] => {
   const declarations: Array<{
     name: string
     exportName: string
@@ -1030,23 +1197,24 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       default: false,
     },
   ]
+  const {source} = scan
   for (const {pattern, canBeSignature, default: defaultExport} of declarationPatterns) {
     for (const match of source.matchAll(pattern)) {
       if (scan.masked[match.index]) continue
       const name = match[1] || 'default'
       let parenIndex = match.index + match[0].length
-      if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>') // skip generic type params
+      if (source[parenIndex] === '<') parenIndex = findBalancedEnd(scan, parenIndex, '<', '>') // skip generic type params
       while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
       if (source[parenIndex] !== '(') continue // not a function shape after all, e.g. `export function` matched inside something weird
-      const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
+      const parenEnd = findBalancedEnd(scan, parenIndex, '(', ')')
       declarations.push({
         name,
         exportName: defaultExport ? 'default' : name,
         default: defaultExport,
         position: match.index,
-        hasBody: canBeSignature ? hasFunctionBody(source, scan, parenEnd) : true,
+        hasBody: canBeSignature ? hasFunctionBody(scan, parenEnd) : true,
         paramList: source.slice(parenIndex + 1, parenEnd - 1),
-        description: jsdocBefore(source, scan, match.index),
+        description: jsdocBefore(scan, match.index),
       })
     }
   }
@@ -1067,12 +1235,13 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       return params ? [{description: declaration.description, params}] : []
     })
     if (overloads.length === 0) return []
-    const {name, exportName, default: defaultExport} = winners[0]
+    const {name, exportName, default: defaultExport, position} = winners[0]
     return [
       {
         name,
         exportName,
         default: defaultExport,
+        position,
         description: overloads[0].description,
         params: overloads[0].params,
         ...(overloads.length > 1 ? {overloads, implementationDescription: implementation?.description} : {}),
@@ -1104,8 +1273,8 @@ const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; de
   })
 }
 
-export const extractModuleClasses = (source: string): ExtractedClass[] => {
-  const scan = scanSource(source)
+export const extractModuleClasses = (scan: SourceScan): ExtractedClass[] => {
+  const {source} = scan
   const classes: ExtractedClass[] = []
 
   const patterns = [
@@ -1119,14 +1288,13 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
       const name = match[1] || 'default'
       const exportName = defaultExport ? 'default' : name
       let headerIndex = match.index + match[0].length
-      if (source[headerIndex] === '<') headerIndex = findBalancedEnd(source, scan, headerIndex, '<', '>')
-      const braceIndex = findNextUnmasked(source, scan, headerIndex, '{')
+      if (source[headerIndex] === '<') headerIndex = findBalancedEnd(scan, headerIndex, '<', '>')
+      const braceIndex = findNextUnmasked(scan, headerIndex, '{')
       const header = source.slice(headerIndex, braceIndex)
       const hasBaseClass = /\bextends\b/.test(header)
 
-      const classEnd = findBalancedEnd(source, scan, braceIndex, '{', '}')
+      const classEnd = findBalancedEnd(scan, braceIndex, '{', '}')
       const {methodDeclarations, hasConstructorParameters, hasZeroArgConstructor} = extractClassMethodDeclarations(
-        source,
         scan,
         braceIndex + 1,
         classEnd - 1,
@@ -1135,7 +1303,7 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
       if (hasBaseClass && !hasZeroArgConstructor) continue
       if (methodDeclarations.length === 0) continue
       const methods = methodDeclarations.flatMap(
-        ({methodName, signatures, implementationDescription}): ExtractedCommand[] => {
+        ({methodName, position, signatures, implementationDescription}): ExtractedCommand[] => {
           const overloads = signatures.flatMap(signature => {
             const params = tryParseParams(`${name}.${methodName}`, signature.paramList)
             return params ? [{description: signature.description, params}] : []
@@ -1146,6 +1314,7 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
               name: methodName,
               exportName: methodName,
               default: false,
+              position,
               description: overloads[0].description,
               params: overloads[0].params,
               ...(overloads.length > 1 ? {overloads, implementationDescription} : {}),
@@ -1161,7 +1330,8 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
   return classes
 }
 
-const findNextUnmasked = (source: string, scan: SourceScan, start: number, char: string): number => {
+const findNextUnmasked = (scan: SourceScan, start: number, char: string): number => {
+  const {source} = scan
   for (let i = start; i < source.length; i++) {
     if (!scan.masked[i] && source[i] === char) return i
   }
@@ -1169,13 +1339,13 @@ const findNextUnmasked = (source: string, scan: SourceScan, start: number, char:
 }
 
 const extractClassMethodDeclarations = (
-  source: string,
   scan: SourceScan,
   bodyStart: number,
   bodyEnd: number,
 ): {
   methodDeclarations: Array<{
     methodName: string
+    position: number
     /** one per body-less overload signature, or a single entry for a plain method - same rule as `groupOverloadDeclarations` */
     signatures: Array<{description: string | undefined; paramList: string}>
     /** jsdoc of the overload implementation, when the method is overloaded */
@@ -1184,6 +1354,7 @@ const extractClassMethodDeclarations = (
   hasConstructorParameters: boolean
   hasZeroArgConstructor: boolean
 } => {
+  const {source} = scan
   const body = source.slice(bodyStart, bodyEnd)
   const declarations: Array<{
     name: string
@@ -1199,7 +1370,7 @@ const extractClassMethodDeclarations = (
   for (const match of body.matchAll(pattern)) {
     const absoluteIndex = bodyStart + match.index
     if (scan.masked[absoluteIndex]) continue
-    if (!isTopLevelClassMember(source, scan, bodyStart, absoluteIndex)) continue
+    if (!isTopLevelClassMember(scan, bodyStart, absoluteIndex)) continue
 
     const visibility = match[1]
     const staticModifier = match[2]
@@ -1218,11 +1389,11 @@ const extractClassMethodDeclarations = (
     if (declarationStart.startsWith('set ')) continue
 
     let parenIndex = bodyStart + match.index + match[0].length
-    if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>')
+    if (source[parenIndex] === '<') parenIndex = findBalancedEnd(scan, parenIndex, '<', '>')
     while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
     if (source[parenIndex] !== '(') continue
 
-    const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
+    const parenEnd = findBalancedEnd(scan, parenIndex, '(', ')')
     const paramList = source.slice(parenIndex + 1, parenEnd - 1)
     if (name === 'constructor') {
       if (paramList.trim()) hasConstructorParameters = true
@@ -1233,9 +1404,9 @@ const extractClassMethodDeclarations = (
     declarations.push({
       name,
       position: absoluteIndex,
-      hasBody: hasFunctionBody(source, scan, parenEnd),
+      hasBody: hasFunctionBody(scan, parenEnd),
       paramList,
-      description: jsdocBefore(source, scan, absoluteIndex),
+      description: jsdocBefore(scan, absoluteIndex),
     })
   }
 
@@ -1246,13 +1417,15 @@ const extractClassMethodDeclarations = (
     hasZeroArgConstructor,
     methodDeclarations: groupOverloadDeclarations(declarations).map(({winners, implementation}) => ({
       methodName: winners[0].name,
+      position: winners[0].position,
       signatures: winners.map(({description, paramList}) => ({description, paramList})),
       implementationDescription: implementation?.description,
     })),
   }
 }
 
-const isTopLevelClassMember = (source: string, scan: SourceScan, bodyStart: number, index: number): boolean => {
+const isTopLevelClassMember = (scan: SourceScan, bodyStart: number, index: number): boolean => {
+  const {source} = scan
   let depth = 0
   for (let i = bodyStart; i < index; i++) {
     if (scan.masked[i]) continue
@@ -1270,7 +1443,8 @@ const isTopLevelClassMember = (source: string, scan: SourceScan, bodyStart: numb
  * full type parser - an exotic depth-0 return type (e.g. a conditional type with a bare `extends {...}`) could
  * misclassify, which only matters when the same name is declared more than once.
  */
-const hasFunctionBody = (source: string, scan: SourceScan, parenEnd: number): boolean => {
+const hasFunctionBody = (scan: SourceScan, parenEnd: number): boolean => {
+  const {source} = scan
   const isComment = (i: number) => scan.comments.some(c => i >= c.start && i < c.end)
   const nextSignificant = (from: number): string => {
     for (let j = from; j < source.length; j++) {
@@ -1330,10 +1504,9 @@ const tryParseParams = (functionName: string, paramList: string): ExtractedParam
   }
 }
 
-const parseParams = (functionName: string, paramList: string): ExtractedParam[] => {
-  const scan = scanSource(paramList)
-
-  // split at top-level commas into [start, end) segments, one per parameter
+/** split a parameter list at top-level commas into [start, end) segments, one per parameter */
+const splitTopLevelCommas = (scan: SourceScan): Array<{start: number; end: number}> => {
+  const {source: paramList} = scan
   const segments: Array<{start: number; end: number}> = []
   let depth = 0
   let segmentStart = 0
@@ -1349,14 +1522,19 @@ const parseParams = (functionName: string, paramList: string): ExtractedParam[] 
     }
   }
   segments.push({start: segmentStart, end: paramList.length})
+  return segments
+}
 
-  return segments.flatMap((segment): ExtractedParam[] => {
+const parseParams = (functionName: string, paramList: string): ExtractedParam[] => {
+  const scan = scanSource(paramList)
+
+  return splitTopLevelCommas(scan).flatMap((segment): ExtractedParam[] => {
     if (!paramList.slice(segment.start, segment.end).trim()) return [] // no parameters at all, or a trailing comma
 
     // find the top-level `:` (start of the type annotation) and `=` (start of a default value) within the segment
     let colon = -1
     let eq = -1
-    depth = 0
+    let depth = 0
     for (let i = segment.start; i < segment.end; i++) {
       if (scan.masked[i]) continue
       const ch = paramList[i]
@@ -1481,7 +1659,7 @@ const buildDeclarationContext = (source: string): Record<string, unknown> => {
     // slice to the end of the whole statement, not just the first balanced `{}` - aliases like
     // `type Opts = {mode: string} & {extra: string}` or multi-line unions must keep their tails,
     // otherwise the schema would silently lose properties/variants
-    const end = findTypeAliasEnd(source, scan, start)
+    const end = findTypeAliasEnd(scan, start)
     const text = `type ${match[1]} = ${source.slice(start, end).replace(/;\s*$/, '').trim()}`
     declarations.push({name: match[1], text})
   }
@@ -1490,7 +1668,7 @@ const buildDeclarationContext = (source: string): Record<string, unknown> => {
   )) {
     if (scan.masked[match.index]) continue
     const braceIndex = match.index + match[0].length - 1
-    const end = findBalancedEnd(source, scan, braceIndex, '{', '}')
+    const end = findBalancedEnd(scan, braceIndex, '{', '}')
     declarations.push({name: match[1], text: source.slice(match.index, end).replace(/^export\s+/, '')})
   }
 
