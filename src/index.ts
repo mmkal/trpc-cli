@@ -908,3 +908,4 @@ const parseJson = (
 }
 
 export {t, os} from './norpc.js'
+export {fn, isFnImplemented, type FnBuilder, type FnDefinition, type FnImplemented} from './fn.js'
