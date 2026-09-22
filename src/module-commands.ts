@@ -16,9 +16,9 @@
  * command modules: `export * as group from './group'` creates a nested router, `export * from './group'` merges
  * named child commands into the current router, and `export {Foo} from './foo'` re-exports selected commands.
  *
- * Alternatively, when every exported function is a `z.function(...).implement(...)` result, the input schemas are read
- * from the functions themselves (zod >=4.5 attaches them as `_zod`) and none of the type parsing below is used - see
- * `buildZodFunctionProcedures`.
+ * Exported `z.function(...).implement(...)` results skip the type parsing: their input schemas are read from the
+ * functions themselves (zod >=4.5 attaches them as `_zod`), and only their jsdoc comes from source - see
+ * `buildZodFunctionProcedure`. Plain and zod functions can be mixed freely in one module.
  *
  * The source "parser" here is deliberately a lightweight hand-rolled extractor, not the TypeScript compiler API:
  * it only needs to find exported function/class method declarations, the jsdoc immediately preceding them, and each
@@ -80,6 +80,8 @@ export interface ExtractedCommand {
   exportName: string
   /** true for a default export, which becomes the CLI's default command */
   default: boolean
+  /** source offset of the declaration - commands are ordered by it in `--help` */
+  position: number
   /** cleaned jsdoc text from the comment immediately preceding the export - becomes the command description */
   description: string | undefined
   /** the function's parameters, in declaration order. Empty = command with no args. For overloaded functions, the first signature's parameters */
@@ -247,10 +249,7 @@ export const buildRouterFromModule = (resolved: {
     )
   }
 
-  const zodFunctions = detectZodFunctionModule(resolved.exports, new Set())
-  const procedures = zodFunctions
-    ? buildZodFunctionProcedures(resolved.source, zodFunctions)
-    : buildLocalProcedures(resolved, buildDeclarationContext(resolved.source))
+  const procedures = buildLocalProcedures(resolved, buildDeclarationContext(resolved.source))
   assertHasProcedures(procedures)
   return t.router(procedures)
 }
@@ -264,20 +263,11 @@ const buildRouterFromFileModule = async (
     throw new Error(`Circular module re-export detected: ${[...ancestors, resolved.filepath].join(' -> ')}`)
   }
 
-  const children: Array<{reexport: ModuleReexport; child: FileCliModule}> = []
-  for (const reexport of extractModuleReexports(resolved.source)) {
-    children.push({reexport, child: await loader.loadSpecifier(resolved.filepath, reexport.specifier)})
-  }
-
-  // `export * from './child'` puts the child's live exports on this module's namespace too - those aren't local
-  // declarations, so they must not count towards zod-function detection (they're handled by the child's router)
-  const reexportedValues = new Set(children.flatMap(({child}) => Object.values(child.exports)))
-  const zodFunctions = detectZodFunctionModule(resolved.exports, reexportedValues)
-  const procedures = zodFunctions
-    ? buildZodFunctionProcedures(resolved.source, zodFunctions)
-    : buildLocalProcedures(resolved, await buildFileDeclarationContext(resolved, loader))
+  const context = await buildFileDeclarationContext(resolved, loader)
+  const procedures = buildLocalProcedures(resolved, context)
   const childAncestors = [...ancestors, resolved.filepath]
-  for (const {reexport, child} of children) {
+  for (const reexport of extractModuleReexports(resolved.source)) {
+    const child = await loader.loadSpecifier(resolved.filepath, reexport.specifier)
     const childRouter = await buildRouterFromFileModule(child, loader, childAncestors)
 
     if (reexport.kind === 'namespace') {
@@ -307,7 +297,7 @@ const buildRouterFromFileModule = async (
 }
 
 // ------------------------------------------------------------------
-// zod function modules - schemas read from `z.function().implement(...)` exports, no source parsing
+// zod function exports - schemas read from `z.function().implement(...)` results, no type parsing
 // ------------------------------------------------------------------
 
 /**
@@ -326,85 +316,36 @@ interface ZodImplementedFunction {
   }
 }
 
-interface ZodFunctionExport {
-  name: string
-  fn: ZodImplementedFunction
-}
-
 const isZodImplementedFunction = (value: unknown): value is ZodImplementedFunction =>
   typeof value === 'function' &&
   '_zod' in value &&
   (value as {_zod?: {def?: {type?: unknown}}})._zod?.def?.type === 'function'
 
 /**
- * A module is a "zod function module" when every function-valued export (ignoring `reexportedValues`, which come
- * from `export * from` children) is a `z.function().implement(...)` result. Returns `undefined` for modules with
- * no zod functions, so the caller falls back to the source-parsing typebox flow; mixing the two is an error
- * rather than silently ignoring one side.
+ * Find the `export const <name> = ...` declaration of a zod function export, for its jsdoc (description, `@alias`)
+ * and its source position (command order). Undefined when this file doesn't declare it - e.g. it arrived via
+ * `export * from './child'`, in which case the child's router owns it.
  */
-const detectZodFunctionModule = (
-  exports: Record<string, unknown>,
-  reexportedValues: Set<unknown>,
-): ZodFunctionExport[] | undefined => {
-  const zodFunctions: ZodFunctionExport[] = []
-  const plainFunctions: string[] = []
-  for (const [name, value] of Object.entries(exports)) {
-    if (typeof value !== 'function' || reexportedValues.has(value)) continue
-    if (isZodImplementedFunction(value)) zodFunctions.push({name, fn: value})
-    else plainFunctions.push(name)
-  }
-  if (zodFunctions.length === 0) return undefined
-  if (plainFunctions.length > 0) {
-    const list = (names: string[]) => names.map(name => JSON.stringify(name)).join(', ')
-    throw new Error(
-      `Module mixes zod functions (${list(zodFunctions.map(z => z.name))}) with plain functions (${list(plainFunctions)}). Either make every exported function a \`z.function().implement(...)\`, or move the zod functions into a separate module and re-export it.`,
-    )
-  }
-  return zodFunctions
+const findExportedConstDeclaration = (source: string, scan: SourceScan, name: string) => {
+  // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
+  const pattern = /(?<![.\w$])export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g
+  const match = [...source.matchAll(pattern)].find(m => m[1] === name && !scan.masked[m.index])
+  return match && {position: match.index, description: jsdocBefore(source, scan, match.index)}
 }
 
 /**
- * Build procedures from zod functions. The tuple input schema is handed to `.input(...)` as-is, so the usual
+ * Build a procedure from a zod function. The tuple input schema is handed to `.input(...)` as-is, so the usual
  * tuple convention applies (leading scalars become positionals, a trailing object becomes flags) and zod's own
- * `.describe()`/`.default()` metadata drives help. Source text is only consulted for the jsdoc immediately before
- * each `export const <name>` (description and `@alias`) and for source order. The implemented function validates
- * its arguments with the same schema again when called - harmless, and it means calling the function directly
- * from other code gets the same validation.
+ * `.describe()`/`.default()` metadata drives help. The implemented function validates its arguments with the same
+ * schema again when called - harmless, and it means calling the function directly from other code gets the same
+ * validation.
  */
-const buildZodFunctionProcedures = (source: string, zodFunctions: ZodFunctionExport[]) => {
-  const scan = scanSource(source)
-  const declarations = zodFunctions.map(({name, fn}) => {
-    if (name === 'default') {
-      throw new Error(
-        `Default-exported zod functions aren't supported - export it with a name, e.g. \`export const greet = z.function(...).implement(...)\`.`,
-      )
-    }
-    // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
-    const pattern = /(?<![.\w$])export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g
-    const match = [...source.matchAll(pattern)].find(m => m[1] === name && !scan.masked[m.index])
-    return {
-      name,
-      fn,
-      position: match ? match.index : Number.POSITIVE_INFINITY,
-      description: match ? jsdocBefore(source, scan, match.index) : undefined,
-    }
-  })
-  declarations.sort((a, b) => a.position - b.position) // stable, so undeclared names keep export order at the end
-
-  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
-  for (const declaration of declarations) {
-    addLocalProcedureOrRouter(procedures, declaration.name, buildZodFunctionProcedure(declaration))
-  }
-  return procedures
-}
-
-const buildZodFunctionProcedure = (declaration: {
-  name: string
-  fn: ZodImplementedFunction
-  description: string | undefined
-}): NorpcProcedureLike => {
-  const {name, fn} = declaration
-  const commandDoc = parseCliJsdoc(declaration.description)
+const buildZodFunctionProcedure = (
+  name: string,
+  fn: ZodImplementedFunction,
+  description: string | undefined,
+): NorpcProcedureLike => {
+  const commandDoc = parseCliJsdoc(description)
   const meta = {
     ...(commandDoc.description ? {description: commandDoc.description} : {}),
     ...(commandDoc.aliases.length > 0 ? {aliases: {command: commandDoc.aliases}} : {}),
@@ -427,17 +368,34 @@ const buildZodFunctionProcedure = (declaration: {
 
 const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string, unknown>) => {
   const {source, exports} = resolved
-  const commands = extractModuleCommands(source)
-  const classes = extractModuleClasses(source)
+  const scan = scanSource(source)
 
-  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
-  for (const command of commands) {
+  // exported functions become commands in source order, whether their schemas come from parsed types or from zod
+  const entries: Array<{name: string; position: number; procedure: NorpcProcedureLike}> = []
+  for (const command of extractModuleCommands(source)) {
     const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
     const procedure = tryBuildProcedure(command, fn as AnyFn, context)
-    if (procedure) addLocalProcedureOrRouter(procedures, command.name, procedure)
+    if (procedure) entries.push({name: command.name, position: command.position, procedure})
   }
-  for (const extractedClass of classes) {
+  for (const [name, value] of Object.entries(exports)) {
+    if (!isZodImplementedFunction(value)) continue
+    if (name === 'default') {
+      throw new Error(
+        `Default-exported zod functions aren't supported - export it with a name, e.g. \`export const greet = z.function(...).implement(...)\`.`,
+      )
+    }
+    const declaration = findExportedConstDeclaration(source, scan, name)
+    if (!declaration) continue // not declared in this file (e.g. `export * from './child'`) - the child's router owns it
+    const procedure = buildZodFunctionProcedure(name, value, declaration.description)
+    entries.push({name, position: declaration.position, procedure})
+  }
+
+  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
+  for (const entry of entries.sort((a, b) => a.position - b.position)) {
+    addLocalProcedureOrRouter(procedures, entry.name, entry.procedure)
+  }
+  for (const extractedClass of extractModuleClasses(source)) {
     const ClassCtor = exports[extractedClass.exportName]
     if (typeof ClassCtor !== 'function') continue
     if (ClassCtor.length > 0) continue
@@ -488,7 +446,7 @@ const tryBuildProcedure = (
 const assertHasProcedures = (procedures: Record<string, NorpcProcedureLike | NorpcRouterLike>) => {
   if (Object.keys(procedures).length === 0) {
     throw new Error(
-      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`, or export a command-group-shaped class.`,
+      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\`, \`export const name = z.function(...).implement(...)\` or \`export default function name(...)\`, or export a command-group-shaped class.`,
     )
   }
 }
@@ -1205,12 +1163,13 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       return params ? [{description: declaration.description, params}] : []
     })
     if (overloads.length === 0) return []
-    const {name, exportName, default: defaultExport} = winners[0]
+    const {name, exportName, default: defaultExport, position} = winners[0]
     return [
       {
         name,
         exportName,
         default: defaultExport,
+        position,
         description: overloads[0].description,
         params: overloads[0].params,
         ...(overloads.length > 1 ? {overloads, implementationDescription: implementation?.description} : {}),
@@ -1273,7 +1232,7 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
       if (hasBaseClass && !hasZeroArgConstructor) continue
       if (methodDeclarations.length === 0) continue
       const methods = methodDeclarations.flatMap(
-        ({methodName, signatures, implementationDescription}): ExtractedCommand[] => {
+        ({methodName, position, signatures, implementationDescription}): ExtractedCommand[] => {
           const overloads = signatures.flatMap(signature => {
             const params = tryParseParams(`${name}.${methodName}`, signature.paramList)
             return params ? [{description: signature.description, params}] : []
@@ -1284,6 +1243,7 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
               name: methodName,
               exportName: methodName,
               default: false,
+              position,
               description: overloads[0].description,
               params: overloads[0].params,
               ...(overloads.length > 1 ? {overloads, implementationDescription} : {}),
@@ -1314,6 +1274,7 @@ const extractClassMethodDeclarations = (
 ): {
   methodDeclarations: Array<{
     methodName: string
+    position: number
     /** one per body-less overload signature, or a single entry for a plain method - same rule as `groupOverloadDeclarations` */
     signatures: Array<{description: string | undefined; paramList: string}>
     /** jsdoc of the overload implementation, when the method is overloaded */
@@ -1384,6 +1345,7 @@ const extractClassMethodDeclarations = (
     hasZeroArgConstructor,
     methodDeclarations: groupOverloadDeclarations(declarations).map(({winners, implementation}) => ({
       methodName: winners[0].name,
+      position: winners[0].position,
       signatures: winners.map(({description, paramList}) => ({description, paramList})),
       implementationDescription: implementation?.description,
     })),

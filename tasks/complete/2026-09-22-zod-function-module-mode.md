@@ -29,13 +29,13 @@ and trpc-cli can read `sayHello._zod.def.input` (a `ZodTuple`) instead of parsin
 
 ## Decisions
 
-- Detection is per module file, on the *live exports*: if every function-valued export carries `_zod` with
-  `def.type === 'function'`, the module is a "zod-function module" and the typebox flow (source extractor,
-  declaration context, `Type.Script`) is skipped entirely.
-- Mixing zod functions with plain functions/classes in one file throws an error naming both groups. Silently
-  ignoring one side is worse; split them into separate files and re-export if needed.
-- Exports that are identical to a re-exported child's exports (`export * from './child'`) are not counted as
-  local, so re-export composition keeps working in file mode.
+- Detection is per export, on the *live exports*: a function export carrying `_zod` with `def.type === 'function'`
+  is built from its schema; everything else goes through the typebox flow as before.
+- ~~Mixing zod functions with plain functions/classes in one file throws an error naming both groups.~~ _Reversed
+  2026-09-22: detection is per export, not per module. Plain and zod functions mix freely and are ordered by
+  source position together. A zod export only counts as local when this file has its `export const <name>`
+  declaration, which is also what excludes `export * from './child'` values - same rule the plain flow already
+  used, so no separate re-export bookkeeping._
 - Input mapping reuses the existing tuple convention: `_zod.def.input` is passed straight to `.input(...)`,
   so leading scalars become positionals and a trailing object becomes flags. Empty tuple / no `input` → no
   CLI inputs. Rest args (`z.function({input: z.array(...)})` or tuple rest) throw - unsupported for now.
@@ -65,3 +65,4 @@ and trpc-cli can read `sayHello._zod.def.input` (a `ZodTuple`) instead of parsin
 - `z.function()` without `input` defaults to `z.array(z.unknown())` - treated as "no arguments" rather than an unsupported array input.
 - CI: `test_tgz` matrix jobs are red in the `bundle` step (`npm install tsdown` → `Cannot read properties of null (reading 'edgesOut')`). Pre-existing/environmental - main's own commit fails identically on a fresh run (2026-08-27). Core test/build/lint jobs pass.
 - CI (2026-09-18): re-running the failed `test_tgz` jobs three weeks later passed all 24 - the npm `edgesOut` crash was transient on the runner's bundled npm, nothing in this repo changed.
+- 2026-09-22: replaced the all-or-nothing module rule with per-export detection (net deletion in src/module-commands.ts: no `detectZodFunctionModule`, no mixed-module error, file mode no longer loads re-export children before local procedures). `ExtractedCommand` gained `position` so plain and zod commands sort together.

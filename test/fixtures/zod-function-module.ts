@@ -1,7 +1,7 @@
 /**
- * Fixture for module mode driven by `z.function().implement(...)` exports: the input schemas are read from
- * the implemented functions at runtime (via the `_zod` property zod attaches), so nothing here is parsed from
- * source except the jsdoc comments used for command descriptions.
+ * Fixture for module mode with `z.function().implement(...)` exports: their input schemas are read from the
+ * implemented functions at runtime (via the `_zod` property zod attaches), and only the jsdoc comments are taken
+ * from source. Plain functions (`shout` below) mix in and get the usual parsed-types treatment.
  */
 import {z} from 'zod'
 
@@ -26,6 +26,11 @@ export const sayHello = z
 export const add = z
   .function({input: [z.number().describe('left'), z.number().describe('right')], output: z.number()})
   .implement((left, right) => left + right)
+
+/** shout a name (a plain function - its parameter types are parsed from source) */
+export function shout(name: string, options: {times?: number}) {
+  return `${name.toUpperCase()}!`.repeat(options.times || 1)
+}
 
 /** install dependencies from the lockfile */
 export const install = z

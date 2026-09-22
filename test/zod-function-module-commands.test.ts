@@ -1,7 +1,6 @@
 /**
- * Module mode from `z.function().implement(...)` exports: when every exported function is a zod function, the
- * input schemas are read from the functions at runtime (colinhacks/zod#6104), and the source-parsing typebox
- * flow is skipped entirely.
+ * Module mode from `z.function().implement(...)` exports: their input schemas are read from the functions at
+ * runtime (colinhacks/zod#6104) instead of being parsed from source. They mix freely with plain exported functions.
  */
 import {expect, test} from 'vitest'
 import {z} from 'zod'
@@ -15,7 +14,7 @@ test('zod function module: --help lists commands in source order with jsdoc desc
   expect(await runWith({filename: modulePath, name: 'mypkg'}, ['--help'])).toMatchInlineSnapshot(`
     "Usage: mypkg [options] [command]
 
-    Available subcommands: say-hello, add, install, version, versions
+    Available subcommands: say-hello, add, shout, install, version, versions
 
     Options:
       -h, --help                     display help for command
@@ -23,6 +22,8 @@ test('zod function module: --help lists commands in source order with jsdoc desc
     Commands:
       say-hello|hi [options] <name>  greet someone
       add <left> <right>             add two numbers
+      shout [options] <name>         shout a name (a plain function - its parameter
+                                     types are parsed from source)
       install [options]              install dependencies from the lockfile
       version [options]              print the version
       versions                       Available subcommands: list
@@ -95,12 +96,13 @@ test('zod function module: re-exported modules become nested commands', async ()
   )
 })
 
-test('zod function module: {source, exports} escape hatch works with no source parsing', async () => {
+test('zod function module: {source, exports} escape hatch only needs the export declaration in source', async () => {
+  const source = `export const greet = z.function({input: [z.string()]}).implement(name => 'hi ' + name)`
   const exports = {
     greet: z.function({input: [z.string()]}).implement(name => `hi ${name}`),
   }
-  expect(await runWith({source: '', exports}, ['greet', 'bob'])).toMatchInlineSnapshot(`"hi bob"`)
-  expect(await runWith({source: '', exports}, ['--help'])).toMatchInlineSnapshot(`
+  expect(await runWith({source, exports}, ['greet', 'bob'])).toMatchInlineSnapshot(`"hi bob"`)
+  expect(await runWith({source, exports}, ['--help'])).toMatchInlineSnapshot(`
     "Usage: program [options] [command]
 
     Available subcommands: greet
@@ -138,25 +140,29 @@ test('zod function module: export names containing $ still get their jsdoc descr
   `)
 })
 
-test('zod function module: mixing zod functions with plain functions is an error', async () => {
-  const source = `
-    export const greet = z.function({input: [z.string()]}).implement(name => 'hi ' + name)
-    export function shout(name: string) { return name.toUpperCase() }
-  `
-  const exports = {
-    greet: z.function({input: [z.string()]}).implement(name => `hi ${name}`),
-    shout: (name: string) => name.toUpperCase(),
-  }
-  await expect(runWith({source, exports}, ['--help'])).rejects.toThrowErrorMatchingInlineSnapshot(
-    `Error: Module mixes zod functions ("greet") with plain functions ("shout"). Either make every exported function a \`z.function().implement(...)\`, or move the zod functions into a separate module and re-export it.`,
-  )
+test('zod function module: plain functions mix in, with their types parsed from source', async () => {
+  expect(await runWith({filename: modulePath}, ['shout', '--help'])).toMatchInlineSnapshot(`
+    "Usage: zod-function-module shout [options] <name>
+
+    shout a name (a plain function - its parameter types are parsed from source)
+
+    Arguments:
+      name              (required)
+
+    Options:
+      --times [number]
+      -h, --help        display help for command
+    "
+  `)
+  expect(await runWith({filename: modulePath}, ['shout', 'bob', '--times', '2'])).toMatchInlineSnapshot(`"BOB!BOB!"`)
 })
 
 test('zod function module: rest arguments are not supported', async () => {
+  const source = `export const sum = z.function({input: z.array(z.number())}).implement((...numbers) => 0)`
   const exports = {
     sum: z.function({input: z.array(z.number())}).implement((...numbers) => numbers.reduce((a, b) => a + b, 0)),
   }
-  await expect(runWith({source: '', exports}, ['--help'])).rejects.toThrowErrorMatchingInlineSnapshot(
+  await expect(runWith({source, exports}, ['--help'])).rejects.toThrowErrorMatchingInlineSnapshot(
     `Error: Zod function "sum" has an array input, which isn't supported. Use a tuple input like \`z.function({input: [z.string(), z.object({...})]})\` so parameters can map to positional arguments and flags.`,
   )
 })
