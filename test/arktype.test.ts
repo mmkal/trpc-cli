@@ -9,6 +9,27 @@ expect.addSnapshotSerializer(snapshotSerializer)
 
 const t = initTRPC.meta<TrpcCliMeta>().create()
 
+test('safe number flags do not show safe-integer bounds in help', async () => {
+  const router = t.router({
+    sayHello: t.procedure
+      .input(type(['string', {enthusiasm: 'number.safe', volume: 'number.integer > 0'}]))
+      .query(({input}) => input),
+  })
+
+  expect(await run(router, ['say-hello', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program say-hello [options] <parameter_1>
+
+    Arguments:
+      parameter_1            (required)
+
+    Options:
+      --enthusiasm <number>
+      --volume <number>      Exclusive minimum: 0
+      -h, --help             display help for command
+    "
+  `)
+})
+
 // codegen:start {preset: custom, source: ./validation-library-codegen.ts, export: testSuite}
 // NOTE: the below tests are ✨generated✨ based on the hand-written tests in ../zod3.test.ts
 // But the zod types are expected to be replaced with equivalent types (written by hand).
