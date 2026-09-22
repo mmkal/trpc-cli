@@ -125,7 +125,7 @@ export interface ExtractedParam {
   optional: boolean
   /** raw text of the type annotation, e.g. `number` or `{force?: boolean}` */
   typeText: string
-  /** cleaned jsdoc from an inline block comment before the parameter, e.g. `(/** the left operand *\/ left: number)` - becomes the positional description */
+  /** cleaned jsdoc from an inline block comment before the parameter, e.g. `(/** the left operand *\/ left: number)` - becomes the positional description (falling back to a `@param` tag in the function's jsdoc) */
   description: string | undefined
   /** true if the parameter is a destructuring pattern like `{force}` or `[a, b]` */
   destructured: boolean
@@ -382,7 +382,11 @@ const extractImplementParamNames = (scan: SourceScan, start: number): Array<stri
  * from `.meta({title})`, and hand back a schema that still validates via the original tuple - the same shape the
  * typebox flow produces. Falls back to the tuple itself when there's nothing to name.
  */
-const withParameterNames = (input: ZodTupleLike, paramNames: Array<string | undefined> | undefined): unknown => {
+const withParameterNames = (
+  input: ZodTupleLike,
+  paramNames: Array<string | undefined> | undefined,
+  paramTags: Record<string, string>,
+): unknown => {
   if (!paramNames?.some(Boolean)) return input
   const converted = toJsonSchema(input, {})
   if (!converted.success) return input
@@ -393,8 +397,13 @@ const withParameterNames = (input: ZodTupleLike, paramNames: Array<string | unde
   if (!items) return input
   items.forEach((item, i) => {
     const paramName = paramNames[i]
-    if (!paramName || typeof item !== 'object' || item.title || isObjectLikeSchema(item)) return
-    item.title = kebabCase(paramName)
+    if (!paramName || typeof item !== 'object') return
+    if (isObjectLikeSchema(item)) {
+      applyParamTagPropertyDescriptions(item, paramName, paramTags)
+      return
+    }
+    if (!item.title) item.title = kebabCase(paramName)
+    if (!item.description && paramTags[paramName]) item.description = paramTags[paramName] // `.describe()` wins over `@param`
   })
   Object.defineProperty(schema, '~standard', {
     configurable: true,
@@ -435,7 +444,7 @@ const buildZodFunctionProcedure = (
     )
   }
   if (!inputDef.items || inputDef.items.length === 0) return builder.handler(() => fn())
-  const named = withParameterNames(input, declaration.paramNames)
+  const named = withParameterNames(input, declaration.paramNames, commandDoc.params)
   return builder.input(named as never).handler(({input: args}) => fn(...(args as unknown[])))
 }
 
@@ -555,6 +564,7 @@ const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<st
 
   if (command.params.length === 1 && isObjectLikeSchema(paramSchemas[0])) {
     // single object(-union) parameter: everything is a flag, the function receives the validated object directly
+    applyParamTagPropertyDescriptions(paramSchemas[0], command.params[0].name, commandDoc.params)
     return builder.input(paramSchemas[0] as never).handler(({input}) => fn(input))
   }
 
@@ -600,10 +610,12 @@ const buildOverloadedProcedure = (
       throw error
     }
     if (!isObjectLikeSchema(schema)) return undefined
+    const overloadDoc = parseCliJsdoc(overload.description)
+    applyParamTagPropertyDescriptions(schema, overload.params[0].name, overloadDoc.params)
     variants.push({
       schema,
       flags: overloadFlagsSummary(schema),
-      description: parseCliJsdoc(overload.description).description?.split('\n')[0],
+      description: overloadDoc.description?.split('\n')[0],
     })
   }
 
@@ -759,6 +771,7 @@ const buildPositionalProcedure = (
   paramSchemas: unknown[],
 ): NorpcProcedureLike => {
   const {params} = command
+  const paramTags = parseCliJsdoc(command.description).params
   const lastIsFlagsObject = isObjectLikeSchema(paramSchemas.at(-1))
   const positionalParams = lastIsFlagsObject ? params.slice(0, -1) : params
 
@@ -811,14 +824,17 @@ const buildPositionalProcedure = (
   positionalParams.forEach((param, i) => {
     const item = schema.items![i] as Record<string, unknown>
     item.title = kebabCase(param.name!)
-    const paramDoc = parseCliJsdoc(param.description)
-    if (paramDoc.description) item.description = paramDoc.description
+    // an inline comment before the parameter wins over a `@param` tag in the function's jsdoc - it sits next to the type
+    const description = parseCliJsdoc(param.description).description || paramTags[param.name!]
+    if (description) item.description = description
     if (cliOptional[i]) item.optional = true
   })
   if (lastIsFlagsObject) {
     // a trailing options object declared via an intersection alias (`type Opts = {a} & {b}`) parses to allOf
     // inside the tuple too - flatten it the same way so flag derivation sees a single object schema
     schema.items[params.length - 1] = mergeIntersection(schema.items[params.length - 1])
+    // `@param options ...` (the object itself) has no home in help and is dropped; `@param options.force ...` documents a flag
+    applyParamTagPropertyDescriptions(schema.items[params.length - 1], params.at(-1)!.name, paramTags)
   }
   // the flags object is always passed (possibly empty), so it's never an optional tuple element - parse-procedure
   // would otherwise treat `minItems` below its index as "the flags object is optional"
@@ -1078,20 +1094,102 @@ const cleanJsdoc = (text: string): string | undefined => {
   return cleaned || undefined
 }
 
-const parseCliJsdoc = (description: string | undefined): {description: string | undefined; aliases: string[]} => {
-  if (!description) return {description: undefined, aliases: []}
-  const aliases: string[] = []
-  const lines: string[] = []
-  for (const line of description.split('\n')) {
-    const match = line.trim().match(/^@alias\s+(.+)$/)
-    if (match) {
-      aliases.push(match[1].trim())
-      continue
-    }
-    lines.push(line)
+interface CliJsdoc {
+  /** the free text before the first `@tag` line - what a command/argument/flag description is made of */
+  description: string | undefined
+  /** `@alias x` tags */
+  aliases: string[]
+  /**
+   * `@param name description` tags keyed by name. `@param {type} name`, `@param name - description` and
+   * `@param [name]` spellings are accepted (the jsdoc type is ignored - the TypeScript annotation is the source of
+   * truth). Dotted names (`@param options.force ...`) are kept as-is; they document a property of an object parameter.
+   */
+  params: Record<string, string>
+}
+
+/**
+ * Split cleaned jsdoc text the way jsdoc tooling does: the description is everything up to the first line that
+ * starts with an `@tag`, and each tag runs until the next one. `@alias` and `@param` are interpreted; every other
+ * tag (`@returns`, `@example`, `@see`, `@deprecated`, ...) is for documentation tooling, not CLI help, and is dropped.
+ */
+const parseCliJsdoc = (text: string | undefined): CliJsdoc => {
+  const doc: CliJsdoc = {description: undefined, aliases: [], params: {}}
+  if (!text) return doc
+  const blocks: string[][] = [[]]
+  for (const line of text.split('\n')) {
+    if (/^\s*@[a-z]/i.test(line)) blocks.push([])
+    blocks.at(-1)!.push(line)
   }
-  const cleaned = lines.join('\n').trim()
-  return {description: cleaned || undefined, aliases}
+  const [descriptionLines, ...tagBlocks] = blocks
+  doc.description = descriptionLines.join('\n').trim() || undefined
+  for (const tagLines of tagBlocks) {
+    const [, tag, body] = tagLines
+      .join('\n')
+      .trim()
+      .match(/^@(\w+)\s*([\s\S]*)$/)!
+    if (tag === 'alias') {
+      const alias = body.split('\n')[0].trim()
+      if (alias) doc.aliases.push(alias)
+    } else if (tag === 'param' || tag === 'arg' || tag === 'argument') {
+      const param = parseParamTag(body)
+      if (param) doc.params[param.name] = param.description
+    }
+  }
+  return doc
+}
+
+/** Parses the body of a `@param` tag: an optional `{type}`, the (possibly `[bracketed]`, possibly dotted) name, an optional `-`, then the description. */
+const parseParamTag = (body: string): {name: string; description: string} | undefined => {
+  let rest = body
+  if (rest.startsWith('{')) {
+    let depth = 0
+    let i = 0
+    for (; i < rest.length; i++) {
+      if (rest[i] === '{') depth++
+      else if (rest[i] === '}' && --depth === 0) break
+    }
+    rest = rest.slice(i + 1).trimStart()
+  }
+  // the optional `-` separator must be followed by whitespace, so a description starting with a hyphen (`-5 means negative`) keeps it
+  const match = rest.match(/^\[?([\w$.]+)(?:=[^\]]*)?\]?(?:[ \t]+-)?(?:\s+([\s\S]*))?$/)
+  if (!match) return undefined
+  const description = (match[2] || '')
+    .split('\n')
+    .map(line => line.trim())
+    .join('\n')
+    .trim()
+  return description ? {name: match[1], description} : undefined
+}
+
+/**
+ * Apply `@param <paramName>.<property> description` tags from a function's jsdoc to the properties of the object
+ * parameter's schema (one level deep, in every union branch), where the property doesn't already have a description
+ * from its own jsdoc. Property jsdoc wins because it sits next to the type it documents.
+ */
+const applyParamTagPropertyDescriptions = (
+  schema: unknown,
+  paramName: string | undefined,
+  params: Record<string, string>,
+): void => {
+  if (!paramName) return
+  const prefix = `${paramName}.`
+  const entries = Object.entries(params).filter(([key]) => key.startsWith(prefix))
+  if (entries.length === 0) return
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return
+    const record = node as {
+      properties?: Record<string, unknown>
+      anyOf?: unknown[]
+      oneOf?: unknown[]
+      allOf?: unknown[]
+    }
+    for (const [key, description] of entries) {
+      const property = record.properties?.[key.slice(prefix.length)] as Record<string, unknown> | undefined
+      if (property && typeof property === 'object' && !property.description) property.description = description
+    }
+    ;[...(record.anyOf || []), ...(record.oneOf || []), ...(record.allOf || [])].forEach(visit)
+  }
+  visit(schema)
 }
 
 const applySchemaJsdocMetadata = (schema: unknown): unknown => {
