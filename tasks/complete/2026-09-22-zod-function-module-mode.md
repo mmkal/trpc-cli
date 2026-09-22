@@ -42,7 +42,7 @@ and trpc-cli can read `sayHello._zod.def.input` (a `ZodTuple`) instead of parsin
 - Command descriptions and `@alias` come from the jsdoc immediately before `export const <name>`, same as the
   typebox flow (`z.function().describe()` metadata lives in zod's registry keyed by the schema instance, which
   `_zod` doesn't point back to). Source order determines command order.
-- `export default` zod functions aren't supported (the implemented function has no usable name) - throws.
+- ~~`export default` zod functions aren't supported (the implemented function has no usable name) - throws.~~ _2026-09-22: supported, same as an anonymous `export default function` - command named `default` with `meta.default: true`. The "no usable name" reasoning was wrong; the plain flow never needed one either._
 - Pre-existing tuple gap fixed generically in parse-procedure: an *optional* trailing flags object (zod
   encodes this as `minItems` below the flags index) no longer makes its required properties required at the
   CLI level, and the handler receives `undefined` instead of `{}` when no flags were given. The typebox module

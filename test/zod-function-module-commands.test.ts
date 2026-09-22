@@ -167,11 +167,25 @@ test('zod function module: rest arguments are not supported', async () => {
   )
 })
 
-test('zod function module: default exports are not supported', async () => {
+test('zod function module: a default export becomes the default command', async () => {
+  const source = `
+    /** greet whoever */
+    export default z.function({input: [z.object({name: z.string()})]}).implement(options => 'hi ' + options.name)
+  `
   const exports = {
-    default: z.function({input: [z.string()]}).implement(name => `hi ${name}`),
+    default: z.function({input: [z.object({name: z.string()})]}).implement(options => `hi ${options.name}`),
   }
-  await expect(runWith({source: '', exports}, ['--help'])).rejects.toThrowErrorMatchingInlineSnapshot(
-    `Error: Default-exported zod functions aren't supported - export it with a name, e.g. \`export const greet = z.function(...).implement(...)\`.`,
-  )
+  expect(await runWith({source, exports}, ['--name', 'bob'])).toMatchInlineSnapshot(`"hi bob"`)
+  expect(await runWith({source, exports}, ['--help'])).toMatchInlineSnapshot(`
+    "Usage: program [options] [command]
+
+    Available subcommands: default (default)
+
+    Options:
+      -h, --help         display help for command
+
+    Commands:
+      default [options]  greet whoever
+    "
+  `)
 })

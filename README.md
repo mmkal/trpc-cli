@@ -817,7 +817,7 @@ export const sayHello = z
 void createCli(import.meta).run() // mycli say-hello bob --enthusiasm 3
 ```
 
-The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `z.function()` with no `input` is a command with no arguments. `.describe()`/`.meta({title, description})`/`.default()` drive help text. Command descriptions and `@alias` tags still come from the jsdoc above `export const <name>`, and source order determines command order. Plain functions, classes and `z.function()` exports can be mixed freely in one file. Rest arguments (`input: z.array(...)` or a tuple rest) and default-exported zod functions aren't supported.
+The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `z.function()` with no `input` is a command with no arguments. `.describe()`/`.meta({title, description})`/`.default()` drive help text. Command descriptions and `@alias` tags still come from the jsdoc above `export const <name>`, and source order determines command order. Plain functions, classes and `z.function()` exports can be mixed freely in one file. `export default z.function(...).implement(...)` becomes the default command, as with a default-exported plain function. Rest arguments (`input: z.array(...)` or a tuple rest) aren't supported.
 
 Details and limitations:
 

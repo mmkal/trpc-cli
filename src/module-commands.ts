@@ -322,14 +322,14 @@ const isZodImplementedFunction = (value: unknown): value is ZodImplementedFuncti
   (value as {_zod?: {def?: {type?: unknown}}})._zod?.def?.type === 'function'
 
 /**
- * Find the `export const <name> = ...` declaration of a zod function export, for its jsdoc (description, `@alias`)
- * and its source position (command order). Undefined when this file doesn't declare it - e.g. it arrived via
- * `export * from './child'`, in which case the child's router owns it.
+ * Find the `export const <name> = ...` (or `export default ...`) declaration of a zod function export, for its jsdoc
+ * (description, `@alias`) and its source position (command order). Undefined when this file doesn't declare it -
+ * e.g. it arrived via `export * from './child'`, in which case the child's router owns it.
  */
-const findExportedConstDeclaration = (source: string, scan: SourceScan, name: string) => {
+const findExportDeclaration = (source: string, scan: SourceScan, name: string) => {
   // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
-  const pattern = /(?<![.\w$])export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g
-  const match = [...source.matchAll(pattern)].find(m => m[1] === name && !scan.masked[m.index])
+  const pattern = /(?<![.\w$])export\s+(?:(default)(?![\w$])|(?:const|let|var)\s+([A-Za-z_$][\w$]*))/g
+  const match = [...source.matchAll(pattern)].find(m => (m[1] || m[2]) === name && !scan.masked[m.index])
   return match && {position: match.index, description: jsdocBefore(source, scan, match.index)}
 }
 
@@ -348,6 +348,7 @@ const buildZodFunctionProcedure = (
   const commandDoc = parseCliJsdoc(description)
   const meta = {
     ...(commandDoc.description ? {description: commandDoc.description} : {}),
+    ...(name === 'default' ? {default: true} : {}), // `export default z.function(...)` - the CLI's default command, like a default-exported plain function
     ...(commandDoc.aliases.length > 0 ? {aliases: {command: commandDoc.aliases}} : {}),
   }
   const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
@@ -380,12 +381,7 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
   }
   for (const [name, value] of Object.entries(exports)) {
     if (!isZodImplementedFunction(value)) continue
-    if (name === 'default') {
-      throw new Error(
-        `Default-exported zod functions aren't supported - export it with a name, e.g. \`export const greet = z.function(...).implement(...)\`.`,
-      )
-    }
-    const declaration = findExportedConstDeclaration(source, scan, name)
+    const declaration = findExportDeclaration(source, scan, name)
     if (!declaration) continue // not declared in this file (e.g. `export * from './child'`) - the child's router owns it
     const procedure = buildZodFunctionProcedure(name, value, declaration.description)
     entries.push({name, position: declaration.position, procedure})
