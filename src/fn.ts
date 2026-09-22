@@ -36,7 +36,18 @@ export type FnImplemented<Args extends unknown[], R> = ((...args: Args) => R) & 
 export const isFnImplemented = (value: unknown): value is FnImplemented<unknown[], unknown> =>
   typeof value === 'function' && fnDefinition in value
 
-type InferArgs<T extends StandardSchemaV1[]> = {[K in keyof T]: StandardSchemaV1.InferOutput<T[K]>}
+/**
+ * The callback's argument types: each schema's output type, with trailing schemas whose output includes `undefined`
+ * (e.g. `z.object({...}).optional()`) becoming optional parameters, so `sayHello('bob')` typechecks without flags.
+ */
+type InferArgs<T extends StandardSchemaV1[]> = T extends [
+  ...infer Init extends StandardSchemaV1[],
+  infer Last extends StandardSchemaV1,
+]
+  ? undefined extends StandardSchemaV1.InferOutput<Last>
+    ? [...InferArgs<Init>, StandardSchemaV1.InferOutput<Last>?]
+    : {[K in keyof T]: StandardSchemaV1.InferOutput<T[K]>}
+  : []
 
 export interface FnBuilder<T extends StandardSchemaV1[]> {
   /** sets the command description (same as `.meta({description})`) */
