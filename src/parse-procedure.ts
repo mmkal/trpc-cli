@@ -303,7 +303,7 @@ function isNullable(schema: JSONSchema7) {
   return false
 }
 
-const tupleItemsSchemas = (schema: JSONSchema7Definition): JSONSchema7Definition[] | undefined => {
+export const tupleItemsSchemas = (schema: JSONSchema7Definition): JSONSchema7Definition[] | undefined => {
   if (!schema || typeof schema !== 'object') return undefined
   if (Array.isArray(schema.items)) return schema.items
   if ('prefixItems' in schema && Array.isArray(schema.prefixItems)) return schema.prefixItems as JSONSchema7Definition[]
@@ -373,6 +373,14 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
 
   const positionalSchemas = flagsSchemaIndex === -1 ? items : items.slice(0, flagsSchemaIndex)
 
+  // an optional trailing flags object (`z.tuple([z.string(), z.object({...}).optional()])` - zod encodes tuple
+  // optionality via `minItems`) means its properties aren't required at the CLI level, and the handler gets
+  // `undefined` rather than `{}` when no flags were passed, matching what a direct call without the argument gets
+  const minItems = typeof tuple === 'object' && typeof tuple.minItems === 'number' ? tuple.minItems : items.length
+  const flagsOptional = !!flagsSchema && (isOptional(flagsSchema) || flagsSchemaIndex >= minItems)
+  const optionsJsonSchema =
+    flagsSchema && typeof flagsSchema === 'object' ? (flagsOptional ? {...flagsSchema, required: []} : flagsSchema) : {}
+
   return {
     success: true,
     value: {
@@ -387,7 +395,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
           .filter(type => type !== 'undefined')
           .join(' | '),
       })),
-      optionsJsonSchema: flagsSchema && typeof flagsSchema === 'object' ? flagsSchema : {},
+      optionsJsonSchema,
       getPojoInput: commandArgs => {
         const inputs: unknown[] = commandArgs.positionalValues.map((v, i) => {
           const correspondingSchema = positionalSchemas[i]
@@ -406,7 +414,7 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
           return convertPositional(correspondingSchema, v)
         })
 
-        if (flagsSchema) {
+        if (flagsSchema && !(flagsOptional && Object.keys(commandArgs.options).length === 0)) {
           inputs.push(commandArgs.options)
         }
         return inputs
