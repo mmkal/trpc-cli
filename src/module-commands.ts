@@ -1150,9 +1150,10 @@ const parseParamTag = (body: string): {name: string; description: string} | unde
     }
     rest = rest.slice(i + 1).trimStart()
   }
-  const match = rest.match(/^\[?([\w$.]+)(?:=[^\]]*)?\]?[ \t]*(?:-[ \t]*)?([\s\S]*)$/)
+  // the optional `-` separator must be followed by whitespace, so a description starting with a hyphen (`-5 means negative`) keeps it
+  const match = rest.match(/^\[?([\w$.]+)(?:=[^\]]*)?\]?(?:[ \t]+-)?(?:\s+([\s\S]*))?$/)
   if (!match) return undefined
-  const description = match[2]
+  const description = (match[2] || '')
     .split('\n')
     .map(line => line.trim())
     .join('\n')

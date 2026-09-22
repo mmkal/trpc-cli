@@ -696,6 +696,7 @@ test('module commands: @param spellings, precedence, and other standard tags', a
        * @param options the options object itself has no home in help, so this line is dropped
        * @param options.force overwrite the destination if it exists
        * @param options.verbose this loses to the property's own jsdoc
+       * @param options.offset -5 means five lines back (a leading hyphen is part of the description, not a separator)
        * @return the destination path
        * @example
        * copy('a.txt', 'b.txt', {force: true})
@@ -709,6 +710,7 @@ test('module commands: @param spellings, precedence, and other standard tags', a
           force?: boolean
           /** print what's happening */
           verbose?: boolean
+          offset?: number
         } = {},
       ) {
         return \`copied \${source} to \${dest || source + '.bak'}\`
@@ -732,6 +734,8 @@ test('module commands: @param spellings, precedence, and other standard tags', a
     Options:
       --force [boolean]    overwrite the destination if it exists
       --verbose [boolean]  print what's happening
+      --offset [number]    -5 means five lines back (a leading hyphen is part of the
+                           description, not a separator)
       -h, --help           display help for command
     "
   `)
