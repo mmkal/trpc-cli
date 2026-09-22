@@ -110,7 +110,7 @@
     "strip-ansi": "7.1.0",
     "trpcserver10": "npm:@trpc/server@^10.45.2",
     "trpcserver11": "npm:@trpc/server@^11.1.1",
-    "tsx": "4.20.3",
+    "tsx": "4.23.15",
     "typebox": "1.2.8",
     "typescript": "5.8.3",
     "valibot": "1.2.0",
