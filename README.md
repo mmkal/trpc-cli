@@ -790,9 +790,35 @@ The flags list is the union of all signatures' flags, and flags that never appea
 
 jsdoc conventions for overloaded commands: each signature's jsdoc describes *its* calling convention (it becomes that usage line's `#` comment); a jsdoc on the *implementation* signature describes the command as a whole (shown as the command description - without one, the signatures' descriptions are joined). Property jsdoc works as usual, and a flag documented differently in different signatures (say, an `input` that means a URL in one and a file path in another) shows each distinct description, joined with `/`.
 
+#### Module mode with `fn()`
+
+Parsing TypeScript types has limits: no runtime transforms, no `.default()`s, no custom metadata beyond jsdoc. If you'd rather write real schemas, export `fn(...).implement(...)` results. `fn` is shaped like [`z.function()`](https://zod.dev/api#functions) but takes *any* [Standard Schema](https://standardschema.dev) (zod, valibot, arktype, ...) and needs nothing from source: the input schemas are read straight from the export, and positional arguments are named after the callback's parameters.
+
+```ts
+// commands.ts
+import {fn} from 'trpc-cli'
+import {z} from 'zod'
+
+export const sayHello = fn({
+  input: [
+    z.string().describe('who to greet'), // positional
+    z.object({enthusiasm: z.number().int().positive().default(1)}).optional(), // flags
+  ],
+})
+  .describe('greet someone')
+  .meta({aliases: {command: ['hi']}})
+  .implement(
+    (name, options) => `Hello, ${name}${'!'.repeat(options?.enthusiasm || 1)}`,
+  )
+
+void createCli(import.meta).run() // mycli say-hello bob --enthusiasm 3
+```
+
+The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `fn()` with no `input` is a command with no arguments. `.describe()` sets the command description and `.meta()` takes the same meta as router-mode procedures (aliases, examples, ...); a jsdoc comment above the export is used as a fallback. Calling the implemented function directly from other code validates its arguments (and its result, if you pass `output`) through the same schemas. Plain functions, classes and `fn()` exports mix freely in one file, and `export default fn(...)` becomes the default command.
+
 #### Module mode with zod functions
 
-Parsing TypeScript types has limits: no runtime transforms, no `.default()`s, no custom metadata beyond jsdoc. If you'd rather write real schemas, export [`z.function()`](https://zod.dev/api#functions) implementations instead - zod ≥4.5 attaches the function schema to the implemented function (see [colinhacks/zod#6104](https://github.com/colinhacks/zod/issues/6104)), so trpc-cli reads the input schemas straight from the exports and skips source parsing entirely:
+If you'd rather stick to zod's own API, [`z.function()`](https://zod.dev/api#functions) implementations work the same way - zod ≥4.5 attaches the function schema to the implemented function (see [colinhacks/zod#6104](https://github.com/colinhacks/zod/issues/6104)), so trpc-cli reads the input schemas straight from the exports:
 
 ```ts
 // commands.ts
@@ -817,7 +843,7 @@ export const sayHello = z
 void createCli(import.meta).run() // mycli say-hello bob --enthusiasm 3
 ```
 
-The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `z.function()` with no `input` is a command with no arguments. `.describe()`/`.meta({title, description})`/`.default()` drive help text. Positional arguments are named after the `.implement((name, options) => ...)` callback's parameters (a `.meta({title})` on the item schema wins if present). Command descriptions and `@alias` tags still come from the jsdoc above `export const <name>`, and source order determines command order. Plain functions, classes and `z.function()` exports can be mixed freely in one file. `export default z.function(...).implement(...)` becomes the default command, as with a default-exported plain function. Rest arguments (`input: z.array(...)` or a tuple rest) aren't supported.
+The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `z.function()` with no `input` is a command with no arguments. Everything said about `fn()` above applies, with one difference: zod keeps the `.implement()` callback private, so its parameter names are read from the `.implement((name, options) => ...)` text in the source file (a `.meta({title})` on the item schema wins if present), and command descriptions and `@alias` tags come from the jsdoc above `export const <name>` since `z.function().describe()` metadata isn't reachable from the implemented function. Rest arguments (`input: z.array(...)` or a tuple rest) aren't supported.
 
 Details and limitations:
 

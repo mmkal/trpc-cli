@@ -16,22 +16,28 @@
  * command modules: `export * as group from './group'` creates a nested router, `export * from './group'` merges
  * named child commands into the current router, and `export {Foo} from './foo'` re-exports selected commands.
  *
- * Exported `z.function(...).implement(...)` results skip the type parsing: their input schemas are read from the
- * functions themselves (zod >=4.5 attaches them as `_zod`), and only their jsdoc comes from source - see
- * `buildZodFunctionProcedure`. Plain and zod functions can be mixed freely in one module.
+ * Exports that carry their own schemas skip the type parsing entirely: `fn(...).implement(...)` results (see ./fn -
+ * any Standard Schema, parameter names from the callback itself) and, through an adapter, zod's
+ * `z.function(...).implement(...)` results (zod >=4.5 attaches the schemas as `_zod`; the callback stays private,
+ * so its parameter names are read from the `.implement(` text). Both become a `CommandFunction` and share one
+ * procedure builder; source is only consulted for the export declaration (position, jsdoc). All three kinds mix
+ * freely in one module.
  *
  * The source "parser" here is deliberately a lightweight hand-rolled extractor, not the TypeScript compiler API:
  * it only needs to find exported function/class method declarations, the jsdoc immediately preceding them, and each
  * parameter's name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type
  * syntax into JSON Schema - is all `Type.Script`.
  */
+import {fnDefinition as fnDefinitionKey, FnImplemented, isFnImplemented} from './fn.js'
 import {flattenedProperties, getEnumChoices, toJsonSchema} from './json-schema.js'
 import {t} from './norpc.js'
-import {isOptional, tupleItemsSchemas} from './parse-procedure.js'
+import {isOptional} from './parse-procedure.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 import {toDotPath} from './standard-schema/errors.js'
+import {validateTuple} from './standard-schema/tuple.js'
 import Type from './typebox/index.js'
+import {TrpcCliMeta} from './types.js'
 import {getSchemaTypes, kebabCase} from './util.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -297,8 +303,32 @@ const buildRouterFromFileModule = async (
 }
 
 // ------------------------------------------------------------------
-// zod function exports - schemas read from `z.function().implement(...)` results, no type parsing
+// schema-carrying function exports: `fn(...).implement(...)` and, via an adapter, `z.function(...).implement(...)`
 // ------------------------------------------------------------------
+
+/**
+ * What a schema-carrying export boils down to before it becomes a procedure. `fn()` exports carry this directly
+ * (see ./fn); zod functions are adapted into it by `zodFunctionCommand`, which is the only place that still reads
+ * the source for anything beyond the export declaration.
+ */
+interface CommandFunction {
+  /** tuple item schemas: leading scalars become positionals, a trailing object becomes flags. Empty = no arguments */
+  input: StandardSchemaV1[]
+  meta: TrpcCliMeta
+  /** parameter names of the implementation, for positional argument names in help; undefined entries for destructured/rest params */
+  paramNames: Array<string | undefined> | undefined
+  call: (...args: unknown[]) => unknown
+}
+
+const fnCommand = (implemented: FnImplemented<unknown[], unknown>): CommandFunction => {
+  const definition = implemented[fnDefinitionKey]
+  return {
+    input: definition.input,
+    meta: definition.meta,
+    paramNames: parseFunctionParamNames(scanSource(definition.implementation.toString()), 0),
+    call: implemented,
+  }
+}
 
 /**
  * The runtime shape of a `z.function(...).implement(fn)` result: zod >=4.5 attaches the function schema's
@@ -311,14 +341,9 @@ interface ZodImplementedFunction {
     def: {
       type: 'function'
       /** a `ZodTuple` when `input: [...]` was given; zod defaults to `z.array(z.unknown())` when it wasn't */
-      input: ZodTupleLike
+      input: {_zod: {def: {type: string; items?: unknown[]; rest?: unknown; element?: {_zod: {def: {type: string}}}}}}
     }
   }
-}
-
-interface ZodTupleLike {
-  '~standard': StandardSchemaV1.Props
-  _zod: {def: {type: string; items?: unknown[]; rest?: unknown; element?: {_zod: {def: {type: string}}}}}
 }
 
 const isZodImplementedFunction = (value: unknown): value is ZodImplementedFunction =>
@@ -327,29 +352,47 @@ const isZodImplementedFunction = (value: unknown): value is ZodImplementedFuncti
   (value as {_zod?: {def?: {type?: unknown}}})._zod?.def?.type === 'function'
 
 /**
- * Find the `export const <name> = ...` (or `export default ...`) declaration of a zod function export, for its jsdoc
- * (description, `@alias`), its source position (command order) and its `.implement()` callback's parameter names.
- * Undefined when this file doesn't declare it - e.g. it arrived via `export * from './child'`, in which case the
- * child's router owns it.
+ * Adapt a zod function into a `CommandFunction`. zod keeps the `.implement()` callback private, so the parameter
+ * names are read from the `.implement((name, options) => ...)` text in the source instead.
+ */
+const zodFunctionCommand = (
+  name: string,
+  zodFn: ZodImplementedFunction,
+  scan: SourceScan,
+  declarationPosition: number,
+): CommandFunction => {
+  const inputDef = zodFn._zod.def.input._zod.def
+  const noInput = inputDef.type === 'array' && inputDef.element?._zod.def.type === 'unknown' // `z.function()` with no `input`
+  if (!noInput && (inputDef.type !== 'tuple' || inputDef.rest)) {
+    throw new Error(
+      `Zod function ${JSON.stringify(name)} has ${inputDef.type === 'tuple' ? 'rest arguments in its' : `an ${inputDef.type}`} input, which isn't supported. Use a tuple input like \`z.function({input: [z.string(), z.object({...})]})\` so parameters can map to positional arguments and flags.`,
+    )
+  }
+  return {
+    input: noInput ? [] : ((inputDef.items || []) as StandardSchemaV1[]),
+    meta: {},
+    paramNames: extractImplementParamNames(scan, declarationPosition),
+    call: zodFn,
+  }
+}
+
+/**
+ * Find the `export const <name> = ...` (or `export default ...`) declaration of a schema-carrying function export,
+ * for its jsdoc (description, `@alias`) and its source position (command order - ESM namespace keys are
+ * alphabetical). Undefined when this file doesn't declare it - e.g. it arrived via `export * from './child'`, in
+ * which case the child's router owns it.
  */
 const findExportDeclaration = (scan: SourceScan, name: string) => {
   const {source} = scan
   // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
   const pattern = /(?<![.\w$])export\s+(?:(default)(?![\w$])|(?:const|let|var)\s+([A-Za-z_$][\w$]*))/g
   const match = [...source.matchAll(pattern)].find(m => (m[1] || m[2]) === name && !scan.masked[m.index])
-  if (!match) return undefined
-  return {
-    position: match.index,
-    description: jsdocBefore(scan, match.index),
-    paramNames: extractImplementParamNames(scan, match.index),
-  }
+  return match && {position: match.index, description: jsdocBefore(scan, match.index)}
 }
 
 /**
- * Parameter names of the `.implement((name, options) => ...)` callback in the declaration starting at `start` - zod
- * tuple items carry no names of their own, so these name the positional arguments in help. Best effort: undefined
- * when the declaration has no inline `.implement(` before the next export (e.g. `export const a = makeCommand()`),
- * and an undefined entry for a destructured or rest parameter.
+ * Parameter names of the `.implement(...)` callback in the declaration starting at `start`. Best effort: undefined
+ * when the declaration has no inline `.implement(` before the next export (e.g. `export const a = makeCommand()`).
  */
 const extractImplementParamNames = (scan: SourceScan, start: number): Array<string | undefined> | undefined => {
   const {source} = scan
@@ -358,14 +401,23 @@ const extractImplementParamNames = (scan: SourceScan, start: number): Array<stri
   const implement = firstUnmaskedAfterStart(/\.implement(?:Async)?\s*\(/g)
   const nextExport = firstUnmaskedAfterStart(/(?<![.\w$])export\s/g)
   if (!implement || (nextExport && nextExport.index < implement.index)) return undefined
+  return parseFunctionParamNames(scan, implement.index + implement[0].length)
+}
 
-  let i = implement.index + implement[0].length
-  i += /^\s*(?:async\s+)?(?:function\b(?:\s+[A-Za-z_$][\w$]*)?\s*)?/.exec(source.slice(i))![0].length
-  if (source[i] !== '(') {
-    const bare = /^([A-Za-z_$][\w$]*)\s*=>/.exec(source.slice(i)) // `name => ...`
-    return bare ? [bare[1]] : undefined
-  }
-  const paramList = source.slice(i + 1, findBalancedEnd(scan, i, '(', ')') - 1)
+/**
+ * Parameter names of the function expression starting at `start` in `scan.source`: `(a, b) => ...`,
+ * `async (a) => ...`, `function name(a) {...}`, a method's `name(a) {...}` (what `Function.prototype.toString`
+ * gives), or a bare `a => ...`. An undefined entry means a destructured or rest parameter.
+ */
+const parseFunctionParamNames = (scan: SourceScan, start: number): Array<string | undefined> | undefined => {
+  const {source} = scan
+  const rest = source.slice(start)
+  const bare = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(rest)
+  if (bare) return [bare[1]]
+  const head = /^\s*(?:async\s+)?(?:function\b\s*\*?\s*)?(?:[A-Za-z_$][\w$]*\s*)?/.exec(rest)![0]
+  const parenIndex = start + head.length
+  if (source[parenIndex] !== '(') return undefined
+  const paramList = source.slice(parenIndex + 1, findBalancedEnd(scan, parenIndex, '(', ')') - 1)
   return splitTopLevelCommas(scanSource(paramList)).map(({start: from, end}) => {
     const text = paramList
       .slice(from, end)
@@ -376,67 +428,54 @@ const extractImplementParamNames = (scan: SourceScan, start: number): Array<stri
 }
 
 /**
- * zod tuple items have no parameter names, so a bare `z.string()` positional would show as `<parameter_1>`. Name
- * the positionals after the `.implement()` callback's parameters: convert the tuple to JSON schema once, add a
- * `title` (which parse-procedure uses as the positional name) to each scalar item that doesn't already have one
- * from `.meta({title})`, and hand back a schema that still validates via the original tuple - the same shape the
- * typebox flow produces. Falls back to the tuple itself when there's nothing to name.
+ * Build a procedure from a `CommandFunction`. The item schemas are converted to JSON schema individually and
+ * assembled into a tuple schema (so the usual tuple convention applies: leading scalars become positionals, a
+ * trailing object becomes flags, and an optional trailing object makes the flags optional), with `title`s from the
+ * implementation's parameter names on scalar items that don't already have one. The tuple validates via the
+ * original schemas. Explicit `.describe()`/`.meta()` win over the declaration's jsdoc.
  */
-const withParameterNames = (input: ZodTupleLike, paramNames: Array<string | undefined> | undefined): unknown => {
-  if (!paramNames?.some(Boolean)) return input
-  const converted = toJsonSchema(input, {})
-  if (!converted.success) return input
-  // shallow copy: zod stamps its output with a non-enumerable, non-configurable `~standard` claiming vendor `zod`,
-  // which would route the plain JSON schema back into the zod converter
-  const schema = {...converted.value}
-  const items = tupleItemsSchemas(schema) // zod 4 emits draft 2020-12 `prefixItems`; older converters use `items`
-  if (!items) return input
-  items.forEach((item, i) => {
-    const paramName = paramNames[i]
-    if (!paramName || typeof item !== 'object' || item.title || isObjectLikeSchema(item)) return
-    item.title = kebabCase(paramName)
-  })
-  Object.defineProperty(schema, '~standard', {
-    configurable: true,
-    enumerable: false,
-    value: {...input['~standard'], vendor: 'trpc-cli', jsonSchema: {input: () => schema, output: () => schema}},
-  })
-  return schema
-}
-
-/**
- * Build a procedure from a zod function. The tuple input schema is handed to `.input(...)` as-is, so the usual
- * tuple convention applies (leading scalars become positionals, a trailing object becomes flags) and zod's own
- * `.describe()`/`.default()` metadata drives help. The implemented function validates its arguments with the same
- * schema again when called - harmless, and it means calling the function directly from other code gets the same
- * validation.
- */
-const buildZodFunctionProcedure = (
+const buildCommandFunctionProcedure = (
   name: string,
-  fn: ZodImplementedFunction,
-  declaration: {description: string | undefined; paramNames: Array<string | undefined> | undefined},
+  command: CommandFunction,
+  jsdoc: string | undefined,
 ): NorpcProcedureLike => {
-  const commandDoc = parseCliJsdoc(declaration.description)
-  const meta = {
+  const commandDoc = parseCliJsdoc(jsdoc)
+  const meta: TrpcCliMeta = {
     ...(commandDoc.description ? {description: commandDoc.description} : {}),
-    ...(name === 'default' ? {default: true} : {}), // `export default z.function(...)` - the CLI's default command, like a default-exported plain function
     ...(commandDoc.aliases.length > 0 ? {aliases: {command: commandDoc.aliases}} : {}),
+    ...(name === 'default' ? {default: true} : {}), // `export default fn(...)` - the CLI's default command, like a default-exported plain function
+    ...command.meta,
   }
   const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
+  if (command.input.length === 0) return builder.handler(() => command.call())
 
-  const input = fn._zod.def.input
-  const inputDef = input._zod.def
-  if (inputDef.type === 'array' && inputDef.element?._zod.def.type === 'unknown') {
-    return builder.handler(() => fn()) // `z.function()` with no `input` - zod defaults to z.array(z.unknown())
+  const items = command.input.map((schema, i) => {
+    const converted = toJsonSchema(schema, {})
+    if (!converted.success) throw new Error(`Input ${i + 1} of ${JSON.stringify(name)}: ${converted.error}`)
+    // shallow copy: zod stamps its output with a non-enumerable `~standard` claiming vendor `zod`, which would
+    // route the plain JSON schema back into the zod converter
+    const item = {...converted.value}
+    const paramName = command.paramNames?.[i]
+    if (paramName && !item.title && !isObjectLikeSchema(item)) item.title = kebabCase(paramName)
+    return item
+  })
+  const firstOptional = items.findIndex(item => isOptional(item))
+  const schema = {
+    type: 'array',
+    items,
+    minItems: firstOptional === -1 ? items.length : firstOptional,
+    maxItems: items.length,
   }
-  if (inputDef.type !== 'tuple' || inputDef.rest) {
-    throw new Error(
-      `Zod function ${JSON.stringify(name)} has ${inputDef.type === 'tuple' ? 'rest arguments in its' : `an ${inputDef.type}`} input, which isn't supported. Use a tuple input like \`z.function({input: [z.string(), z.object({...})]})\` so parameters can map to positional arguments and flags.`,
-    )
-  }
-  if (!inputDef.items || inputDef.items.length === 0) return builder.handler(() => fn())
-  const named = withParameterNames(input, declaration.paramNames)
-  return builder.input(named as never).handler(({input: args}) => fn(...(args as unknown[])))
+  Object.defineProperty(schema, '~standard', {
+    enumerable: false,
+    value: {
+      version: 1,
+      vendor: 'trpc-cli',
+      validate: (value: unknown) => validateTuple(command.input, value),
+      jsonSchema: {input: () => schema, output: () => schema},
+    },
+  })
+  return builder.input(schema as never).handler(({input}) => command.call(...(input as unknown[])))
 }
 
 const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string, unknown>) => {
@@ -452,10 +491,13 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
     if (procedure) entries.push({name: command.name, position: command.position, procedure})
   }
   for (const [name, value] of Object.entries(exports)) {
-    if (!isZodImplementedFunction(value)) continue
+    if (!isFnImplemented(value) && !isZodImplementedFunction(value)) continue
     const declaration = findExportDeclaration(scan, name)
     if (!declaration) continue // not declared in this file (e.g. `export * from './child'`) - the child's router owns it
-    const procedure = buildZodFunctionProcedure(name, value, declaration)
+    const command = isFnImplemented(value)
+      ? fnCommand(value)
+      : zodFunctionCommand(name, value, scan, declaration.position)
+    const procedure = buildCommandFunctionProcedure(name, command, declaration.description)
     entries.push({name, position: declaration.position, procedure})
   }
 
