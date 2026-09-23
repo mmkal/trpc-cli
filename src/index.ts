@@ -888,8 +888,13 @@ const describeIssues = (
     .map(issue => ({
       issue,
       // `Array.from` rather than `.map`: arktype's paths are an Array subclass whose constructor takes items, so `.map`
-      // (which constructs via `Symbol.species` with a length) turns an empty root path into `[0]`
-      path: Array.from(issue.path || [], segment => (typeof segment === 'object' ? segment.key : segment)),
+      // (which constructs via `Symbol.species` with a length) turns an empty root path into `[0]`.
+      // Numeric strings become numbers: typebox reports tuple/array indexes as strings (`'1'`), and index segments are
+      // what locate positionals and repeated tokens. CLI option names are never all digits, so nothing is lost.
+      path: Array.from(issue.path || [], segment => {
+        const key = typeof segment === 'object' ? segment.key : segment
+        return typeof key === 'string' && /^\d+$/.test(key) ? Number(key) : key
+      }),
     }))
     .sort((a, b) => a.path.length - b.path.length)
     .map(({issue, path}) => {
