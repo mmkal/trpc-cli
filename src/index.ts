@@ -18,6 +18,7 @@ import {
 import {commandToJSON} from './json.js'
 import {yamlTableConsoleLogger} from './logging.js'
 import type {CliModuleInput} from './module-commands.js'
+import {coerce} from './parse-procedure.js'
 import {
   type AnyRouter,
   type CreateCallerFactoryLike,
@@ -28,7 +29,6 @@ import {
   parseRouter,
   type ProcedureInfo,
 } from './parse-router.js'
-import {coerce} from './parse-procedure.js'
 import {CosmeticJsonOption, promptify} from './prompts.js'
 import {guessCliName, scriptBasename} from './resolve-name.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
@@ -465,8 +465,10 @@ function createRouterCli<R extends AnyRouter>(
         const enumChoices = getEnumChoices(propertyValue)
         let valueName: string
         if (enumChoices?.type === 'string_enum') valueName = bracketise('string')
-        else if (allowedSchemas.length > 1) valueName = '[value]' // unions including booleans can be passed as bare flags
-        else if (rootTypes.length === 0) valueName = bracketise('json') // untyped, e.g. `--json` input
+        else if (allowedSchemas.length > 1)
+          valueName = '[value]' // unions including booleans can be passed as bare flags
+        else if (rootTypes.length === 0)
+          valueName = bracketise('json') // untyped, e.g. `--json` input
         else if (['string', 'number', 'integer'].includes(propertyType)) valueName = bracketise(propertyType)
         else valueName = '[json]'
 

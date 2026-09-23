@@ -122,18 +122,18 @@ test('make sure parsing works correctly', async () => {
   await expect(run(['square-root', '--', '-1'])).rejects.toMatchInlineSnapshot(`[Error: Get real]`)
   await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(
     `
-    [Error: error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Expected number, received string
+      [Error: error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Expected number, received string
 
-    Usage: program add [options] <parameter_1> <parameter_2>
+      Usage: program add [options] <parameter_1> <parameter_2>
 
-    Arguments:
-      parameter_1  number (required)
-      parameter_2  number (required)
+      Arguments:
+        parameter_1  number (required)
+        parameter_2  number (required)
 
-    Options:
-      -h, --help   display help for command
-    ]
-  `,
+      Options:
+        -h, --help   display help for command
+      ]
+    `,
   )
 })
 
