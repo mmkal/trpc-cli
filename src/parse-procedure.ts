@@ -1,4 +1,5 @@
 import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
+import {InvalidArgumentError} from 'commander'
 import {inspect} from 'util'
 import {CliValidationError} from './errors.js'
 import {getSchemaTypes, looksJsonSchemaable, toJsonSchema} from './json-schema.js'
@@ -76,7 +77,10 @@ export function parseJsonSchemaInputs(schemas: Result<JSONSchema7[]>): Result<Pa
               const positionalValues = [...params.positionalValues]
               const options = {...params.options}
               for (const {key, schema} of optionishPositionals) {
-                options[key] = convertPositional(schema, positionalValues.shift() as string)
+                const value = positionalValues.shift()
+                options[key] = Array.isArray(value)
+                  ? value.map(v => coercePositional(toRoughJsonSchema7(schema).items as JSONSchema7, v))
+                  : coercePositional(schema, value)
               }
 
               return inner.value.getPojoInput({positionalValues, options})
@@ -214,7 +218,7 @@ function parsePrimitiveInput(schema: JSONSchema7): Result<ParsedProcedure> {
         },
       ],
       optionsJsonSchema: {},
-      getPojoInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
+      getPojoInput: argv => coercePositional(schema, argv.positionalValues[0] as string | undefined),
       getArgvLocation: path => ({type: 'positional', index: 0, path}),
     },
   }
@@ -352,7 +356,7 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
       ],
       optionsJsonSchema: {},
       getPojoInput: argv =>
-        (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.items as JSONSchema7, s)),
+        (argv.positionalValues.at(-1) as string[]).map(s => coercePositional(array.items as JSONSchema7, s)),
       getArgvLocation: path => ({type: 'positional', index: 0, path}),
     },
   }
@@ -423,13 +427,13 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
             }
             return v.map(s => {
               if (!correspondingSchema.items || Array.isArray(correspondingSchema.items)) return s
-              return convertPositional(correspondingSchema.items, s)
+              return coercePositional(correspondingSchema.items, s)
             })
           }
           if (typeof v !== 'string' && v !== undefined) {
             throw new CliValidationError(`Expected string at position ${i}, got ${typeof v}`)
           }
-          return convertPositional(correspondingSchema, v)
+          return coercePositional(correspondingSchema, v)
         })
 
         if (flagsSchema && !(flagsOptional && Object.keys(commandArgs.options).length === 0)) {
@@ -453,47 +457,60 @@ const optionLocation = (path: PropertyKey[]): ArgvLocation | undefined => {
   return typeof key === 'string' ? {type: 'option', key, path: rest} : undefined
 }
 
+const primitiveTypes = new Set(['string', 'number', 'integer', 'boolean'])
+
 /**
- * Converts a positional string to parameter into a number if the target schema accepts numbers, and the input can be parsed as a number.
- * If the target schema accepts numbers but it's *not* a valid number, just return a string.
- * trpc will use zod to handle the validation before invoking the procedure.
+ * Converts a CLI string (positional or option value) into the type the schema accepts, where there's a sensible
+ * conversion. Anything else is passed through as typed, for the schema to reject with its own message against the
+ * argument/option it came from. The one exception is malformed JSON when only JSON could produce an accepted value:
+ * passing `{"a": 1,}` through would degrade "Malformed JSON" into "expected object, received string".
  */
-const convertPositional = (schema: JSONSchema7Definition, value: string) => {
-  let preprocessed: string | number | boolean | undefined = undefined
+export const coerce = (schema: JSONSchema7Definition, value: string): unknown => {
+  const types = new Set(getSchemaTypes(toRoughJsonSchema7(schema)))
+  types.delete('undefined') // e.g. typebox's `Type.Union([Type.Number(), Type.Undefined()])` for optional tuple elements
 
-  const acceptedTypes = new Set(acceptedPrimitiveTypes(schema))
+  if (types.has('boolean') && (value === 'true' || value === 'false')) return value === 'true'
 
-  if (acceptedTypes.has('string')) {
-    preprocessed = value
+  const number = value.trim() ? Number(value) : Number.NaN // `Number('')` is 0, which is never what someone meant
+  if (!Number.isNaN(number)) {
+    if (types.has('number')) return number
+    // a non-integer for an integer-only schema stays a number, so the schema says "expected int" rather than "expected number, received string"
+    if (types.has('integer') && (Number.isInteger(number) || !types.has('string'))) return number
   }
 
-  if (acceptedTypes.has('boolean')) {
-    if (value === 'true') preprocessed = true
-    else if (value === 'false') preprocessed = false
-  }
-
-  if (acceptedTypes.has('number')) {
-    const number = Number(value)
-    if (!Number.isNaN(number)) {
-      preprocessed = number
+  if (types.size === 0 || [...types].some(t => !primitiveTypes.has(t))) {
+    try {
+      const parsed = JSON.parse(value) as unknown
+      const parsedType = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed
+      // strings win over JSON of the wrong type, e.g. `123` for `string | null` stays the string "123"
+      if (types.size === 0 || types.has(parsedType) || !types.has('string')) return parsed
+    } catch {
+      if (types.size === 0) {
+        throw new InvalidArgumentError(
+          `Malformed JSON. If passing a string, pass it as a valid JSON string with quotes (${JSON.stringify(value)})`,
+        )
+      }
+      if (!types.has('string') && (types.has('object') || types.has('array'))) {
+        throw new InvalidArgumentError(`Malformed JSON.`)
+      }
     }
   }
 
-  if (acceptedTypes.has('integer')) {
-    const num = Number(value)
-    if (Number.isInteger(num)) {
-      preprocessed = num
-    } else if (!Number.isNaN(num) && acceptedTypes === undefined) {
-      // we're expecting an integer and the value isn't one, but we haven't come up with anything else, so use it anyway to get helpful "expected integer, got float" error rather than "expected number, got string"
-      preprocessed = value
-    }
-  }
+  return value
+}
 
-  if (preprocessed === undefined) {
-    return value // we didn't convert to a number or boolean, so just return the string
+/**
+ * Positionals are coerced after commander has parsed argv, where a throw wouldn't be reported against the argument.
+ * So malformed JSON is passed through as typed instead, for the schema to reject.
+ */
+const coercePositional = (schema: JSONSchema7Definition, value: string | undefined): unknown => {
+  if (value === undefined) return value // an optional positional that wasn't passed
+  try {
+    return coerce(schema, value)
+  } catch (error) {
+    if (error instanceof InvalidArgumentError) return value
+    throw error
   }
-
-  return preprocessed
 }
 
 const looksLikeArray = (schema: JSONSchema7Definition): schema is JSONSchema7 & {type: 'array'} => {

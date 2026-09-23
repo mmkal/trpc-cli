@@ -460,7 +460,7 @@ test('module positionals: missing and invalid positionals fail before the functi
   `)
   await expect(runWith({filename: positionalModulePath}, ['add', '2', 'banana'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'banana' is invalid for argument 'right'. Invalid number: banana
+      Caused by: CliValidationError: ✖ must be number → at 1
   `)
 })
 

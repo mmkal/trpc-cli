@@ -204,12 +204,9 @@ test('non-primitive option union', async () => {
   `)
   expect(await run(router, ['foo', '--foo', '1'])).toMatchInlineSnapshot(`"{"foo":1}"`)
   expect(await run(router, ['foo', '--foo', '{"bar":"abc"}'])).toMatchInlineSnapshot(`"{"foo":{"bar":"abc"}}"`)
-  await expect(run(router, ['foo', '--foo', 'abc123'])).rejects.toMatchInlineSnapshot(
-    `
-      CLI exited with code 1
-        Caused by: CommanderError: error: option '--foo [value]' argument 'abc123' is invalid. Malformed JSON. If passing a string, pass it as a valid JSON string with quotes ("abc123")
-    `,
-  )
+  // strings are accepted, so a non-JSON value is just a string
+  expect(await run(router, ['foo', '--foo', 'abc123'])).toMatchInlineSnapshot(`"{"foo":"abc123"}"`)
+  expect(await run(router, ['foo', '--foo', '"abc123"'])).toMatchInlineSnapshot(`"{"foo":"abc123"}"`)
 })
 
 test('positional array with title', async () => {
