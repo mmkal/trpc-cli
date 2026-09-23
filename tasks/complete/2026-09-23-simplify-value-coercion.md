@@ -8,7 +8,7 @@ base: hoist-validation-issues (https://github.com/mmkal/trpc-cli/pull/222)
 
 **Status:** done. One `coerce` in src/parse-procedure.ts serves positionals and options; the positional number
 pre-check and both old coercers are gone (src net -104 lines). All tests pass; new test/coercion.test.ts pins the
-behaviour changes. Follow-ups noted below, not done here.
+behaviour changes. One follow-up noted below, not done here.
 
 ## Background
 
@@ -104,12 +104,11 @@ stay the string `"123"` rather than become the number `123` and fail.
   `json` required, but the procedure input itself may be optional.
 - Conflicts (`option.conflicts`) now apply to every option, not just string/number/array. Before, enum, union and
   boolean options showed "Do not use with" in help but weren't enforced by commander.
+- Merged #222's follow-up (arktype under tRPC, typebox numeric path segments). The 5 arktype/typebox snapshots that
+  had lost the argument name when the `Invalid number` pre-check went now name it again, e.g.
+  `command-argument value 'banana' is invalid for argument 'right'. must be number`.
 
 ### Follow-ups (not done here)
 
-- arktype errors and typebox tuple-positional errors aren't attributed to the argument by #222's `describeIssues`
-  (arktype throws its own error shape; typebox reports tuple indices as strings, e.g. `→ at 1`). With the
-  `Invalid number` pre-check gone, those libraries now show e.g. `must be a number (was a string)` without the argument
-  name. Fixing belongs in #222's issue-to-argv mapping.
 - `--name null` for `z.string().nullable()` gives `true`: commander turns an `argParser` return of `null` into `true`
   for optional-value options. Pre-existing.

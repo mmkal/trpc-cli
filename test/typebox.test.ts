@@ -251,7 +251,7 @@ test('tuple input', async () => {
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ must be number → at 1
+      Caused by: CliValidationError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. must be number
   `)
 })
 
