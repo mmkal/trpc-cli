@@ -1,5 +1,5 @@
-import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {InvalidArgumentError} from 'commander'
+import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
 import {CliValidationError} from './errors.js'
 import {getSchemaTypes, looksJsonSchemaable, toJsonSchema} from './json-schema.js'

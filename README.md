@@ -1765,7 +1765,7 @@ Note: the bin script no longer accepts files exporting trpc/orpc routers - if yo
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L184)
+#### [createCli](./src/index.ts#L185)
 
 Run a trpc router as a CLI.
 
