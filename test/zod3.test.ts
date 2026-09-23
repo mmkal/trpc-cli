@@ -57,7 +57,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'a' is invalid for argument 'number'. Invalid number: a
+      Caused by: CliValidationError: error: command-argument value 'a' is invalid for argument 'number'. Expected number, received string
   `)
 })
 
@@ -187,7 +187,7 @@ test('tuple input', async () => {
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
+      Caused by: CliValidationError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Expected number, received string
   `)
 })
 
@@ -213,7 +213,7 @@ test('tuple input with flags', async () => {
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
+      Caused by: CliValidationError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Expected number, received string
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -354,7 +354,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: error: command-argument value '1.2' is invalid for argument 'parameter_1'. Expected number, received string
+      Caused by: CliValidationError: error: command-argument value '1.2' is invalid for argument 'parameter_1'. Expected integer, received float
   `)
 })
 

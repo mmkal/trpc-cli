@@ -78,7 +78,7 @@ test('zod function module: validation errors come from the zod schemas', async (
     `)
   await expect(runWith({filename: modulePath}, ['add', 'two', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'two' is invalid for argument 'left'. Invalid number: two
+      Caused by: CliValidationError: error: command-argument value 'two' is invalid for argument 'left'. Invalid input: expected number, received string
   `)
 })
 

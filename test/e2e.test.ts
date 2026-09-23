@@ -142,9 +142,7 @@ test('cli add', async () => {
 test('cli add failure', async () => {
   const output = await tsx('calculator', ['add', '1', 'notanumber'])
   expect(output).toMatchInlineSnapshot(`
-    "error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
-
-
+    "error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid input: expected number, received string
 
     Usage: calculator add [options] <parameter_1> <parameter_2>
 

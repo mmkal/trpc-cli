@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import {Argument, Command as BaseCommand, InvalidArgumentError, InvalidOptionArgumentError} from 'commander'
+import {Argument, Command as BaseCommand} from 'commander'
 import {Option as BaseOption} from 'commander'
 import {JSONSchema7} from 'json-schema'
 import {inspect} from 'util'
@@ -18,6 +18,7 @@ import {
 import {commandToJSON} from './json.js'
 import {yamlTableConsoleLogger} from './logging.js'
 import type {CliModuleInput} from './module-commands.js'
+import {coerce} from './parse-procedure.js'
 import {
   type AnyRouter,
   type CreateCallerFactoryLike,
@@ -354,13 +355,6 @@ function createRouterCli<R extends AnyRouter>(
           param.required ? '(required)' : '',
         ]
         const argument = new Argument(param.name, descriptionParts.filter(Boolean).join(' '))
-        if (param.type === 'number') {
-          argument.argParser(value => {
-            const number = numberParser(value, {fallback: null})
-            if (number == null) throw new InvalidArgumentError(`Invalid number: ${value}`)
-            return value
-          })
-        }
         argument.required = param.required
         argument.variadic = param.array
         command.addArgument(argument)
@@ -438,104 +432,56 @@ function createRouterCli<R extends AnyRouter>(
 
         const bracketise = (name: string) => (isCliOptionRequired ? `<${name}>` : `[${name}]`)
 
-        // Check if this is an enum (including union of literals like z.union([z.literal('foo'), z.literal('bar')]))
-        // If so, handle it as a string with choices, not as a multi-type union
-        const enumChoices = getEnumChoices(propertyValue)
-        if (enumChoices?.type === 'string_enum') {
-          const option = new Option(`${flags} ${bracketise('string')}`, description)
-          option.choices(enumChoices.choices)
-          if (defaultValue.exists) option.default(defaultValue.value)
-          addOption(option)
-          return
-        }
-
-        if (allowedSchemas.length > 1) {
-          const option = new Option(`${flags} [value]`, description)
-          if (defaultValue.exists) option.default(defaultValue.value)
-          else if (rootTypes.includes('boolean')) option.default(false)
-          option.argParser(getOptionValueParser(propertyValue))
-          addOption(option)
-          if (rootTypes.includes('boolean')) negate()
-          return
-        }
-
-        if (rootTypes.length !== 1) {
-          const option = new Option(`${flags} ${bracketise('json')}`, description)
-          option.argParser(getOptionValueParser(propertyValue))
-          addOption(option)
-          return
-        }
-
-        if (propertyType === 'boolean') {
+        if (propertyType === 'boolean' && allowedSchemas.length === 1) {
           const option = new Option(`${flags} [boolean]`, description)
-          option.argParser(value => booleanParser(value))
+          option.argParser(value => coerce(propertyValue, value))
           // don't set a default value of `false`, because `undefined` is accepted by the procedure
           if (isValueRequired) option.default(false)
           else if (defaultValue.exists) option.default(defaultValue.value)
+          option.conflicts(incompatibleWith)
           addOption(option)
           negate()
           return
         }
 
-        let option: Option | null = null
-
-        if (propertyType === 'string') {
-          option = new Option(`${flags} ${bracketise('string')}`, description)
-        } else if (propertyType === 'boolean') {
-          option = new Option(flags, description)
-        } else if (propertyType === 'number' || propertyType === 'integer') {
-          option = new Option(`${flags} ${bracketise(propertyType)}`, description)
-          // non-numbers (and non-integers) are passed through as typed for the schema library to reject, so the user
-          // gets its "expected number"/"expected int" message against the value they typed
-          option.argParser(value => numberParser(value))
-        } else if (propertyType === 'array') {
-          option = new Option(`${flags} [values...]`, description)
+        if (propertyType === 'array' && allowedSchemas.length === 1) {
+          const option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
           else if (isValueRequired) option.default([])
           const itemsSchema = 'items' in propertyValue ? (propertyValue.items as JSONSchema7) : {}
-
           const itemEnumTypes = getEnumChoices(itemsSchema)
-          if (itemEnumTypes?.type === 'string_enum') {
-            option.choices(itemEnumTypes.choices)
-          }
-
-          const itemParser = getOptionValueParser(itemsSchema)
-          if (itemParser) {
-            option.argParser((value, previous): unknown[] => {
-              const parsed = itemParser(value)
-              return Array.isArray(previous) ? [...previous, parsed] : [parsed]
-            })
-          }
-        }
-        if (!option) {
-          option = new Option(`${flags} [json]`, description)
-          option.argParser(value => parseJson(value, InvalidOptionArgumentError))
-        }
-        if (defaultValue.exists && option.defaultValue !== defaultValue.value) {
-          option.default(defaultValue.value)
+          if (itemEnumTypes?.type === 'string_enum') option.choices(itemEnumTypes.choices)
+          option.argParser((value, previous): unknown[] => {
+            const parsed = coerce(itemsSchema, value)
+            return Array.isArray(previous) ? [...previous, parsed] : [parsed]
+          })
+          option.conflicts(incompatibleWith)
+          addOption(option)
+          return
         }
 
-        if (option.flags.includes('<')) {
-          option.makeOptionMandatory()
-        }
+        // Check if this is an enum (including union of literals like z.union([z.literal('foo'), z.literal('bar')]))
+        // If so, handle it as a string with choices, not as a multi-type union
+        const enumChoices = getEnumChoices(propertyValue)
+        let valueName: string
+        if (enumChoices?.type === 'string_enum') valueName = bracketise('string')
+        else if (allowedSchemas.length > 1)
+          valueName = '[value]' // unions including booleans can be passed as bare flags
+        else if (rootTypes.length === 0)
+          valueName = bracketise('json') // untyped, e.g. `--json` input
+        else if (['string', 'number', 'integer'].includes(propertyType)) valueName = bracketise(propertyType)
+        else valueName = '[json]'
 
-        // Note: enum choices for union of literals are handled earlier (before allowedSchemas.length > 1 check)
-        // This handles z.enum() style enums which don't go through the multi-schema path
-        const propertyEnumChoices = getEnumChoices(propertyValue)
-        if (propertyEnumChoices?.type === 'string_enum') {
-          option.choices(propertyEnumChoices.choices)
-        }
-
-        option.conflicts(
-          incompatiblePairs.flatMap(pair => {
-            const filtered = pair.filter(p => p !== propertyKey)
-            if (filtered.length === pair.length) return []
-            return filtered
-          }),
-        )
-
+        const option = new Option(`${flags} ${valueName}`, description)
+        option.argParser(value => coerce(propertyValue, value))
+        if (enumChoices?.type === 'string_enum') option.choices(enumChoices.choices)
+        if (defaultValue.exists) option.default(defaultValue.value)
+        else if (rootTypes.includes('boolean')) option.default(false)
+        // untyped options (e.g. `--json <json>`) show that the flag needs a value, but the procedure input itself may be optional
+        if (option.flags.includes('<') && rootTypes.length > 0) option.makeOptionMandatory()
+        option.conflicts(incompatibleWith)
         addOption(option)
-        if (propertyType === 'boolean') negate() // just in case we refactor the code above and don't handle booleans as a special case
+        if (rootTypes.includes('boolean')) negate()
       }
 
       Object.entries(optionJsonSchemaProperties).forEach(addOptionForProperty)
@@ -941,70 +887,5 @@ export {
   yamlLogger,
 } from './logging.js'
 export {toYaml} from './yaml.js'
-
-const numberParser = (val: string, {fallback = val as unknown} = {}) => {
-  const number = Number(val)
-  return Number.isNaN(number) ? fallback : number
-}
-
-const booleanParser = (val: string, {fallback = val as unknown} = {}) => {
-  if (val === 'true') return true
-  if (val === 'false') return false
-  return fallback
-}
-
-const getOptionValueParser = (schema: JSONSchema7) => {
-  const allowedSchemas = getAllowedSchemas(schema)
-    .slice()
-    .sort((a, b) => String(getSchemaTypes(a)[0]).localeCompare(String(getSchemaTypes(b)[0])))
-
-  const typesArray = allowedSchemas.flatMap(getSchemaTypes)
-  const types = new Set(typesArray)
-
-  return (value: string) => {
-    const definitelyPrimitive = typesArray.every(
-      t => t === 'boolean' || t === 'number' || t === 'integer' || t === 'string',
-    )
-    if (types.size === 0 || !definitelyPrimitive) {
-      // parse this as JSON - too risky to fall back to a string because that will probably do the wrong thing if someone passes malformed JSON like `{"foo": 1,}` (trailing comma)
-      const hint = `Malformed JSON. If passing a string, pass it as a valid JSON string with quotes (${JSON.stringify(value)})`
-      const parsed = parseJson(value, InvalidOptionArgumentError, hint)
-      if (!types.size) return parsed // if types is empty, it means any type is allowed - e.g. for json input
-      const jsonSchemaType = Array.isArray(parsed) ? 'array' : parsed === null ? 'null' : typeof parsed
-      if (!types.has(jsonSchemaType)) {
-        throw new InvalidOptionArgumentError(`Got ${jsonSchemaType} but expected ${[...types].join(' or ')}`)
-      }
-      return parsed
-    }
-    if (types.has('boolean')) {
-      const parsed = booleanParser(value, {fallback: null})
-      if (typeof parsed === 'boolean') return parsed
-    }
-    if (types.has('number')) {
-      const parsed = numberParser(value, {fallback: null})
-      if (typeof parsed === 'number') return parsed
-    }
-    if (types.has('integer')) {
-      const parsed = numberParser(value, {fallback: null})
-      if (typeof parsed === 'number' && Number.isInteger(parsed)) return parsed
-    }
-    if (types.has('string')) {
-      return value
-    }
-    throw new InvalidOptionArgumentError(`Got ${JSON.stringify(value)} but expected ${[...types].join(' or ')}`)
-  }
-}
-
-const parseJson = (
-  value: string,
-  ErrorClass: new (message: string) => Error = InvalidArgumentError,
-  hint = `Malformed JSON.`,
-) => {
-  try {
-    return JSON.parse(value) as {}
-  } catch {
-    throw new ErrorClass(hint)
-  }
-}
 
 export {t, os} from './norpc.js'
