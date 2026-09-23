@@ -1,6 +1,6 @@
+import {InputValidationError} from './errors.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
-import {InputValidationError} from './errors.js'
 import {TrpcCliMeta} from './types.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

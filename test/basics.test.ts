@@ -108,15 +108,15 @@ test('json option', async () => {
   )
   await expect(run(router, ['foo', '--obj', '{"abc":"abc"}'])).rejects.toMatchInlineSnapshot(
     `
-    CLI exited with code 1
-      Caused by: CliValidationError: error: option '--obj [json]' argument '{"abc":"abc"}' is invalid. Invalid input: expected number, received undefined → at def
-  `,
+      CLI exited with code 1
+        Caused by: CliValidationError: error: option '--obj [json]' argument '{"abc":"abc"}' is invalid. Invalid input: expected number, received undefined → at def
+    `,
   )
   await expect(run(router, ['foo', '--obj', '{"def":1}'])).rejects.toMatchInlineSnapshot(
     `
-    CLI exited with code 1
-      Caused by: CliValidationError: error: option '--obj [json]' argument '{"def":1}' is invalid. Invalid input: expected string, received undefined → at abc
-  `,
+      CLI exited with code 1
+        Caused by: CliValidationError: error: option '--obj [json]' argument '{"def":1}' is invalid. Invalid input: expected string, received undefined → at abc
+    `,
   )
 })
 

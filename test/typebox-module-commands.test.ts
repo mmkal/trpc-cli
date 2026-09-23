@@ -81,9 +81,9 @@ test('module commands: inputs are validated against the schema before the functi
     runWith({filename: modulePath}, ['install', '--frozen-lockfile', 'maybe']),
   ).rejects.toMatchInlineSnapshot(
     `
-    CLI exited with code 1
-      Caused by: CliValidationError: error: option '--frozen-lockfile [boolean]' argument 'maybe' is invalid. must be boolean
-  `,
+      CLI exited with code 1
+        Caused by: CliValidationError: error: option '--frozen-lockfile [boolean]' argument 'maybe' is invalid. must be boolean
+    `,
   )
 })
 

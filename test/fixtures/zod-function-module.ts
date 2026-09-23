@@ -53,7 +53,9 @@ export const checkHealth = z
         .url()
         .refine(url => url.startsWith('https://'), 'secure only pls')
         .transform(url => url.replace(/\/$/, '')),
-      z.object({timeout: z.number().int().positive().optional().describe('give up after this many milliseconds')}).optional(),
+      z
+        .object({timeout: z.number().int().positive().optional().describe('give up after this many milliseconds')})
+        .optional(),
     ],
   })
   .implement((url, options) => `GET ${url}/health (timeout ${options?.timeout || 'none'})`)

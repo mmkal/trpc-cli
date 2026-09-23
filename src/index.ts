@@ -30,8 +30,8 @@ import {
 } from './parse-router.js'
 import {CosmeticJsonOption, promptify} from './prompts.js'
 import {guessCliName, scriptBasename} from './resolve-name.js'
-import {toDotPath} from './standard-schema/errors.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
+import {toDotPath} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {
   JsonInputMode,
@@ -826,7 +826,9 @@ function transformError(err: unknown, invocation: Invocation) {
   if (coded?.code === 'BAD_REQUEST') {
     const cause = coded.cause
     if (looksLikeStandardSchemaFailure(cause)) {
-      return new CliValidationError(describeIssues(cause.issues, invocation) + '\n\n' + invocation.command.helpInformation())
+      return new CliValidationError(
+        describeIssues(cause.issues, invocation) + '\n\n' + invocation.command.helpInformation(),
+      )
     }
 
     if (
@@ -857,7 +859,10 @@ const describeIssues = (
   {command, parsedProcedure, positionalValues, options}: Invocation,
 ) => {
   const described = [...issues]
-    .map(issue => ({issue, path: (issue.path || []).map(segment => (typeof segment === 'object' ? segment.key : segment))}))
+    .map(issue => ({
+      issue,
+      path: (issue.path || []).map(segment => (typeof segment === 'object' ? segment.key : segment)),
+    }))
     .sort((a, b) => a.path.length - b.path.length)
     .map(({issue, path}) => {
       const fallback = `✖ ${issue.message}` + (path.length ? ` → at ${toDotPath(path)}` : '')

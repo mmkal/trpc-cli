@@ -25,9 +25,9 @@ test('refinemenet type', async () => {
   expect(await run(router, ['foo', 'hello world'])).toMatchInlineSnapshot(`"There are 2 os in your string"`)
   await expect(run(router, ['foo', 'bye earth'])).rejects.toMatchInlineSnapshot(
     `
-    CLI exited with code 1
-      Caused by: CliValidationError: error: command-argument value 'bye earth' is invalid for argument 'string'. input must include o
-  `,
+      CLI exited with code 1
+        Caused by: CliValidationError: error: command-argument value 'bye earth' is invalid for argument 'string'. input must include o
+    `,
   )
 
   expect(await run(router, ['bar', '--greeting', 'hello world'])).toMatchInlineSnapshot(
@@ -35,9 +35,9 @@ test('refinemenet type', async () => {
   )
   await expect(run(router, ['bar', '--greeting', 'bye earth'])).rejects.toMatchInlineSnapshot(
     `
-    CLI exited with code 1
-      Caused by: CliValidationError: error: option '--greeting <string>' argument 'bye earth' is invalid. input must include o
-  `,
+      CLI exited with code 1
+        Caused by: CliValidationError: error: option '--greeting <string>' argument 'bye earth' is invalid. input must include o
+    `,
   )
 })
 

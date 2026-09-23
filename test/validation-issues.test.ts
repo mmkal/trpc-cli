@@ -30,7 +30,9 @@ test('positional argument and option issues name the argument/option, like comma
       .query(({input: [url, options]}) => `GET ${url}/health (timeout ${options.timeout || 'none'})`),
   })
 
-  expect(await run(router, ['check-health', 'https://example.com'])).toMatchInlineSnapshot(`"GET https://example.com/health (timeout none)"`)
+  expect(await run(router, ['check-health', 'https://example.com'])).toMatchInlineSnapshot(
+    `"GET https://example.com/health (timeout none)"`,
+  )
   await expect(run(router, ['check-health', 'http://example.com'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: error: command-argument value 'http://example.com' is invalid for argument 'url'. secure only pls

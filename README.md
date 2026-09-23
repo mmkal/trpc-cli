@@ -341,11 +341,16 @@ t.router({
   checkHealth: t.procedure
     .input(
       z.tuple([
-        z.url().refine(url => url.startsWith('https://'), 'secure only pls').describe('url'),
+        z
+          .url()
+          .refine(url => url.startsWith('https://'), 'secure only pls')
+          .describe('url'),
         z.object({timeout: z.number().int().positive().optional()}),
       ]),
     )
-    .query(({input: [url, options]}) => getHealthFromSomeExternalService(url, options)),
+    .query(({input: [url, options]}) =>
+      getHealthFromSomeExternalService(url, options),
+    ),
 })
 ```
 
@@ -1760,7 +1765,7 @@ Note: the bin script no longer accepts files exporting trpc/orpc routers - if yo
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L183)
+#### [createCli](./src/index.ts#L184)
 
 Run a trpc router as a CLI.
 

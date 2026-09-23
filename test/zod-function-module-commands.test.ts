@@ -35,16 +35,18 @@ test('zod function module: --help lists commands in source order with jsdoc desc
 })
 
 test('zod function module: validation issues are reported against the argument or option they came from', async () => {
-  expect(await runWith({filename: modulePath}, ['check-health', 'https://example.com/'])).toMatchInlineSnapshot(`"GET https://example.com/health (timeout none)"`)
+  expect(await runWith({filename: modulePath}, ['check-health', 'https://example.com/'])).toMatchInlineSnapshot(
+    `"GET https://example.com/health (timeout none)"`,
+  )
   await expect(runWith({filename: modulePath}, ['check-health', 'http://example.com'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CliValidationError: error: command-argument value 'http://example.com' is invalid for argument 'url'. secure only pls
   `)
   await expect(runWith({filename: modulePath}, ['check-health', 'https://example.com', '--timeout', '0'])).rejects
     .toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CliValidationError: error: option '--timeout [integer]' argument '0' is invalid. Too small: expected number to be >0
-  `)
+      CLI exited with code 1
+        Caused by: CliValidationError: error: option '--timeout [integer]' argument '0' is invalid. Too small: expected number to be >0
+    `)
 })
 
 test('zod function module: positionals and flags come from the tuple input schema', async () => {
@@ -71,9 +73,9 @@ test('zod function module: positionals and flags come from the tuple input schem
 test('zod function module: validation errors come from the zod schemas', async () => {
   await expect(runWith({filename: modulePath}, ['say-hello', 'bob', '--enthusiasm', '-1'])).rejects
     .toMatchInlineSnapshot(`
-    CLI exited with code 1
-      Caused by: CliValidationError: error: option '--enthusiasm [integer]' argument '-1' is invalid. Too small: expected number to be >0
-  `)
+      CLI exited with code 1
+        Caused by: CliValidationError: error: option '--enthusiasm [integer]' argument '-1' is invalid. Too small: expected number to be >0
+    `)
   await expect(runWith({filename: modulePath}, ['add', 'two', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
       Caused by: CommanderError: error: command-argument value 'two' is invalid for argument 'left'. Invalid number: two
