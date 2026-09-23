@@ -158,9 +158,9 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ must be equal to constant
-    ✖ must be equal to constant
-    ✖ must match a schema in anyOf
+      Caused by: CliValidationError: error: command-argument value 'cc' is invalid for argument 'string'. must be equal to constant
+    error: command-argument value 'cc' is invalid for argument 'string'. must be equal to constant
+    error: command-argument value 'cc' is invalid for argument 'string'. must match a schema in anyOf
   `)
 })
 
@@ -189,7 +189,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ must be boolean
+      Caused by: CliValidationError: error: command-argument value 'a' is invalid for argument 'boolean'. must be boolean
   `)
 })
 
@@ -203,7 +203,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ must be equal to constant
+      Caused by: CliValidationError: error: command-argument value '3' is invalid for argument 'number'. must be equal to constant
   `)
 })
 
@@ -360,7 +360,7 @@ test('template literal input', async () => {
   expect(await run(router, ['foo', 'user-123'])).toMatchInlineSnapshot(`""user-123""`)
   await expect(run(router, ['foo', 'admin-123'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ must match pattern "^user--?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+      Caused by: CliValidationError: error: command-argument value 'admin-123' is invalid for argument 'string'. must match pattern "^user--?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
   `)
 })
 
@@ -389,7 +389,7 @@ test('cyclic input', async () => {
   )
   await expect(run(router, ['foo', '--json', '{"value": 123}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ must be string → at value
+      Caused by: CliValidationError: error: option '--json <json>' argument '{"value":123}' is invalid. must be string → at value
   `)
 })
 

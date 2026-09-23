@@ -81,9 +81,9 @@ test('module commands: inputs are validated against the schema before the functi
     runWith({filename: modulePath}, ['install', '--frozen-lockfile', 'maybe']),
   ).rejects.toMatchInlineSnapshot(
     `
-      CLI exited with code 1
-        Caused by: Error: Invalid input: ✖ must be boolean → at frozenLockfile
-    `,
+    CLI exited with code 1
+      Caused by: CliValidationError: error: option '--frozen-lockfile [boolean]' argument 'maybe' is invalid. must be boolean
+  `,
   )
 })
 
@@ -915,7 +915,7 @@ test('module commands: overloaded functions become alternate calling conventions
   // matching no signature reports each signature's issues - closest match (fewest issues) first
   await expect(runWith(params, ['resize', '--input', 'a.png'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Error: Invalid input: ✖ matched none of the 2 ways to call this command:
+      Caused by: CliValidationError: ✖ matched none of the 2 ways to call this command:
       --input <string> --width <number> --height <number>: must have required properties width, height
       --input <string> --scale <number>: must have required properties scale
   `)

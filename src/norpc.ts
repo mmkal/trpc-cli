@@ -1,6 +1,6 @@
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
-import {prettifyStandardSchemaError} from './standard-schema/errors.js'
+import {InputValidationError} from './errors.js'
 import {TrpcCliMeta} from './types.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,8 +26,8 @@ const createProcedureInternal = <Ctx, Input>(params: {
     fn: params.fn as AnyFn,
     call: async (unvalidated, initialContext = {}) => {
       const parsed = await params.input['~standard'].validate(unvalidated)
-      if ('issues' in parsed) {
-        throw new Error(`Invalid input: ${prettifyStandardSchemaError(parsed)}`)
+      if (parsed.issues) {
+        throw new InputValidationError(parsed)
       }
 
       // Execute middleware chain

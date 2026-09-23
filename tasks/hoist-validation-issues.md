@@ -1,11 +1,11 @@
 ---
-status: in-progress
+status: review
 size: medium
 ---
 
 # Hoist schema validation issues to the CLI argument/option level
 
-**Status:** spec written, implementation not started.
+**Status:** done. All three router flavours (tRPC, oRPC, norpc/module mode) report schema issues against the argument or option they came from; 46 existing snapshots updated, new tests + fixture added, README section written.
 
 ## Problem
 
@@ -81,13 +81,22 @@ error: command-argument value 'http://example.com' is invalid for argument 'url'
 
 ## Checklist
 
-- [ ] `getArgvLocation` on `ParsedProcedure` + implementations for every variant
-- [ ] norpc `call` throws `InputValidationError` with `code: 'BAD_REQUEST'` and the failure as `cause`
-- [ ] `transformError` maps issues → argument/option messages; gated on `BAD_REQUEST`
-- [ ] fixture + tests: module mode (`z.function` with `.refine()` positional), router mode positional/option/nested
-  JSON option/variadic, `--json` mode, in-resolver `ZodError` no longer misreported
-- [ ] update existing snapshots
-- [ ] README: validation error section (if one exists) shows the new wording
+- [x] `getArgvLocation` on `ParsedProcedure` + implementations for every variant _`src/parse-procedure.ts` (7 sites + `optionLocation` helper), `src/parse-router.ts` (JSON fallback), type in `src/types.ts`_
+- [x] norpc `call` throws `InputValidationError` with `code: 'BAD_REQUEST'` and the failure as `cause` _`src/errors.ts`, `src/norpc.ts`_
+- [x] `transformError` maps issues → argument/option messages; gated on `BAD_REQUEST` _`describeIssues` in `src/index.ts`; the action passes `{command, parsedProcedure, positionalValues, options}`_
+- [x] fixture + tests _`test/validation-issues.test.ts` (tRPC/oRPC/norpc, positional-meta, root refine fallback, in-handler ZodError, `--json` mode); `checkHealth` export in `test/fixtures/zod-function-module.ts` + test in `test/zod-function-module-commands.test.ts`_
+- [x] update existing snapshots _46 across 13 files, all reviewed - every one is the same issue re-attributed to its argument/option_
+- [x] README: validation error section _new "Validation errors" subsection under "Combining Positional Arguments and Options"; stale zod3-era snippet in "Testing your CLI" corrected_
 
 ## Implementation log
+
+- Pre-existing bug fixed in passing: number options (`--bar <number>`) parsed a non-numeric value to `null`, which
+  commander turns into `''`, so the schema saw an empty string and the user's typed value was lost. The option
+  parser now passes the raw string through (as the positional parser and the comment already claimed), so the error
+  reads `argument 'notanumber' is invalid` instead of `argument ''`.
+- The in-handler `ZodError` misattribution was real for tRPC: `transformError` used to prettify any `TRPCError`
+  whose cause had `issues`, including `INTERNAL_SERVER_ERROR` wrappers. Now only `BAD_REQUEST` qualifies; tRPC's
+  INTERNAL_SERVER_ERROR still unwraps to its cause.
+- Not done here: the `fn()` builder on the `fn-module-mode` branch (#221) builds the same tuple-shaped norpc
+  procedures, so it picks this up on merge with no extra work beyond its own snapshot updates.
 

@@ -332,6 +332,33 @@ path/to/cli copy a.txt b.txt --mkdirp
 
 >Note: when using a tuple, object types for options must appear _last_ in the `.input(...)` tuple, when being used with positional arguments. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed (inputs would have to be passed as JSON).
 
+#### Validation errors
+
+When the input schema rejects a value, the issue is reported against the argument or option it came from, worded like commander's own parse errors:
+
+```ts
+t.router({
+  checkHealth: t.procedure
+    .input(
+      z.tuple([
+        z.url().refine(url => url.startsWith('https://'), 'secure only pls').describe('url'),
+        z.object({timeout: z.number().int().positive().optional()}),
+      ]),
+    )
+    .query(({input: [url, options]}) => getHealthFromSomeExternalService(url, options)),
+})
+```
+
+```
+$ mycli check-health http://example.com
+error: command-argument value 'http://example.com' is invalid for argument 'url'. secure only pls
+
+$ mycli check-health https://example.com --timeout 0
+error: option '--timeout [integer]' argument '0' is invalid. Too small: expected number to be >0
+```
+
+Help text follows the errors. This works for any validator, and for tRPC, oRPC, standalone and module-mode routers alike. Issues that don't belong to one argument or option (e.g. a `.refine()` on the whole input object) are printed as `✖ <message>`. Errors thrown _inside_ a procedure (say, a stray `z.number().parse(...)`) are not treated as bad input - they're reported as the crash they are.
+
 ### Command Configuration
 
 You can change the behaviour of the command generated for a given procedure by using trpc's `meta` feature.
@@ -1466,8 +1493,7 @@ test('make sure parsing works correctly', async () => {
     `[Error: Get real]`,
   )
   await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
-    [Error: Validation error
-      - Expected number, received string at index 1
+    [Error: error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
 
     Usage: program add [options] <parameter_1> <parameter_2>
 

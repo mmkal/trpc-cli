@@ -30,7 +30,8 @@ import {
 } from './parse-router.js'
 import {CosmeticJsonOption, promptify} from './prompts.js'
 import {guessCliName, scriptBasename} from './resolve-name.js'
-import {prettifyStandardSchemaError} from './standard-schema/errors.js'
+import {toDotPath} from './standard-schema/errors.js'
+import {StandardSchemaV1} from './standard-schema/contract.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {
   JsonInputMode,
@@ -484,8 +485,9 @@ function createRouterCli<R extends AnyRouter>(
           option = new Option(flags, description)
         } else if (propertyType === 'number' || propertyType === 'integer') {
           option = new Option(`${flags} ${bracketise(propertyType)}`, description)
-          // non-integers are passed through for the schema library to reject, so the user gets its "expected int" message
-          option.argParser(value => numberParser(value, {fallback: null}))
+          // non-numbers (and non-integers) are passed through as typed for the schema library to reject, so the user
+          // gets its "expected number"/"expected int" message against the value they typed
+          option.argParser(value => numberParser(value))
         } else if (propertyType === 'array') {
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
@@ -613,7 +615,7 @@ function createRouterCli<R extends AnyRouter>(
 
         const result = await runWithCliContext(cliContext, () =>
           (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-            throw transformError(err, command)
+            throw transformError(err, {command, parsedProcedure, positionalValues, options})
           }),
         )
         command.__result = result
@@ -799,33 +801,93 @@ const argvIncludesJsonFlag = (argv: string[]) => {
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-function transformError(err: unknown, command: Command) {
+/** what the leaf command was invoked with - lets validation issues be reported against the argument/option they came from */
+type Invocation = {
+  command: Command
+  parsedProcedure: ParsedProcedure
+  positionalValues: Array<string | string[]>
+  options: Record<string, unknown>
+}
+
+function transformError(err: unknown, invocation: Invocation) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error(
       'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
     )
   }
 
-  type TRPCErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
-  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError') || looksLikeInstanceof<TRPCErrorLike>(err, 'ORPCError')) {
-    const cause = err.cause
+  type CodedErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
+  const coded = looksLikeInstanceof(err, Error) && 'code' in err ? (err as CodedErrorLike) : undefined
+
+  // tRPC, oRPC and norpc all report input validation failures as `code: 'BAD_REQUEST'` with the schema failure as
+  // `cause`. Errors thrown *inside* a handler don't get that code (tRPC wraps them as INTERNAL_SERVER_ERROR, oRPC and
+  // norpc let them propagate untouched), so a stray `z.string().parse(...)` in a handler is reported as the crash it
+  // is rather than as bad CLI input.
+  if (coded?.code === 'BAD_REQUEST') {
+    const cause = coded.cause
     if (looksLikeStandardSchemaFailure(cause)) {
-      const prettyMessage = prettifyStandardSchemaError(cause)
-      return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
+      return new CliValidationError(describeIssues(cause.issues, invocation) + '\n\n' + invocation.command.helpInformation())
     }
 
     if (
-      err.code === 'BAD_REQUEST' &&
-      (err.cause?.constructor?.name === 'TraversalError' || // arktype error
-        err.cause?.constructor?.name === 'StandardSchemaV1Error') // valibot error
+      cause?.constructor?.name === 'TraversalError' || // arktype error
+      cause?.constructor?.name === 'StandardSchemaV1Error' // valibot error
     ) {
-      return new CliValidationError(err.cause.message + '\n\n' + command.helpInformation())
-    }
-    if (err.code === 'INTERNAL_SERVER_ERROR') {
-      return cause
+      return new CliValidationError(cause.message + '\n\n' + invocation.command.helpInformation())
     }
   }
+
+  if (
+    (looksLikeInstanceof<CodedErrorLike>(err, 'TRPCError') || looksLikeInstanceof<CodedErrorLike>(err, 'ORPCError')) &&
+    err.code === 'INTERNAL_SERVER_ERROR'
+  ) {
+    return err.cause
+  }
   return err
+}
+
+/**
+ * One line per issue. An issue whose path maps back to a positional argument or option is worded like commander's
+ * own parse errors (`error: command-argument value 'x' is invalid for argument 'y'. ...`), naming the argument/option
+ * the way `--help` shows it. Anything else (e.g. a root-level `.refine()` on an object input) falls back to
+ * `✖ message → at path`.
+ */
+const describeIssues = (
+  issues: readonly StandardSchemaV1.Issue[],
+  {command, parsedProcedure, positionalValues, options}: Invocation,
+) => {
+  const described = [...issues]
+    .map(issue => ({issue, path: (issue.path || []).map(segment => (typeof segment === 'object' ? segment.key : segment))}))
+    .sort((a, b) => a.path.length - b.path.length)
+    .map(({issue, path}) => {
+      const fallback = `✖ ${issue.message}` + (path.length ? ` → at ${toDotPath(path)}` : '')
+      const location = parsedProcedure.getArgvLocation(path)
+      if (!location) return fallback
+
+      // index segments select one repeated token (`--foo a --foo b`, or a variadic positional), so drill into them to
+      // show that token. key segments identify part of a single typed value (e.g. a JSON option) and stay in the message.
+      let value: unknown = location.type === 'positional' ? positionalValues[location.index] : options[location.key]
+      let rest = location.path
+      while (typeof rest[0] === 'number' && Array.isArray(value)) {
+        value = value[rest[0]] as unknown
+        rest = rest.slice(1)
+      }
+      const detail = issue.message + (rest.length ? ` → at ${toDotPath(rest)}` : '')
+      const shown = value === undefined ? undefined : typeof value === 'string' ? value : JSON.stringify(value)
+
+      if (location.type === 'positional') {
+        const argument = command.registeredArguments[location.index]
+        if (!argument) return fallback
+        if (shown === undefined) return `error: argument '${argument.name()}' is invalid. ${detail}`
+        return `error: command-argument value '${shown}' is invalid for argument '${argument.name()}'. ${detail}`
+      }
+
+      const option = command.options.find(o => o.attributeName() === location.key && !o.negate)
+      if (!option) return fallback
+      if (shown === undefined) return `error: option '${option.flags}' is invalid. ${detail}`
+      return `error: option '${option.flags}' argument '${shown}' is invalid. ${detail}`
+    })
+  return described.join('\n')
 }
 
 export {FailedToExitError, CliValidationError} from './errors.js'

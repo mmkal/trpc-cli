@@ -45,6 +45,19 @@ export const install = z
   })
   .implement(async options => `installed from ${options.registry}${options.frozenLockfile ? ' (frozen)' : ''}`)
 
+/** check a service's health endpoint */
+export const checkHealth = z
+  .function({
+    input: [
+      z
+        .url()
+        .refine(url => url.startsWith('https://'), 'secure only pls')
+        .transform(url => url.replace(/\/$/, '')),
+      z.object({timeout: z.number().int().positive().optional().describe('give up after this many milliseconds')}).optional(),
+    ],
+  })
+  .implement((url, options) => `GET ${url}/health (timeout ${options?.timeout || 'none'})`)
+
 /** print the version */
 export const version = z.function().implement(() => '1.2.3')
 

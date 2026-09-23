@@ -108,15 +108,15 @@ test('json option', async () => {
   )
   await expect(run(router, ['foo', '--obj', '{"abc":"abc"}'])).rejects.toMatchInlineSnapshot(
     `
-      CLI exited with code 1
-        Caused by: CliValidationError: ✖ Invalid input: expected number, received undefined → at obj.def
-    `,
+    CLI exited with code 1
+      Caused by: CliValidationError: error: option '--obj [json]' argument '{"abc":"abc"}' is invalid. Invalid input: expected number, received undefined → at def
+  `,
   )
   await expect(run(router, ['foo', '--obj', '{"def":1}'])).rejects.toMatchInlineSnapshot(
     `
-      CLI exited with code 1
-        Caused by: CliValidationError: ✖ Invalid input: expected string, received undefined → at obj.abc
-    `,
+    CLI exited with code 1
+      Caused by: CliValidationError: error: option '--obj [json]' argument '{"def":1}' is invalid. Invalid input: expected string, received undefined → at abc
+  `,
   )
 })
 
@@ -165,7 +165,7 @@ test('option union array with enum', async () => {
 
   await expect(run(router, ['foo', '--foo'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected array, received boolean → at foo
+      Caused by: CliValidationError: error: option '--foo [values...]' argument 'true' is invalid. Invalid input: expected array, received boolean
   `)
   expect(await run(router, ['foo'])).toMatchInlineSnapshot(`"{"foo":[]}"`)
   expect(await run(router, ['foo', '--foo', 'true'])).toMatchInlineSnapshot(`"{"foo":[true]}"`)
@@ -182,7 +182,7 @@ test('option union array with enum', async () => {
   )
   await expect(run(router, ['foo', '--foo', 'wrong'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input → at foo[0]
+      Caused by: CliValidationError: error: option '--foo [values...]' argument 'wrong' is invalid. Invalid input
   `)
 })
 
