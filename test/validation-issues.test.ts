@@ -4,8 +4,8 @@
  * wording applies to tRPC, oRPC and norpc routers (module mode builds norpc routers - see
  * ./zod-function-module-commands.test.ts).
  */
-import {os} from '@orpc/server'
-import {initTRPC} from '@trpc/server'
+import {ORPCError, os} from '@orpc/server'
+import {initTRPC, TRPCError} from '@trpc/server'
 import {expect, test} from 'vitest'
 import {z} from 'zod/v4'
 import {t as norpc} from '../src/norpc.js'
@@ -90,6 +90,103 @@ test('a schema error thrown inside the handler is a crash, not a bad CLI input',
         "message": "Invalid input: expected number, received string"
       }
     ]
+  `)
+})
+
+test('handler errors dressed up as input validation errors are still crashes (oRPC, norpc)', async () => {
+  const handlers = {
+    assignsParseResult: () => {
+      const parseResult = z.tuple([z.string()]).safeParse(null)
+      throw Object.assign(new Error('assignsParseResult: not an input error'), parseResult, {code: 'BAD_REQUEST'})
+    },
+    schemaFailureCause: () => {
+      const parseResult = z.tuple([z.string()]).safeParse([1])
+      throw Object.assign(new Error('schemaFailureCause: not an input error'), {
+        code: 'BAD_REQUEST',
+        cause: parseResult.error,
+      })
+    },
+    orpcError: () => {
+      const parseResult = z.tuple([z.string()]).safeParse([1])
+      throw new ORPCError('BAD_REQUEST', {message: 'orpcError: not an input error', cause: parseResult.error})
+    },
+  }
+  const orpcRouter = os.router({
+    assignsParseResult: os.input(checkHealthInput).handler(handlers.assignsParseResult),
+    schemaFailureCause: os.input(checkHealthInput).handler(handlers.schemaFailureCause),
+    orpcError: os.input(checkHealthInput).handler(handlers.orpcError),
+  })
+  const norpcRouter = norpc.router({
+    assignsParseResult: norpc.procedure.input(checkHealthInput).handler(handlers.assignsParseResult),
+    schemaFailureCause: norpc.procedure.input(checkHealthInput).handler(handlers.schemaFailureCause),
+  })
+
+  // `https://example.com` is a valid url - if these were misread as input errors, they'd blame the `url` argument
+  await expect(run(orpcRouter, ['assigns-parse-result', 'https://example.com'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Error: assignsParseResult: not an input error
+  `)
+  await expect(run(orpcRouter, ['schema-failure-cause', 'https://example.com'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Error: schemaFailureCause: not an input error
+        Caused by: ZodError: [
+      {
+        "expected": "string",
+        "code": "invalid_type",
+        "path": [
+          0
+        ],
+        "message": "Invalid input: expected string, received number"
+      }
+    ]
+  `)
+  await expect(run(orpcRouter, ['orpc-error', 'https://example.com'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: ORPCError: orpcError: not an input error
+        Caused by: ZodError: [
+      {
+        "expected": "string",
+        "code": "invalid_type",
+        "path": [
+          0
+        ],
+        "message": "Invalid input: expected string, received number"
+      }
+    ]
+  `)
+  await expect(run(norpcRouter, ['assigns-parse-result', 'https://example.com'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Error: assignsParseResult: not an input error
+  `)
+  await expect(run(norpcRouter, ['schema-failure-cause', 'https://example.com'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: Error: schemaFailureCause: not an input error
+        Caused by: ZodError: [
+      {
+        "expected": "string",
+        "code": "invalid_type",
+        "path": [
+          0
+        ],
+        "message": "Invalid input: expected string, received number"
+      }
+    ]
+  `)
+})
+
+test('tRPC: a resolver throwing BAD_REQUEST with a schema failure is treated as bad input', async () => {
+  // tRPC's own input validation throws exactly `new TRPCError({code: 'BAD_REQUEST', cause})` - there's nothing to
+  // tell the two apart, and a resolver doing this is explicitly saying "bad input"
+  const router = t.router({
+    checkHealth: t.procedure.input(checkHealthInput).query(() => {
+      const parseResult = z.tuple([z.string()]).safeParse([1])
+      throw new TRPCError({code: 'BAD_REQUEST', cause: parseResult.error})
+    }),
+  })
+
+  await expect(run(router, ['check-health', 'https://example.com'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: error: command-argument value 'https://example.com' is invalid for argument 'url'. Invalid input: expected string, received number
   `)
 })
 

@@ -6,7 +6,7 @@ import {inspect} from 'util'
 import {isAgent} from './agent.js'
 import {addCompletions} from './completions.js'
 import {runWithCliContext} from './context.js'
-import {FailedToExitError, CliValidationError} from './errors.js'
+import {FailedToExitError, CliValidationError, InputValidationError} from './errors.js'
 import {
   flattenedProperties,
   incompatiblePropertyPairs,
@@ -615,7 +615,7 @@ function createRouterCli<R extends AnyRouter>(
 
         const result = await runWithCliContext(cliContext, () =>
           (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-            throw transformError(err, {command, parsedProcedure, positionalValues, options})
+            throw transformError(err, {command, parsedProcedure, input, positionalValues, options})
           }),
         )
         command.__result = result
@@ -805,6 +805,8 @@ export const trpcCli = createCli
 type Invocation = {
   command: Command
   parsedProcedure: ParsedProcedure
+  /** the exact object passed to the procedure - lets oRPC's input validation errors be told apart from lookalikes */
+  input: unknown
   positionalValues: Array<string | string[]>
   options: Record<string, unknown>
 }
@@ -816,27 +818,19 @@ function transformError(err: unknown, invocation: Invocation) {
     )
   }
 
-  type CodedErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
-  const coded = looksLikeInstanceof(err, Error) && 'code' in err ? (err as CodedErrorLike) : undefined
-
-  // tRPC, oRPC and norpc all report input validation failures as `code: 'BAD_REQUEST'` with the schema failure as
-  // `cause`. Errors thrown *inside* a handler don't get that code (tRPC wraps them as INTERNAL_SERVER_ERROR, oRPC and
-  // norpc let them propagate untouched), so a stray `z.string().parse(...)` in a handler is reported as the crash it
-  // is rather than as bad CLI input.
-  if (coded?.code === 'BAD_REQUEST') {
-    const cause = coded.cause
-    if (looksLikeStandardSchemaFailure(cause)) {
-      return new CliValidationError(
-        describeIssues(cause.issues, invocation) + '\n\n' + invocation.command.helpInformation(),
-      )
-    }
-
-    if (
-      cause?.constructor?.name === 'TraversalError' || // arktype error
-      cause?.constructor?.name === 'StandardSchemaV1Error' // valibot error
-    ) {
-      return new CliValidationError(cause.message + '\n\n' + invocation.command.helpInformation())
-    }
+  // only the framework rejecting the input counts as bad CLI input. Errors thrown *inside* a handler - a stray
+  // `z.string().parse(...)`, or something dressed up to look like a validation error - are reported as the crash they are
+  const cause = inputValidationCause(err, invocation.input)
+  if (looksLikeStandardSchemaFailure(cause)) {
+    return new CliValidationError(
+      describeIssues(cause.issues, invocation) + '\n\n' + invocation.command.helpInformation(),
+    )
+  }
+  if (
+    looksLikeInstanceof<Error>(cause, 'TraversalError') || // arktype error
+    looksLikeInstanceof<Error>(cause, 'StandardSchemaV1Error') // valibot error
+  ) {
+    return new CliValidationError(cause.message + '\n\n' + invocation.command.helpInformation())
   }
 
   if (
@@ -846,6 +840,36 @@ function transformError(err: unknown, invocation: Invocation) {
     return err.cause
   }
   return err
+}
+
+type CodedErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
+
+/**
+ * The schema failure behind `err` when `err` is the framework rejecting the procedure input, as opposed to an error
+ * thrown inside the handler that merely looks like one (e.g. `throw new ORPCError('BAD_REQUEST', {cause: zodError})`).
+ */
+const inputValidationCause = (err: unknown, input: unknown): object | undefined => {
+  // norpc (including module mode): its own error class, which isn't exported, so a handler can't throw one
+  if (err instanceof InputValidationError) return err.cause
+
+  // oRPC: the cause is a `ValidationError` whose `data` is the raw input object we passed in. Handlers only ever see
+  // the parsed value, so the identity check rules out lookalikes.
+  if (looksLikeInstanceof<CodedErrorLike>(err, 'ORPCError')) {
+    const cause = err.cause as unknown
+    const isInputFailure =
+      err.code === 'BAD_REQUEST' &&
+      looksLikeInstanceof<{data: unknown}>(cause, 'ValidationError') &&
+      cause.data === input
+    return isInputFailure ? cause : undefined
+  }
+
+  // tRPC: its input middleware throws a bare `new TRPCError({code: 'BAD_REQUEST', cause})`, with nothing on the error
+  // to tell it apart from a resolver throwing the same thing (only the stack trace differs). A resolver doing that is
+  // explicitly saying "bad input", so it's treated as such. Telling them apart for sure would mean validating the
+  // input ourselves before calling the procedure, running refinements and transforms twice.
+  if (looksLikeInstanceof<CodedErrorLike>(err, 'TRPCError') && err.code === 'BAD_REQUEST') return err.cause
+
+  return undefined
 }
 
 /**

@@ -76,8 +76,15 @@ error: command-argument value 'http://example.com' is invalid for argument 'url'
   `options` matched by `attributeName()`), so what's printed matches what `--help` shows.
 - norpc's `call` throws `InputValidationError` (new, `src/errors.ts`): `code: 'BAD_REQUEST'`, `cause` = the failure
   result, message keeps the prettified issues so direct callers of `.call()` still get a readable error.
-- `transformError` duck-types on `code === 'BAD_REQUEST'` + a cause with `issues`, rather than on
-  `TRPCError`/`ORPCError` class names, so norpc, tRPC and oRPC share it. The arktype/valibot special cases stay.
+- ~~`transformError` duck-types on `code === 'BAD_REQUEST'` + a cause with `issues`, rather than on
+  `TRPCError`/`ORPCError` class names, so norpc, tRPC and oRPC share it.~~ _Tightened after review: a bare
+  `code: 'BAD_REQUEST'` check let a handler's `throw Object.assign(new Error(), {code: 'BAD_REQUEST', cause: zodError})`
+  masquerade as bad CLI input. Now per framework: norpc via `instanceof InputValidationError` (not exported); oRPC via
+  `ORPCError` + `ValidationError` cause whose `data` is the exact input object passed in (handlers only see the parsed
+  value); tRPC via `TRPCError` + `BAD_REQUEST`, since its input middleware throws a bare `new TRPCError({code, cause})`
+  identical to what a resolver could throw - a resolver doing that is explicitly saying "bad input", and the only
+  airtight alternative (pre-validating before calling) runs refinements/transforms twice._ The arktype/valibot special
+  cases stay.
 
 ## Checklist
 
