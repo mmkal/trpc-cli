@@ -765,13 +765,15 @@ function transformError(err: unknown, invocation: Invocation) {
   // only the framework rejecting the input counts as bad CLI input. Errors thrown *inside* a handler - a stray
   // `z.string().parse(...)`, or something dressed up to look like a validation error - are reported as the crash they are
   const cause = inputValidationCause(err, invocation.input)
-  if (looksLikeStandardSchemaFailure(cause)) {
+  // arktype via tRPC: tRPC calls arktype's `.assert()`, whose `TraversalError` wraps the Standard Schema-shaped `arkErrors`
+  const failure = looksLikeInstanceof<{arkErrors?: unknown}>(cause, 'TraversalError') ? cause.arkErrors : cause
+  if (looksLikeStandardSchemaFailure(failure)) {
     return new CliValidationError(
-      describeIssues(cause.issues, invocation) + '\n\n' + invocation.command.helpInformation(),
+      describeIssues(failure.issues, invocation) + '\n\n' + invocation.command.helpInformation(),
     )
   }
   if (
-    looksLikeInstanceof<Error>(cause, 'TraversalError') || // arktype error
+    looksLikeInstanceof<Error>(cause, 'TraversalError') || // arktype error, from versions without `arkErrors`
     looksLikeInstanceof<Error>(cause, 'StandardSchemaV1Error') // valibot error
   ) {
     return new CliValidationError(cause.message + '\n\n' + invocation.command.helpInformation())
@@ -829,7 +831,14 @@ const describeIssues = (
   const described = [...issues]
     .map(issue => ({
       issue,
-      path: (issue.path || []).map(segment => (typeof segment === 'object' ? segment.key : segment)),
+      // `Array.from` rather than `.map`: arktype's paths are an Array subclass whose constructor takes items, so `.map`
+      // (which constructs via `Symbol.species` with a length) turns an empty root path into `[0]`.
+      // Numeric strings become numbers: typebox reports tuple/array indexes as strings (`'1'`), and index segments are
+      // what locate positionals and repeated tokens. CLI option names are never all digits, so nothing is lost.
+      path: Array.from(issue.path || [], segment => {
+        const key = typeof segment === 'object' ? segment.key : segment
+        return typeof key === 'string' && /^\d+$/.test(key) ? Number(key) : key
+      }),
     }))
     .sort((a, b) => a.path.length - b.path.length)
     .map(({issue, path}) => {

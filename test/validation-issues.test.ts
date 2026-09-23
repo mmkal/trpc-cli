@@ -9,6 +9,7 @@ import {initTRPC, TRPCError} from '@trpc/server'
 import {expect, test} from 'vitest'
 import {z} from 'zod/v4'
 import {t as norpc} from '../src/norpc.js'
+import Type from '../src/typebox/index.js'
 import {run, runWith, snapshotSerializer} from './test-run.js'
 
 expect.addSnapshotSerializer(snapshotSerializer)
@@ -234,6 +235,30 @@ test('norpc routers get the same wording', async () => {
         "message": "Invalid input: expected number, received string"
       }
     ]
+  `)
+})
+
+test('typebox: tuple and array indexes, which it reports as strings, still locate the argument or repeated option', async () => {
+  const router = t.router({
+    tag: t.procedure
+      .input(
+        Type.Tuple([
+          Type.String({title: 'name'}),
+          Type.Number({title: 'priority', minimum: 1}),
+          Type.Object({labels: Type.Optional(Type.Array(Type.String({minLength: 3})))}),
+        ]),
+      )
+      .query(({input: [name, priority, options]}) => `${name} p${priority} ${options.labels?.join(',') || ''}`),
+  })
+
+  expect(await run(router, ['tag', 'bug', '2', '--labels', 'urgent'])).toMatchInlineSnapshot(`"bug p2 urgent"`)
+  await expect(run(router, ['tag', 'bug', '0'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: error: command-argument value '0' is invalid for argument 'priority'. must be >= 1
+  `)
+  await expect(run(router, ['tag', 'bug', '2', '--labels', 'urgent', '--labels', 'ui'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CliValidationError: error: option '--labels [values...]' argument 'ui' is invalid. must not have fewer than 3 characters
   `)
 })
 
