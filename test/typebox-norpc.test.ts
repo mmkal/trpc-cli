@@ -44,7 +44,7 @@ test('validation failures come from the typebox validator', async () => {
   await expect(run(router, ['greet', '--greeting', 'hi', '--shout', 'maybe'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: Error: Invalid input: ✖ must be boolean → at shout
+        Caused by: CliValidationError: error: option '--shout [boolean]' argument 'maybe' is invalid. must be boolean
     `,
   )
 })
