@@ -142,9 +142,7 @@ test('cli add', async () => {
 test('cli add failure', async () => {
   const output = await tsx('calculator', ['add', '1', 'notanumber'])
   expect(output).toMatchInlineSnapshot(`
-    "error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
-
-
+    "error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid input: expected number, received string
 
     Usage: calculator add [options] <parameter_1> <parameter_2>
 
@@ -169,7 +167,7 @@ test('cli divide', async () => {
 test('cli divide failure', async () => {
   const output = await tsx('calculator', ['divide', '8', '0'])
   expect(output).toMatchInlineSnapshot(`
-    "✖ Invalid input → at [1]
+    "error: command-argument value '0' is invalid for argument 'denominator'. Invalid input
 
     Usage: calculator divide [options] <numerator> <denominator>
 
@@ -476,7 +474,7 @@ test('fs copy', async () => {
 
   // invalid enum value:
   expect(await tsx('fs', ['diff', 'one', 'fileNotFound'])).toMatchInlineSnapshot(`
-    "✖ Invalid option: expected one of "one"|"two"|"three"|"four" → at [1]
+    "error: command-argument value 'fileNotFound' is invalid for argument 'Head path'. Invalid option: expected one of "one"|"two"|"three"|"four"
 
     Usage: fs diff [options] <Base path> <Head path>
 

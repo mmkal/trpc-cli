@@ -115,13 +115,13 @@ test('--json payloads still go through procedure validation', async () => {
     runWith({router, jsonInput: 'auto'}, ['object', '--json', '{"foo":"bar"}']), // missing required `count`
   ).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received undefined → at count
+      Caused by: CliValidationError: error: option '--json <json>' argument '{"foo":"bar"}' is invalid. Invalid input: expected number, received undefined → at count
   `)
   await expect(
     runWith({router, jsonInput: 'auto'}, ['object', '--json', '{"foo":"bar","count":"two"}']), // wrong type for `count`
   ).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at count
+      Caused by: CliValidationError: error: option '--json <json>' argument '{"foo":"bar","count":"two"}' is invalid. Invalid input: expected number, received string → at count
   `)
 })
 

@@ -26,7 +26,7 @@ test('refinemenet type', async () => {
   await expect(run(router, ['foo', 'bye earth'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: CliValidationError: ✖ input must include o
+        Caused by: CliValidationError: error: command-argument value 'bye earth' is invalid for argument 'string'. input must include o
     `,
   )
 
@@ -36,7 +36,7 @@ test('refinemenet type', async () => {
   await expect(run(router, ['bar', '--greeting', 'bye earth'])).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: CliValidationError: ✖ input must include o → at greeting
+        Caused by: CliValidationError: error: option '--greeting <string>' argument 'bye earth' is invalid. input must include o
     `,
   )
 })
@@ -142,7 +142,7 @@ test('enum input', async () => {
   expect(await run(router, ['foo', 'aa'])).toMatchInlineSnapshot(`""aa""`)
   await expect(run(router, ['foo', 'cc'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid option: expected one of "aa"|"bb"
+      Caused by: CliValidationError: error: command-argument value 'cc' is invalid for argument 'string'. Invalid option: expected one of "aa"|"bb"
   `)
 })
 
@@ -154,7 +154,7 @@ test('number input', async () => {
   expect(await run(router, ['foo', '1'])).toMatchInlineSnapshot(`"1"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'a' is invalid for argument 'number'. Invalid number: a
+      Caused by: CliValidationError: error: command-argument value 'a' is invalid for argument 'number'. Invalid input: expected number, received string
   `)
 })
 
@@ -169,7 +169,7 @@ test('boolean input', async () => {
   expect(await run(router, ['foo', 'false'])).toMatchInlineSnapshot(`"false"`)
   await expect(run(router, ['foo', 'a'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string
+      Caused by: CliValidationError: error: command-argument value 'a' is invalid for argument 'boolean'. Invalid input: expected boolean, received string
   `)
 })
 
@@ -213,7 +213,7 @@ test('literal input', async () => {
   expect(await run(router, ['foo', '2'])).toMatchInlineSnapshot(`"2"`)
   await expect(run(router, ['foo', '3'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected 2
+      Caused by: CliValidationError: error: command-argument value '3' is invalid for argument 'number'. Invalid input: expected 2
   `)
 })
 
@@ -250,7 +250,7 @@ test('regex input', async () => {
   // note: zod 4 has a better error message
   await expect(run(router, ['foo', 'goodbye xyz'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid string: must match pattern /hello/
+      Caused by: CliValidationError: error: command-argument value 'goodbye xyz' is invalid for argument 'value'. Invalid string: must match pattern /hello/
   `)
 })
 
@@ -282,7 +282,7 @@ test('tuple input', async () => {
   expect(await run(router, ['foo', 'hello', '123'])).toMatchInlineSnapshot(`"["hello",123]"`)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
+      Caused by: CliValidationError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid input: expected number, received string
   `)
 })
 
@@ -308,7 +308,7 @@ test('tuple input with flags', async () => {
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!', '--foo', 'bar'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid number: not a number!
+      Caused by: CliValidationError: error: command-argument value 'not a number!' is invalid for argument 'parameter_2'. Invalid input: expected number, received string
   `)
   await expect(run(router, ['foo', 'hello', 'not a number!'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
@@ -436,7 +436,7 @@ test('number array input', async () => {
 
   await expect(run(router, ['test', '1', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at [1]
+      Caused by: CliValidationError: error: command-argument value 'bad' is invalid for argument 'parameter_1'. Invalid input: expected number, received string
   `)
 })
 
@@ -449,7 +449,7 @@ test('number array input with constraints', async () => {
 
   await expect(run(router, ['foo', '1.2'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at [0]
+      Caused by: CliValidationError: error: command-argument value '1.2' is invalid for argument 'parameter_1'. Invalid input: expected int, received number
   `)
 })
 
@@ -465,7 +465,7 @@ test('boolean array input', async () => {
 
   await expect(run(router, ['test', 'true', 'bad'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected boolean, received string → at [1]
+      Caused by: CliValidationError: error: command-argument value 'bad' is invalid for argument 'parameter_1'. Invalid input: expected boolean, received string
   `)
 })
 
@@ -533,7 +533,7 @@ test('record input', async () => {
   expect(await run(router, ['test', '--json', '{"foo": 1}'])).toMatchInlineSnapshot(`"input: {"foo":1}"`)
   await expect(run(router, ['test', '--json', '{"foo": "x"}'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid input: expected number, received string → at foo
+      Caused by: CliValidationError: error: option '--json <json>' argument '{"foo":"x"}' is invalid. Invalid input: expected number, received string → at foo
   `)
 })
 
@@ -875,8 +875,12 @@ test('complex positionals', async () => {
         }),
       )
       .mutation(({input}) => JSON.stringify(input)),
+    numberArray: t.procedure
+      .input(z.object({foo: z.number().array().meta({positional: true})}))
+      .mutation(({input}) => JSON.stringify(input)),
   })
 
+  expect(await run(router, ['number-array', '1', '2'])).toMatchInlineSnapshot(`"{"foo":[1,2]}"`)
   expect(await run(router, ['string-array', 'hello', 'goodbye'])).toMatchInlineSnapshot(`"{"foo":["hello","goodbye"]}"`)
   expect(await run(router, ['number-and-string-array', '123', 'hello', 'goodbye'])).toMatchInlineSnapshot(
     `"{"bar":123,"foo":["hello","goodbye"]}"`,
