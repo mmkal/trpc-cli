@@ -2,7 +2,7 @@ import type {JSONSchema7, JSONSchema7Definition} from 'json-schema'
 import {inspect} from 'util'
 import {CliValidationError} from './errors.js'
 import {getSchemaTypes, looksJsonSchemaable, toJsonSchema} from './json-schema.js'
-import type {Dependencies, ParsedProcedure, Result} from './types.js'
+import type {ArgvLocation, Dependencies, ParsedProcedure, Result} from './types.js'
 
 function looksLikeJsonSchema(value: unknown): value is JSONSchema7 & {type: string} {
   return (
@@ -81,6 +81,17 @@ export function parseJsonSchemaInputs(schemas: Result<JSONSchema7[]>): Result<Pa
 
               return inner.value.getPojoInput({positionalValues, options})
             },
+            getArgvLocation: path => {
+              const location = inner.value.getArgvLocation(path)
+              if (location?.type !== 'option') return location
+              const positionalIndex = optionishPositionals.findIndex(({key}) => key === location.key)
+              if (positionalIndex === -1) return location
+              return {
+                type: 'positional',
+                index: inner.value.positionalParameters.length + positionalIndex,
+                path: location.path,
+              }
+            },
           },
         }
       }
@@ -102,6 +113,7 @@ function parseProcedureInputsInner(schemasResult: Result<JSONSchema7[]>): Result
         positionalParameters: [],
         optionsJsonSchema: {},
         getPojoInput: () => ({}),
+        getArgvLocation: () => undefined,
       },
     }
   }
@@ -145,6 +157,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
           positionalParameters: [],
           optionsJsonSchema: mergedSchema,
           getPojoInput: argv => argv.options,
+          getArgvLocation: optionLocation,
         },
       }
     }
@@ -163,6 +176,7 @@ function handleMergedSchema(mergedSchema: JSONSchema7): Result<ParsedProcedure> 
       positionalParameters: [],
       optionsJsonSchema: mergedSchema,
       getPojoInput: argv => argv.options,
+      getArgvLocation: optionLocation,
     },
   }
 }
@@ -201,6 +215,7 @@ function parsePrimitiveInput(schema: JSONSchema7): Result<ParsedProcedure> {
       ],
       optionsJsonSchema: {},
       getPojoInput: argv => convertPositional(schema, argv.positionalValues[0] as string),
+      getArgvLocation: path => ({type: 'positional', index: 0, path}),
     },
   }
 }
@@ -271,6 +286,7 @@ function parseMultiInputs(schemas: JSONSchema7[]): Result<ParsedProcedure> {
         positionalParameters: [],
         optionsJsonSchema: merged,
         getPojoInput: argv => argv.options,
+        getArgvLocation: optionLocation,
       },
     }
   }
@@ -291,6 +307,7 @@ function parseMultiInputs(schemas: JSONSchema7[]): Result<ParsedProcedure> {
         }),
       },
       getPojoInput: argv => argv.options,
+      getArgvLocation: optionLocation,
     },
   }
 }
@@ -336,6 +353,7 @@ function parseArrayInput(array: JSONSchema7 & {items: {type: unknown}}): Result<
       optionsJsonSchema: {},
       getPojoInput: argv =>
         (argv.positionalValues.at(-1) as string[]).map(s => convertPositional(array.items as JSONSchema7, s)),
+      getArgvLocation: path => ({type: 'positional', index: 0, path}),
     },
   }
 }
@@ -419,8 +437,20 @@ function parseTupleInput(tuple: JSONSchema7Definition): Result<ParsedProcedure> 
         }
         return inputs
       },
+      getArgvLocation: ([index, ...rest]) => {
+        if (typeof index !== 'number') return undefined
+        if (index < positionalSchemas.length) return {type: 'positional', index, path: rest}
+        if (flagsSchema && index === flagsSchemaIndex) return optionLocation(rest)
+        return undefined
+      },
     },
   }
+}
+
+/** `getArgvLocation` for inputs that are plain objects: the first path segment is the option's property key */
+const optionLocation = (path: PropertyKey[]): ArgvLocation | undefined => {
+  const [key, ...rest] = path
+  return typeof key === 'string' ? {type: 'option', key, path: rest} : undefined
 }
 
 /**

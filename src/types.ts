@@ -193,7 +193,21 @@ export interface ParsedProcedure {
    * Needed because this function is where inspect the input schema(s) and determine how to map the argv to the input
    */
   getPojoInput: (argv: {positionalValues: Array<string | string[]>; options: Record<string, unknown>}) => unknown
+  /**
+   * The inverse of `getPojoInput` for error reporting: given the path of a validation issue *within the procedure
+   * input*, which positional argument or option did that part of the input come from? Returns `undefined` when the
+   * path doesn't land on anything the CLI exposes (e.g. a root-level `.refine()` on an object input).
+   */
+  getArgvLocation: (path: PropertyKey[]) => ArgvLocation | undefined
 }
+
+/**
+ * Where a piece of procedure input came from on the command line. `path` is the remainder of the issue path
+ * *inside* that argument/option's value (e.g. `['def']` for an issue at `obj.def` when `--obj` is a JSON option).
+ */
+export type ArgvLocation =
+  | {type: 'positional'; index: number; path: PropertyKey[]}
+  | {type: 'option'; key: string; path: PropertyKey[]}
 
 export type Result<T> = {success: true; value: T} | {success: false; error: string}
 

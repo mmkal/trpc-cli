@@ -6,7 +6,7 @@ import {inspect} from 'util'
 import {isAgent} from './agent.js'
 import {addCompletions} from './completions.js'
 import {runWithCliContext} from './context.js'
-import {FailedToExitError, CliValidationError} from './errors.js'
+import {FailedToExitError, CliValidationError, InputValidationError} from './errors.js'
 import {
   flattenedProperties,
   incompatiblePropertyPairs,
@@ -30,7 +30,8 @@ import {
 } from './parse-router.js'
 import {CosmeticJsonOption, promptify} from './prompts.js'
 import {guessCliName, scriptBasename} from './resolve-name.js'
-import {prettifyStandardSchemaError} from './standard-schema/errors.js'
+import {StandardSchemaV1} from './standard-schema/contract.js'
+import {toDotPath} from './standard-schema/errors.js'
 import {looksLikeStandardSchemaFailure} from './standard-schema/utils.js'
 import {
   JsonInputMode,
@@ -484,8 +485,9 @@ function createRouterCli<R extends AnyRouter>(
           option = new Option(flags, description)
         } else if (propertyType === 'number' || propertyType === 'integer') {
           option = new Option(`${flags} ${bracketise(propertyType)}`, description)
-          // non-integers are passed through for the schema library to reject, so the user gets its "expected int" message
-          option.argParser(value => numberParser(value, {fallback: null}))
+          // non-numbers (and non-integers) are passed through as typed for the schema library to reject, so the user
+          // gets its "expected number"/"expected int" message against the value they typed
+          option.argParser(value => numberParser(value))
         } else if (propertyType === 'array') {
           option = new Option(`${flags} [values...]`, description)
           if (defaultValue.exists) option.default(defaultValue.value)
@@ -613,7 +615,7 @@ function createRouterCli<R extends AnyRouter>(
 
         const result = await runWithCliContext(cliContext, () =>
           (caller[procedurePath](input) as Promise<unknown>).catch(err => {
-            throw transformError(err, command)
+            throw transformError(err, {command, parsedProcedure, input, positionalValues, options})
           }),
         )
         command.__result = result
@@ -799,33 +801,131 @@ const argvIncludesJsonFlag = (argv: string[]) => {
 /** @deprecated renamed to `createCli` */
 export const trpcCli = createCli
 
-function transformError(err: unknown, command: Command) {
+/** what the leaf command was invoked with - lets validation issues be reported against the argument/option they came from */
+type Invocation = {
+  command: Command
+  parsedProcedure: ParsedProcedure
+  /** the exact object passed to the procedure - lets oRPC's input validation errors be told apart from lookalikes */
+  input: unknown
+  positionalValues: Array<string | string[]>
+  options: Record<string, unknown>
+}
+
+function transformError(err: unknown, invocation: Invocation) {
   if (looksLikeInstanceof(err, Error) && err.message.includes('This is a client-only function')) {
     return new Error(
       'Failed to create trpc caller. If using trpc v10, either upgrade to v11 or pass in the `@trpc/server` module to `createCli` explicitly',
     )
   }
 
-  type TRPCErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
-  if (looksLikeInstanceof<TRPCErrorLike>(err, 'TRPCError') || looksLikeInstanceof<TRPCErrorLike>(err, 'ORPCError')) {
-    const cause = err.cause
-    if (looksLikeStandardSchemaFailure(cause)) {
-      const prettyMessage = prettifyStandardSchemaError(cause)
-      return new CliValidationError(prettyMessage + '\n\n' + command.helpInformation())
-    }
+  // only the framework rejecting the input counts as bad CLI input. Errors thrown *inside* a handler - a stray
+  // `z.string().parse(...)`, or something dressed up to look like a validation error - are reported as the crash they are
+  const cause = inputValidationCause(err, invocation.input)
+  // arktype via tRPC: tRPC calls arktype's `.assert()`, whose `TraversalError` wraps the Standard Schema-shaped `arkErrors`
+  const failure = looksLikeInstanceof<{arkErrors?: unknown}>(cause, 'TraversalError') ? cause.arkErrors : cause
+  if (looksLikeStandardSchemaFailure(failure)) {
+    return new CliValidationError(
+      describeIssues(failure.issues, invocation) + '\n\n' + invocation.command.helpInformation(),
+    )
+  }
+  if (
+    looksLikeInstanceof<Error>(cause, 'TraversalError') || // arktype error, from versions without `arkErrors`
+    looksLikeInstanceof<Error>(cause, 'StandardSchemaV1Error') // valibot error
+  ) {
+    return new CliValidationError(cause.message + '\n\n' + invocation.command.helpInformation())
+  }
 
-    if (
-      err.code === 'BAD_REQUEST' &&
-      (err.cause?.constructor?.name === 'TraversalError' || // arktype error
-        err.cause?.constructor?.name === 'StandardSchemaV1Error') // valibot error
-    ) {
-      return new CliValidationError(err.cause.message + '\n\n' + command.helpInformation())
-    }
-    if (err.code === 'INTERNAL_SERVER_ERROR') {
-      return cause
-    }
+  if (
+    (looksLikeInstanceof<CodedErrorLike>(err, 'TRPCError') || looksLikeInstanceof<CodedErrorLike>(err, 'ORPCError')) &&
+    err.code === 'INTERNAL_SERVER_ERROR'
+  ) {
+    return err.cause
   }
   return err
+}
+
+type CodedErrorLike = Error & {cause: Error; code: 'BAD_REQUEST' | 'INTERNAL_SERVER_ERROR' | (string & {})}
+
+/**
+ * The schema failure behind `err` when `err` is the framework rejecting the procedure input, as opposed to an error
+ * thrown inside the handler that merely looks like one (e.g. `throw new ORPCError('BAD_REQUEST', {cause: zodError})`).
+ */
+const inputValidationCause = (err: unknown, input: unknown): object | undefined => {
+  // norpc (including module mode): its own error class, which isn't exported, so a handler can't throw one
+  if (err instanceof InputValidationError) return err.cause
+
+  // oRPC: the cause is a `ValidationError` whose `data` is the raw input object we passed in. Handlers only ever see
+  // the parsed value, so the identity check rules out lookalikes.
+  if (looksLikeInstanceof<CodedErrorLike>(err, 'ORPCError')) {
+    const cause = err.cause as unknown
+    const isInputFailure =
+      err.code === 'BAD_REQUEST' &&
+      looksLikeInstanceof<{data: unknown}>(cause, 'ValidationError') &&
+      cause.data === input
+    return isInputFailure ? cause : undefined
+  }
+
+  // tRPC: its input middleware throws a bare `new TRPCError({code: 'BAD_REQUEST', cause})`, with nothing on the error
+  // to tell it apart from a resolver throwing the same thing (only the stack trace differs). A resolver doing that is
+  // explicitly saying "bad input", so it's treated as such. Telling them apart for sure would mean validating the
+  // input ourselves before calling the procedure, running refinements and transforms twice.
+  if (looksLikeInstanceof<CodedErrorLike>(err, 'TRPCError') && err.code === 'BAD_REQUEST') return err.cause
+
+  return undefined
+}
+
+/**
+ * One line per issue. An issue whose path maps back to a positional argument or option is worded like commander's
+ * own parse errors (`error: command-argument value 'x' is invalid for argument 'y'. ...`), naming the argument/option
+ * the way `--help` shows it. Anything else (e.g. a root-level `.refine()` on an object input) falls back to
+ * `✖ message → at path`.
+ */
+const describeIssues = (
+  issues: readonly StandardSchemaV1.Issue[],
+  {command, parsedProcedure, positionalValues, options}: Invocation,
+) => {
+  const described = [...issues]
+    .map(issue => ({
+      issue,
+      // `Array.from` rather than `.map`: arktype's paths are an Array subclass whose constructor takes items, so `.map`
+      // (which constructs via `Symbol.species` with a length) turns an empty root path into `[0]`.
+      // Numeric strings become numbers: typebox reports tuple/array indexes as strings (`'1'`), and index segments are
+      // what locate positionals and repeated tokens. CLI option names are never all digits, so nothing is lost.
+      path: Array.from(issue.path || [], segment => {
+        const key = typeof segment === 'object' ? segment.key : segment
+        return typeof key === 'string' && /^\d+$/.test(key) ? Number(key) : key
+      }),
+    }))
+    .sort((a, b) => a.path.length - b.path.length)
+    .map(({issue, path}) => {
+      const fallback = `✖ ${issue.message}` + (path.length ? ` → at ${toDotPath(path)}` : '')
+      const location = parsedProcedure.getArgvLocation(path)
+      if (!location) return fallback
+
+      // index segments select one repeated token (`--foo a --foo b`, or a variadic positional), so drill into them to
+      // show that token. key segments identify part of a single typed value (e.g. a JSON option) and stay in the message.
+      let value: unknown = location.type === 'positional' ? positionalValues[location.index] : options[location.key]
+      let rest = location.path
+      while (typeof rest[0] === 'number' && Array.isArray(value)) {
+        value = value[rest[0]] as unknown
+        rest = rest.slice(1)
+      }
+      const detail = issue.message + (rest.length ? ` → at ${toDotPath(rest)}` : '')
+      const shown = value === undefined ? undefined : typeof value === 'string' ? value : JSON.stringify(value)
+
+      if (location.type === 'positional') {
+        const argument = command.registeredArguments[location.index]
+        if (!argument) return fallback
+        if (shown === undefined) return `error: argument '${argument.name()}' is invalid. ${detail}`
+        return `error: command-argument value '${shown}' is invalid for argument '${argument.name()}'. ${detail}`
+      }
+
+      const option = command.options.find(o => o.attributeName() === location.key && !o.negate)
+      if (!option) return fallback
+      if (shown === undefined) return `error: option '${option.flags}' is invalid. ${detail}`
+      return `error: option '${option.flags}' argument '${shown}' is invalid. ${detail}`
+    })
+  return described.join('\n')
 }
 
 export {FailedToExitError, CliValidationError} from './errors.js'

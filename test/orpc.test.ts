@@ -67,7 +67,7 @@ test('orpc validation errors are prettified', async () => {
 
   await expect(run(router, ['test', '--foo', 'wrong'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CliValidationError: ✖ Invalid option: expected one of "abc"|"def" → at foo[0]
+      Caused by: CliValidationError: error: option '--foo [values...]' argument 'wrong' is invalid. Invalid option: expected one of "abc"|"def"
   `)
 })
 
