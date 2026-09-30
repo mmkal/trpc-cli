@@ -460,17 +460,15 @@ function createRouterCli<R extends AnyRouter>(
           return
         }
 
-        // Check if this is an enum (including union of literals like z.union([z.literal('foo'), z.literal('bar')]))
-        // If so, handle it as a string with choices, not as a multi-type union
+        // enums (including unions of literals like `z.union([z.literal('foo'), z.literal('bar')])`) are strings with
+        // choices. other unions are `[value]`, since ones including booleans can be passed as bare flags. untyped
+        // input (e.g. `--json`) is `json`.
         const enumChoices = getEnumChoices(propertyValue)
-        let valueName: string
+        let valueName = '[json]'
         if (enumChoices?.type === 'string_enum') valueName = bracketise('string')
-        else if (allowedSchemas.length > 1)
-          valueName = '[value]' // unions including booleans can be passed as bare flags
-        else if (rootTypes.length === 0)
-          valueName = bracketise('json') // untyped, e.g. `--json` input
+        else if (allowedSchemas.length > 1) valueName = '[value]'
+        else if (rootTypes.length === 0) valueName = bracketise('json')
         else if (['string', 'number', 'integer'].includes(propertyType)) valueName = bracketise(propertyType)
-        else valueName = '[json]'
 
         const option = new Option(`${flags} ${valueName}`, description)
         option.argParser(value => coerce(propertyValue, value))

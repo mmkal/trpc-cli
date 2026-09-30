@@ -1,7 +1,7 @@
 ---
 status: review
 size: medium
-base: hoist-validation-issues (https://github.com/mmkal/trpc-cli/pull/222)
+base: main (was stacked on https://github.com/mmkal/trpc-cli/pull/222, now merged)
 ---
 
 # Simplify argv value coercion now that the schema reports its own issues
