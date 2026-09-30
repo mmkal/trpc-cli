@@ -78,7 +78,7 @@ test('fn module: validation errors come from the item schemas', async () => {
   await expect(runWith({filename: modulePath}, ['say-hello', 'bob', '--enthusiasm', '-1'])).rejects
     .toMatchInlineSnapshot(`
       CLI exited with code 1
-        Caused by: Error: Invalid input: ✖ Too small: expected number to be >0 → at [1].enthusiasm
+        Caused by: CliValidationError: error: option '--enthusiasm [integer]' argument '-1' is invalid. Too small: expected number to be >0
     `)
 })
 

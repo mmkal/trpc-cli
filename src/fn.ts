@@ -62,6 +62,18 @@ export interface FnBuilder<T extends StandardSchemaV1[]> {
   implement<R>(implementation: (...args: InferArgs<T>) => R): FnImplemented<InferArgs<T>, R>
 }
 
+/**
+ * @experimental This API is experimental and may change in a future release.
+ *
+ * A `z.function()`-shaped builder for module-mode commands whose input schemas can be any Standard Schema. Leading
+ * scalar schemas become positional arguments, a trailing object schema becomes flags.
+ *
+ * ```ts
+ * export const sayHello = fn({input: [z.string(), z.object({shout: z.boolean()})]})
+ *   .describe('greet someone')
+ *   .implement((name, options) => (options.shout ? name.toUpperCase() : name))
+ * ```
+ */
 export function fn<T extends StandardSchemaV1[] = []>(
   config: {input?: [...T]; output?: StandardSchemaV1} = {},
 ): FnBuilder<T> {
