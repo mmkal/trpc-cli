@@ -1498,13 +1498,13 @@ test('make sure parsing works correctly', async () => {
     `[Error: Get real]`,
   )
   await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
-    [Error: error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Invalid number: notanumber
+    [Error: error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Expected number, received string
 
     Usage: program add [options] <parameter_1> <parameter_2>
 
     Arguments:
-      parameter_1   (required)
-      parameter_2   (required)
+      parameter_1  number (required)
+      parameter_2  number (required)
 
     Options:
       -h, --help   display help for command
@@ -1765,7 +1765,7 @@ Note: the bin script no longer accepts files exporting trpc/orpc routers - if yo
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L184)
+#### [createCli](./src/index.ts#L185)
 
 Run a trpc router as a CLI.
 
