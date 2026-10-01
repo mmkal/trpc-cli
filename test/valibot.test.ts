@@ -800,3 +800,18 @@ test('valibot schemas to JSON schema', async () => {
     }
   `)
 })
+
+test.fails('cli metadata via v.metadata(...)', async () => {
+  const router = t.router({
+    install: t.procedure
+      .input(
+        v.object({
+          cwd: v.pipe(v.string(), v.metadata({positional: true})),
+          frozenLockfile: v.pipe(v.optional(v.boolean()), v.metadata({alias: 'f'})),
+        }),
+      )
+      .query(({input}) => JSON.stringify(input)),
+  })
+
+  expect(await run(router, ['install', '/repo', '-f'])).toBe(`{"cwd":"/repo","frozenLockfile":true}`)
+})
