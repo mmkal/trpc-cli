@@ -220,6 +220,116 @@ test('module commands: module with only ignored function exports errors with no 
   await expect(runWith(params, ['--help'])).rejects.toThrowError(/No commands found in module/)
 })
 
+test('module commands: @internal exports are not commands', async () => {
+  class Cache {
+    clear() {
+      return 'cleared'
+    }
+  }
+  class Users {
+    invite(options: {email: string}) {
+      return `invite ${this.normalizeEmail(options.email)}`
+    }
+
+    normalizeEmail(email: string) {
+      return email.toLowerCase()
+    }
+  }
+  const params = {
+    source: `
+      /** @internal */
+      export function loadConfig(options: {path: string}) {
+        return {path: options.path}
+      }
+
+      /**
+       * quote a value for logging
+       * @internal
+       */
+      export const quote = (value: string) => JSON.stringify(value)
+
+      /** @internal */
+      export class Cache {
+        clear() {
+          return 'cleared'
+        }
+      }
+
+      export class Users {
+        /** invite a user */
+        invite(options: {email: string}) {
+          return 'invite ' + this.normalizeEmail(options.email)
+        }
+
+        /** @internal */
+        normalizeEmail(email: string) {
+          return email.toLowerCase()
+        }
+      }
+
+      /** show the status */
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {
+      loadConfig: (options: any) => ({path: options.path}),
+      quote: (value: string) => JSON.stringify(value),
+      Cache,
+      Users,
+      status: () => 'ok',
+    },
+  }
+
+  expect(await runWith(params, ['--help'])).toMatchInlineSnapshot(`
+    "Usage: program [options] [command]
+
+    Available subcommands: status, users
+
+    Options:
+      -h, --help        display help for command
+
+    Commands:
+      status [options]  show the status
+      users             Available subcommands: invite
+      help [command]    display help for command
+    "
+  `)
+  expect(await runWith(params, ['users', 'invite', '--email', 'Ada@Example.com'])).toMatchInlineSnapshot(
+    `"invite ada@example.com"`,
+  )
+  await expect(runWith(params, ['load-config', '--path', 'x'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown command 'load-config'
+  `)
+})
+
+test('module commands: @internal on any overload signature hides the whole command', async () => {
+  const params = {
+    source: `
+      /** resize by explicit dimensions */
+      export function resize(params: {width: number; height: number}): string
+      /**
+       * resize by scale factor
+       * @internal
+       */
+      export function resize(params: {scale: number}): string
+      export function resize(params: any) {
+        return 'resized'
+      }
+
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {resize: () => 'resized', status: () => 'ok'},
+  }
+
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('resize')
+})
+
 test('module commands: export * merges child module commands at the root', async () => {
   using fixture = createReexportFixture()
   const params = {filename: fixture.barrelPath}
