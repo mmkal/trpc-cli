@@ -7,8 +7,9 @@
  * JSON Schema - including jsdoc comments as property descriptions - with a `~standard` validator attached. Each
  * function becomes a norpc procedure, so the rest of trpc-cli treats the module like any other router: leading
  * scalar parameters become positional arguments and a trailing object-literal parameter becomes flags (the same
- * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only. Exported
- * functions whose signatures cannot be converted into CLI inputs are ignored as ordinary non-command exports.
+ * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only. Exports tagged
+ * `@internal` (functions, classes, class methods) are helpers, not commands; exported functions whose signatures
+ * cannot be converted into CLI inputs are also ignored as ordinary non-command exports.
  * Command-group-shaped exported classes become nested command groups whose public instance methods are invoked on a
  * fresh class instance only when the command runs; a default-exported class puts its methods at the current router
  * level. Classes with constructor arguments, no public command methods, or `extends` without an explicit
@@ -500,6 +501,7 @@ const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string,
     if (!isFnImplemented(value) && !isZodImplementedFunction(value)) continue
     const declaration = findExportDeclaration(scan, name)
     if (!declaration) continue // not declared in this file (e.g. `export * from './child'`) - the child's router owns it
+    if (parseCliJsdoc(declaration.description).internal) continue
     const command = isFnImplemented(value)
       ? fnCommand(value)
       : zodFunctionCommand(name, value, scan, declaration.position)
@@ -1138,6 +1140,8 @@ interface CliJsdoc {
   description: string | undefined
   /** `@alias x` tags */
   aliases: string[]
+  /** true for an `@internal` tag: the export (or class method) is a helper, not a command */
+  internal: boolean
   /**
    * `@param name description` tags keyed by name. `@param {type} name`, `@param name - description` and
    * `@param [name]` spellings are accepted (the jsdoc type is ignored - the TypeScript annotation is the source of
@@ -1148,11 +1152,12 @@ interface CliJsdoc {
 
 /**
  * Split cleaned jsdoc text the way jsdoc tooling does: the description is everything up to the first line that
- * starts with an `@tag`, and each tag runs until the next one. `@alias` and `@param` are interpreted; every other
- * tag (`@returns`, `@example`, `@see`, `@deprecated`, ...) is for documentation tooling, not CLI help, and is dropped.
+ * starts with an `@tag`, and each tag runs until the next one. `@alias`, `@param` and `@internal` are interpreted;
+ * every other tag (`@returns`, `@example`, `@see`, `@deprecated`, ...) is for documentation tooling, not CLI help,
+ * and is dropped.
  */
 const parseCliJsdoc = (text: string | undefined): CliJsdoc => {
-  const doc: CliJsdoc = {description: undefined, aliases: [], params: {}}
+  const doc: CliJsdoc = {description: undefined, aliases: [], internal: false, params: {}}
   if (!text) return doc
   const blocks: string[][] = [[]]
   for (const line of text.split('\n')) {
@@ -1169,6 +1174,8 @@ const parseCliJsdoc = (text: string | undefined): CliJsdoc => {
     if (tag === 'alias') {
       const alias = body.split('\n')[0].trim()
       if (alias) doc.aliases.push(alias)
+    } else if (tag === 'internal') {
+      doc.internal = true
     } else if (tag === 'param' || tag === 'arg' || tag === 'argument') {
       const param = parseParamTag(body)
       if (param) doc.params[param.name] = param.description
@@ -1391,6 +1398,7 @@ export const extractModuleCommands = (scan: SourceScan): ExtractedCommand[] => {
  * Group declarations sharing a name. `winners` are the declarations defining the command's calling convention(s):
  * all body-less overload signatures when any exist (in declaration order), otherwise the first implementation.
  * The implementation declaration is kept separately - its jsdoc can describe an overloaded command as a whole.
+ * Groups with an `@internal` tag on *any* declaration are dropped: the function (or method) is a helper, not a command.
  */
 const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; description?: string | undefined}>(
   declarations: D[],
@@ -1401,7 +1409,8 @@ const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; de
     if (group) group.push(declaration)
     else groups.set(declaration.name, [declaration])
   }
-  return [...groups.values()].map(group => {
+  const isCommand = (group: D[]) => !group.some(declaration => parseCliJsdoc(declaration.description).internal)
+  return [...groups.values()].filter(isCommand).map(group => {
     const signatures = group.filter(declaration => !declaration.hasBody)
     return {
       winners: signatures.length > 0 ? signatures : group.slice(0, 1),
@@ -1422,6 +1431,7 @@ export const extractModuleClasses = (scan: SourceScan): ExtractedClass[] => {
   for (const {pattern, default: defaultExport} of patterns) {
     for (const match of source.matchAll(pattern)) {
       if (scan.masked[match.index]) continue
+      if (parseCliJsdoc(jsdocBefore(scan, match.index)).internal) continue
       const name = match[1] || 'default'
       const exportName = defaultExport ? 'default' : name
       let headerIndex = match.index + match[0].length

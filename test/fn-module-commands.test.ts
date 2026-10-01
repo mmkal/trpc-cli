@@ -127,6 +127,37 @@ test('fn module: a default export becomes the default command', async () => {
   expect(await runWith({source, exports}, ['--name', 'bob'])).toMatchInlineSnapshot(`"hi bob"`)
 })
 
+test('fn module: @internal fn and zod function exports are not commands', async () => {
+  const source = `
+    /** @internal */
+    export const slugify = fn({input: [z.string()]}).implement(text => text.toLowerCase())
+
+    /** @internal */
+    export const shout = z.function({input: [z.string()]}).implement(text => text.toUpperCase())
+
+    /** greet someone */
+    export const greet = fn({input: [z.string()]}).implement(name => 'hi ' + name)
+  `
+  const exports = {
+    slugify: fn({input: [z.string()]}).implement(text => text.toLowerCase()),
+    shout: z.function({input: [z.string()]}).implement(text => text.toUpperCase()),
+    greet: fn({input: [z.string()]}).implement(name => `hi ${name}`),
+  }
+  expect(await runWith({source, exports}, ['--help'])).toMatchInlineSnapshot(`
+    "Usage: program [options] [command]
+
+    Available subcommands: greet
+
+    Options:
+      -h, --help      display help for command
+
+    Commands:
+      greet <name>    greet someone
+      help [command]  display help for command
+    "
+  `)
+})
+
 test('fn module: {source, exports} escape hatch only needs the export declaration in source', async () => {
   const source = `
     /** @alias g */
