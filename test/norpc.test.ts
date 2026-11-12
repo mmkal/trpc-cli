@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-shadow */
 import * as v from 'valibot'
-import {describe, expect, test} from 'vitest'
+import {describe, expect, expectTypeOf, test} from 'vitest'
 import {z} from 'zod/v4'
 import {os, t} from '../src/index.js'
 import {run, snapshotSerializer} from './test-run.js'
@@ -240,5 +240,17 @@ describe('orpc style', () => {
     expect(await run(router, ['whoami'])).toMatchInlineSnapshot(`"I am Bob (id: 1)"`)
     expect(await run(router, ['permissions'])).toMatchInlineSnapshot(`"User Bob has permissions: admin"`)
     expect(await run(router, ['greet', '--greeting', 'Hi'])).toMatchInlineSnapshot(`"Hi, Bob!"`)
+  })
+
+  test('handler input is the parsed (output) type, so defaults are applied', async () => {
+    const router = os.router({
+      cd: os.input(z.object({path: z.string().default('/')})).handler(({input}) => {
+        expectTypeOf(input).toEqualTypeOf<{path: string}>()
+        return `cd ${input.path}`
+      }),
+    })
+
+    expect(await run(router, ['cd'])).toMatchInlineSnapshot(`"cd /"`)
+    expect(await run(router, ['cd', '--path', '/tmp'])).toMatchInlineSnapshot(`"cd /tmp"`)
   })
 })

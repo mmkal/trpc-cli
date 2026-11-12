@@ -284,6 +284,7 @@ export const jsonProcedureInputs = (reason?: string): ParsedProcedure => {
       required: ['json'],
     },
     getPojoInput: parsedCliParams => parsedCliParams.options.json,
+    getArgvLocation: path => ({type: 'option', key: 'json', path}),
   }
 }
 

@@ -1,6 +1,6 @@
+import {InputValidationError} from './errors.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
-import {prettifyStandardSchemaError} from './standard-schema/errors.js'
 import {TrpcCliMeta} from './types.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,7 +15,7 @@ type AnyMiddlewareFn = (params: any) => Promise<unknown>
  */
 const createProcedureInternal = <Ctx, Input>(params: {
   middlewares: AnyMiddlewareFn[]
-  input: StandardSchemaV1<Input>
+  input: StandardSchemaV1<unknown, Input>
   fn: (params: {input: Input; ctx: Ctx; context: Ctx}) => unknown
   meta?: TrpcCliMeta
 }): NorpcProcedureLike => {
@@ -26,8 +26,8 @@ const createProcedureInternal = <Ctx, Input>(params: {
     fn: params.fn as AnyFn,
     call: async (unvalidated, initialContext = {}) => {
       const parsed = await params.input['~standard'].validate(unvalidated)
-      if ('issues' in parsed) {
-        throw new Error(`Invalid input: ${prettifyStandardSchemaError(parsed)}`)
+      if (parsed.issues) {
+        throw new InputValidationError(parsed)
       }
 
       // Execute middleware chain
@@ -95,7 +95,7 @@ type HandlerParams<Ctx, Input> = {input: Input; ctx: Ctx; context: Ctx}
  * Procedure builder interface - represents a chainable procedure definition
  */
 interface ProcedureBuilder<Ctx extends object> {
-  input: <Input>(schema: StandardSchemaV1<Input>) => ProcedureBuilderWithInput<Ctx, Input>
+  input: <Input>(schema: StandardSchemaV1<unknown, Input>) => ProcedureBuilderWithInput<Ctx, Input>
   meta: (meta: TrpcCliMeta) => ProcedureBuilder<Ctx>
   use: <TCtxOut extends object>(middlewareFn: MiddlewareFn<Ctx, TCtxOut>) => ProcedureBuilder<Ctx & TCtxOut>
   handler: (fn: (params: HandlerParams<Ctx, void>) => unknown) => NorpcProcedureLike
@@ -124,7 +124,7 @@ const createProcedureBuilder = <Ctx extends object>(
   meta: TrpcCliMeta,
   inputSchema?: StandardSchemaV1,
 ): ProcedureBuilder<Ctx> => {
-  const withInput = <Input>(schema: StandardSchemaV1<Input>): ProcedureBuilderWithInput<Ctx, Input> => {
+  const withInput = <Input>(schema: StandardSchemaV1<unknown, Input>): ProcedureBuilderWithInput<Ctx, Input> => {
     const handlers = {
       handler: (fn: (params: HandlerParams<Ctx, Input>) => unknown) =>
         createProcedureInternal<Ctx, Input>({middlewares, input: schema, fn, meta}),

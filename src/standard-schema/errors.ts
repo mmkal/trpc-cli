@@ -7,7 +7,8 @@ export const prettifyStandardSchemaError = (error: unknown): string | null => {
   const issues = [...error.issues]
     .map(issue => {
       const path = issue.path || []
-      const primitivePathSegments = path.map(segment => {
+      // `Array.from` rather than `.map`: arktype's path is an Array subclass that `.map` would reconstruct wrongly
+      const primitivePathSegments = Array.from(path, segment => {
         if (typeof segment === 'string' || typeof segment === 'number' || typeof segment === 'symbol') return segment
         return segment.key
       })

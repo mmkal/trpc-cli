@@ -11,6 +11,7 @@ jobs:
       - run: corepack enable
       - run: pnpm install
       - run: pnpm build
+      - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm lint
   create_tgz:

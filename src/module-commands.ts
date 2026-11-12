@@ -7,8 +7,9 @@
  * JSON Schema - including jsdoc comments as property descriptions - with a `~standard` validator attached. Each
  * function becomes a norpc procedure, so the rest of trpc-cli treats the module like any other router: leading
  * scalar parameters become positional arguments and a trailing object-literal parameter becomes flags (the same
- * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only. Exported
- * functions whose signatures cannot be converted into CLI inputs are ignored as ordinary non-command exports.
+ * convention as trpc-cli's tuple inputs), while single-object-parameter functions are flags-only. Exports tagged
+ * `@internal` (functions, classes, class methods) are helpers, not commands; exported functions whose signatures
+ * cannot be converted into CLI inputs are also ignored as ordinary non-command exports.
  * Command-group-shaped exported classes become nested command groups whose public instance methods are invoked on a
  * fresh class instance only when the command runs; a default-exported class puts its methods at the current router
  * level. Classes with constructor arguments, no public command methods, or `extends` without an explicit
@@ -16,18 +17,28 @@
  * command modules: `export * as group from './group'` creates a nested router, `export * from './group'` merges
  * named child commands into the current router, and `export {Foo} from './foo'` re-exports selected commands.
  *
+ * Exports that carry their own schemas skip the type parsing entirely: `fn(...).implement(...)` results (see ./fn -
+ * any Standard Schema, parameter names from the callback itself) and, through an adapter, zod's
+ * `z.function(...).implement(...)` results (zod >=4.5 attaches the schemas as `_zod`; the callback stays private,
+ * so its parameter names are read from the `.implement(` text). Both become a `CommandFunction` and share one
+ * procedure builder; source is only consulted for the export declaration (position, jsdoc). All three kinds mix
+ * freely in one module.
+ *
  * The source "parser" here is deliberately a lightweight hand-rolled extractor, not the TypeScript compiler API:
  * it only needs to find exported function/class method declarations, the jsdoc immediately preceding them, and each
  * parameter's name + balanced `{...}` (or named-reference) type annotation text. The heavy lifting - turning type
  * syntax into JSON Schema - is all `Type.Script`.
  */
-import {flattenedProperties, getEnumChoices} from './json-schema.js'
+import {fnDefinition as fnDefinitionKey, FnImplemented, isFnImplemented} from './fn.js'
+import {flattenedProperties, getEnumChoices, toJsonSchema} from './json-schema.js'
 import {t} from './norpc.js'
 import {isOptional} from './parse-procedure.js'
 import {NorpcProcedureLike, NorpcRouterLike} from './parse-router.js'
 import {StandardSchemaV1} from './standard-schema/contract.js'
 import {toDotPath} from './standard-schema/errors.js'
+import {validateTuple} from './standard-schema/tuple.js'
 import Type from './typebox/index.js'
+import {TrpcCliMeta} from './types.js'
 import {getSchemaTypes, kebabCase} from './util.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,6 +87,8 @@ export interface ExtractedCommand {
   exportName: string
   /** true for a default export, which becomes the CLI's default command */
   default: boolean
+  /** source offset of the declaration - commands are ordered by it in `--help` */
+  position: number
   /** cleaned jsdoc text from the comment immediately preceding the export - becomes the command description */
   description: string | undefined
   /** the function's parameters, in declaration order. Empty = command with no args. For overloaded functions, the first signature's parameters */
@@ -119,7 +132,7 @@ export interface ExtractedParam {
   optional: boolean
   /** raw text of the type annotation, e.g. `number` or `{force?: boolean}` */
   typeText: string
-  /** cleaned jsdoc from an inline block comment before the parameter, e.g. `(/** the left operand *\/ left: number)` - becomes the positional description */
+  /** cleaned jsdoc from an inline block comment before the parameter, e.g. `(/** the left operand *\/ left: number)` - becomes the positional description (falling back to a `@param` tag in the function's jsdoc) */
   description: string | undefined
   /** true if the parameter is a destructuring pattern like `{force}` or `[a, b]` */
   destructured: boolean
@@ -290,19 +303,217 @@ const buildRouterFromFileModule = async (
   return t.router(procedures)
 }
 
+// ------------------------------------------------------------------
+// schema-carrying function exports: `fn(...).implement(...)` and, via an adapter, `z.function(...).implement(...)`
+// ------------------------------------------------------------------
+
+/**
+ * What a schema-carrying export boils down to before it becomes a procedure. `fn()` exports carry this directly
+ * (see ./fn); zod functions are adapted into it by `zodFunctionCommand`, which is the only place that still reads
+ * the source for anything beyond the export declaration.
+ */
+interface CommandFunction {
+  /** tuple item schemas: leading scalars become positionals, a trailing object becomes flags. Empty = no arguments */
+  input: StandardSchemaV1[]
+  meta: TrpcCliMeta
+  /** parameter names of the implementation, for positional argument names in help; undefined entries for destructured/rest params */
+  paramNames: Array<string | undefined> | undefined
+  call: (...args: unknown[]) => unknown
+}
+
+const fnCommand = (implemented: FnImplemented<unknown[], unknown>): CommandFunction => {
+  const definition = implemented[fnDefinitionKey]
+  return {
+    input: definition.input,
+    meta: definition.meta,
+    paramNames: parseFunctionParamNames(scanSource(definition.implementation.toString()), 0),
+    call: implemented,
+  }
+}
+
+/**
+ * The runtime shape of a `z.function(...).implement(fn)` result: zod >=4.5 attaches the function schema's
+ * internals as a non-enumerable `_zod` property (https://github.com/colinhacks/zod/issues/6104). Duck-typed
+ * rather than imported from zod, which is an optional peer dependency.
+ */
+interface ZodImplementedFunction {
+  (...args: unknown[]): unknown
+  _zod: {
+    def: {
+      type: 'function'
+      /** a `ZodTuple` when `input: [...]` was given; zod defaults to `z.array(z.unknown())` when it wasn't */
+      input: {_zod: {def: {type: string; items?: unknown[]; rest?: unknown; element?: {_zod: {def: {type: string}}}}}}
+    }
+  }
+}
+
+const isZodImplementedFunction = (value: unknown): value is ZodImplementedFunction =>
+  typeof value === 'function' &&
+  '_zod' in value &&
+  (value as {_zod?: {def?: {type?: unknown}}})._zod?.def?.type === 'function'
+
+/**
+ * Adapt a zod function into a `CommandFunction`. zod keeps the `.implement()` callback private, so the parameter
+ * names are read from the `.implement((name, options) => ...)` text in the source instead.
+ */
+const zodFunctionCommand = (
+  name: string,
+  zodFn: ZodImplementedFunction,
+  scan: SourceScan,
+  declarationPosition: number,
+): CommandFunction => {
+  const inputDef = zodFn._zod.def.input._zod.def
+  const noInput = inputDef.type === 'array' && inputDef.element?._zod.def.type === 'unknown' // `z.function()` with no `input`
+  if (!noInput && (inputDef.type !== 'tuple' || inputDef.rest)) {
+    throw new Error(
+      `Zod function ${JSON.stringify(name)} has ${inputDef.type === 'tuple' ? 'rest arguments in its' : `an ${inputDef.type}`} input, which isn't supported. Use a tuple input like \`z.function({input: [z.string(), z.object({...})]})\` so parameters can map to positional arguments and flags.`,
+    )
+  }
+  return {
+    input: noInput ? [] : ((inputDef.items || []) as StandardSchemaV1[]),
+    meta: {},
+    paramNames: extractImplementParamNames(scan, declarationPosition),
+    call: zodFn,
+  }
+}
+
+/**
+ * Find the `export const <name> = ...` (or `export default ...`) declaration of a schema-carrying function export,
+ * for its jsdoc (description, `@alias`) and its source position (command order - ESM namespace keys are
+ * alphabetical). Undefined when this file doesn't declare it - e.g. it arrived via `export * from './child'`, in
+ * which case the child's router owns it.
+ */
+const findExportDeclaration = (scan: SourceScan, name: string) => {
+  const {source} = scan
+  // static pattern + compare the captured identifier, rather than interpolating `name` (which may contain `$`)
+  const pattern = /(?<![.\w$])export\s+(?:(default)(?![\w$])|(?:const|let|var)\s+([A-Za-z_$][\w$]*))/g
+  const match = [...source.matchAll(pattern)].find(m => (m[1] || m[2]) === name && !scan.masked[m.index])
+  return match && {position: match.index, description: jsdocBefore(scan, match.index)}
+}
+
+/**
+ * Parameter names of the `.implement(...)` callback in the declaration starting at `start`. Best effort: undefined
+ * when the declaration has no inline `.implement(` before the next export (e.g. `export const a = makeCommand()`).
+ */
+const extractImplementParamNames = (scan: SourceScan, start: number): Array<string | undefined> | undefined => {
+  const {source} = scan
+  const firstUnmaskedAfterStart = (pattern: RegExp) =>
+    [...source.matchAll(pattern)].find(m => m.index > start && !scan.masked[m.index])
+  const implement = firstUnmaskedAfterStart(/\.implement(?:Async)?\s*\(/g)
+  const nextExport = firstUnmaskedAfterStart(/(?<![.\w$])export\s/g)
+  if (!implement || (nextExport && nextExport.index < implement.index)) return undefined
+  return parseFunctionParamNames(scan, implement.index + implement[0].length)
+}
+
+/**
+ * Parameter names of the function expression starting at `start` in `scan.source`: `(a, b) => ...`,
+ * `async (a) => ...`, `function name(a) {...}`, a method's `name(a) {...}` (what `Function.prototype.toString`
+ * gives), or a bare `a => ...`. An undefined entry means a destructured or rest parameter.
+ */
+const parseFunctionParamNames = (scan: SourceScan, start: number): Array<string | undefined> | undefined => {
+  const {source} = scan
+  const rest = source.slice(start)
+  const bare = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/.exec(rest)
+  if (bare) return [bare[1]]
+  const head = /^\s*(?:async\s+)?(?:function\b\s*\*?\s*)?(?:[A-Za-z_$][\w$]*\s*)?/.exec(rest)![0]
+  const parenIndex = start + head.length
+  if (source[parenIndex] !== '(') return undefined
+  const paramList = source.slice(parenIndex + 1, findBalancedEnd(scan, parenIndex, '(', ')') - 1)
+  return splitTopLevelCommas(scanSource(paramList)).map(({start: from, end}) => {
+    const text = paramList
+      .slice(from, end)
+      .replaceAll(/\/\*[\S\s]*?\*\//g, '')
+      .trim()
+    return /^([A-Za-z_$][\w$]*)/.exec(text)?.[1]
+  })
+}
+
+/**
+ * Build a procedure from a `CommandFunction`. The item schemas are converted to JSON schema individually and
+ * assembled into a tuple schema (so the usual tuple convention applies: leading scalars become positionals, a
+ * trailing object becomes flags, and an optional trailing object makes the flags optional), with `title`s from the
+ * implementation's parameter names on scalar items that don't already have one. The tuple validates via the
+ * original schemas. Explicit `.describe()`/`.meta()` win over the declaration's jsdoc.
+ */
+const buildCommandFunctionProcedure = (
+  name: string,
+  command: CommandFunction,
+  jsdoc: string | undefined,
+): NorpcProcedureLike => {
+  const commandDoc = parseCliJsdoc(jsdoc)
+  const meta: TrpcCliMeta = {
+    ...(commandDoc.description ? {description: commandDoc.description} : {}),
+    ...(commandDoc.aliases.length > 0 ? {aliases: {command: commandDoc.aliases}} : {}),
+    ...(name === 'default' ? {default: true} : {}), // `export default fn(...)` - the CLI's default command, like a default-exported plain function
+    ...command.meta,
+  }
+  const builder = Object.keys(meta).length > 0 ? t.procedure.meta(meta) : t.procedure
+  if (command.input.length === 0) return builder.handler(() => command.call())
+
+  const items = command.input.map((schema, i) => {
+    const converted = toJsonSchema(schema, {})
+    if (!converted.success) throw new Error(`Input ${i + 1} of ${JSON.stringify(name)}: ${converted.error}`)
+    // shallow copy: zod stamps its output with a non-enumerable `~standard` claiming vendor `zod`, which would
+    // route the plain JSON schema back into the zod converter
+    const item = {...converted.value}
+    const paramName = command.paramNames?.[i]
+    if (!paramName) return item
+    if (isObjectLikeSchema(item)) {
+      applyParamTagPropertyDescriptions(item, paramName, commandDoc.params) // `@param options.force ...` documents a flag
+      return item
+    }
+    if (!item.title) item.title = kebabCase(paramName)
+    if (!item.description && commandDoc.params[paramName]) item.description = commandDoc.params[paramName] // `.describe()` wins over `@param`
+    return item
+  })
+  const firstOptional = items.findIndex(item => isOptional(item))
+  const schema = {
+    type: 'array',
+    items,
+    minItems: firstOptional === -1 ? items.length : firstOptional,
+    maxItems: items.length,
+  }
+  Object.defineProperty(schema, '~standard', {
+    enumerable: false,
+    value: {
+      version: 1,
+      vendor: 'trpc-cli',
+      validate: (value: unknown) => validateTuple(command.input, value),
+      jsonSchema: {input: () => schema, output: () => schema},
+    },
+  })
+  return builder.input(schema as never).handler(({input}) => command.call(...(input as unknown[])))
+}
+
 const buildLocalProcedures = (resolved: SourceCliModule, context: Record<string, unknown>) => {
   const {source, exports} = resolved
-  const commands = extractModuleCommands(source)
-  const classes = extractModuleClasses(source)
+  const scan = scanSource(source)
 
-  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
-  for (const command of commands) {
+  // exported functions become commands in source order, whether their schemas come from parsed types or from zod
+  const entries: Array<{name: string; position: number; procedure: NorpcProcedureLike}> = []
+  for (const command of extractModuleCommands(scan)) {
     const fn = exports[command.exportName]
     if (typeof fn !== 'function') continue // e.g. `export const x = (2 + 3)` - extractor can match non-functions; runtime is the source of truth
     const procedure = tryBuildProcedure(command, fn as AnyFn, context)
-    if (procedure) addLocalProcedureOrRouter(procedures, command.name, procedure)
+    if (procedure) entries.push({name: command.name, position: command.position, procedure})
   }
-  for (const extractedClass of classes) {
+  for (const [name, value] of Object.entries(exports)) {
+    if (!isFnImplemented(value) && !isZodImplementedFunction(value)) continue
+    const declaration = findExportDeclaration(scan, name)
+    if (!declaration) continue // not declared in this file (e.g. `export * from './child'`) - the child's router owns it
+    if (parseCliJsdoc(declaration.description).internal) continue
+    const command = isFnImplemented(value)
+      ? fnCommand(value)
+      : zodFunctionCommand(name, value, scan, declaration.position)
+    const procedure = buildCommandFunctionProcedure(name, command, declaration.description)
+    entries.push({name, position: declaration.position, procedure})
+  }
+
+  const procedures: Record<string, NorpcProcedureLike | NorpcRouterLike> = {}
+  for (const entry of entries.sort((a, b) => a.position - b.position)) {
+    addLocalProcedureOrRouter(procedures, entry.name, entry.procedure)
+  }
+  for (const extractedClass of extractModuleClasses(scan)) {
     const ClassCtor = exports[extractedClass.exportName]
     if (typeof ClassCtor !== 'function') continue
     if (ClassCtor.length > 0) continue
@@ -353,7 +564,7 @@ const tryBuildProcedure = (
 const assertHasProcedures = (procedures: Record<string, NorpcProcedureLike | NorpcRouterLike>) => {
   if (Object.keys(procedures).length === 0) {
     throw new Error(
-      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\` or \`export default function name(...)\`, or export a command-group-shaped class.`,
+      `No commands found in module. Export functions with \`export function name(...)\`, \`export async function name(...)\`, \`export const name = (...) => ...\`, \`export const name = z.function(...).implement(...)\` or \`export default function name(...)\`, or export a command-group-shaped class.`,
     )
   }
 }
@@ -394,6 +605,7 @@ const buildProcedure = (command: ExtractedCommand, fn: AnyFn, context: Record<st
 
   if (command.params.length === 1 && isObjectLikeSchema(paramSchemas[0])) {
     // single object(-union) parameter: everything is a flag, the function receives the validated object directly
+    applyParamTagPropertyDescriptions(paramSchemas[0], command.params[0].name, commandDoc.params)
     return builder.input(paramSchemas[0] as never).handler(({input}) => fn(input))
   }
 
@@ -439,10 +651,12 @@ const buildOverloadedProcedure = (
       throw error
     }
     if (!isObjectLikeSchema(schema)) return undefined
+    const overloadDoc = parseCliJsdoc(overload.description)
+    applyParamTagPropertyDescriptions(schema, overload.params[0].name, overloadDoc.params)
     variants.push({
       schema,
       flags: overloadFlagsSummary(schema),
-      description: parseCliJsdoc(overload.description).description?.split('\n')[0],
+      description: overloadDoc.description?.split('\n')[0],
     })
   }
 
@@ -598,6 +812,7 @@ const buildPositionalProcedure = (
   paramSchemas: unknown[],
 ): NorpcProcedureLike => {
   const {params} = command
+  const paramTags = parseCliJsdoc(command.description).params
   const lastIsFlagsObject = isObjectLikeSchema(paramSchemas.at(-1))
   const positionalParams = lastIsFlagsObject ? params.slice(0, -1) : params
 
@@ -650,16 +865,22 @@ const buildPositionalProcedure = (
   positionalParams.forEach((param, i) => {
     const item = schema.items![i] as Record<string, unknown>
     item.title = kebabCase(param.name!)
-    const paramDoc = parseCliJsdoc(param.description)
-    if (paramDoc.description) item.description = paramDoc.description
+    // an inline comment before the parameter wins over a `@param` tag in the function's jsdoc - it sits next to the type
+    const description = parseCliJsdoc(param.description).description || paramTags[param.name!]
+    if (description) item.description = description
     if (cliOptional[i]) item.optional = true
   })
   if (lastIsFlagsObject) {
     // a trailing options object declared via an intersection alias (`type Opts = {a} & {b}`) parses to allOf
     // inside the tuple too - flatten it the same way so flag derivation sees a single object schema
     schema.items[params.length - 1] = mergeIntersection(schema.items[params.length - 1])
+    // `@param options ...` (the object itself) has no home in help and is dropped; `@param options.force ...` documents a flag
+    applyParamTagPropertyDescriptions(schema.items[params.length - 1], params.at(-1)!.name, paramTags)
   }
-  schema.minItems = cliOptional.includes(true) ? cliOptional.indexOf(true) : params.length
+  // the flags object is always passed (possibly empty), so it's never an optional tuple element - parse-procedure
+  // would otherwise treat `minItems` below its index as "the flags object is optional"
+  const firstOptional = cliOptional.indexOf(true)
+  schema.minItems = lastIsFlagsObject || firstOptional === -1 ? params.length : firstOptional
 
   applySchemaJsdocMetadata(schema)
   return builder.input(schema as never).handler(({input}) => fn(...(input as unknown[])))
@@ -762,6 +983,7 @@ const isArrayOfPrimitives = (schema: unknown): boolean => {
 // ------------------------------------------------------------------
 
 interface SourceScan {
+  source: string
   /** for each index of the source: true if inside a comment or string/template literal */
   masked: boolean[]
   /** line and block comments in order of appearance, with their raw text */
@@ -829,11 +1051,12 @@ const scanSource = (source: string): SourceScan => {
       i++
     }
   }
-  return {masked, comments}
+  return {source, masked, comments}
 }
 
 /** Returns the index just *after* the bracket closing the opening bracket at `start`. Comment/string positions are skipped. */
-const findBalancedEnd = (source: string, scan: SourceScan, start: number, open: string, close: string): number => {
+const findBalancedEnd = (scan: SourceScan, start: number, open: string, close: string): number => {
+  const {source} = scan
   let depth = 0
   for (let i = start; i < source.length; i++) {
     if (scan.masked[i]) continue
@@ -853,7 +1076,8 @@ const findBalancedEnd = (source: string, scan: SourceScan, start: number, open: 
  * side of the newline means it continues - covering multi-line unions/intersections with leading or trailing
  * operators). Tracks `{}[]()<>` depth with the usual exception for the `>` of `=>`.
  */
-const findTypeAliasEnd = (source: string, scan: SourceScan, start: number): number => {
+const findTypeAliasEnd = (scan: SourceScan, start: number): number => {
+  const {source} = scan
   const isComment = (i: number) => scan.comments.some(c => i >= c.start && i < c.end)
   const nextSignificant = (from: number): string => {
     for (let j = from; j < source.length; j++) {
@@ -885,7 +1109,8 @@ const findTypeAliasEnd = (source: string, scan: SourceScan, start: number): numb
 }
 
 /** Finds the cleaned text of the nearest preceding jsdoc block comment, skipping whitespace and any intervening line comments. */
-const jsdocBefore = (source: string, scan: SourceScan, index: number): string | undefined => {
+const jsdocBefore = (scan: SourceScan, index: number): string | undefined => {
+  const {source} = scan
   let i = index - 1
   let comment: SourceScan['comments'][number] | undefined
   while (true) {
@@ -910,20 +1135,107 @@ const cleanJsdoc = (text: string): string | undefined => {
   return cleaned || undefined
 }
 
-const parseCliJsdoc = (description: string | undefined): {description: string | undefined; aliases: string[]} => {
-  if (!description) return {description: undefined, aliases: []}
-  const aliases: string[] = []
-  const lines: string[] = []
-  for (const line of description.split('\n')) {
-    const match = line.trim().match(/^@alias\s+(.+)$/)
-    if (match) {
-      aliases.push(match[1].trim())
-      continue
-    }
-    lines.push(line)
+interface CliJsdoc {
+  /** the free text before the first `@tag` line - what a command/argument/flag description is made of */
+  description: string | undefined
+  /** `@alias x` tags */
+  aliases: string[]
+  /** true for an `@internal` tag: the export (or class method) is a helper, not a command */
+  internal: boolean
+  /**
+   * `@param name description` tags keyed by name. `@param {type} name`, `@param name - description` and
+   * `@param [name]` spellings are accepted (the jsdoc type is ignored - the TypeScript annotation is the source of
+   * truth). Dotted names (`@param options.force ...`) are kept as-is; they document a property of an object parameter.
+   */
+  params: Record<string, string>
+}
+
+/**
+ * Split cleaned jsdoc text the way jsdoc tooling does: the description is everything up to the first line that
+ * starts with an `@tag`, and each tag runs until the next one. `@alias`, `@param` and `@internal` are interpreted;
+ * every other tag (`@returns`, `@example`, `@see`, `@deprecated`, ...) is for documentation tooling, not CLI help,
+ * and is dropped.
+ */
+const parseCliJsdoc = (text: string | undefined): CliJsdoc => {
+  const doc: CliJsdoc = {description: undefined, aliases: [], internal: false, params: {}}
+  if (!text) return doc
+  const blocks: string[][] = [[]]
+  for (const line of text.split('\n')) {
+    if (/^\s*@[a-z]/i.test(line)) blocks.push([])
+    blocks.at(-1)!.push(line)
   }
-  const cleaned = lines.join('\n').trim()
-  return {description: cleaned || undefined, aliases}
+  const [descriptionLines, ...tagBlocks] = blocks
+  doc.description = descriptionLines.join('\n').trim() || undefined
+  for (const tagLines of tagBlocks) {
+    const [, tag, body] = tagLines
+      .join('\n')
+      .trim()
+      .match(/^@(\w+)\s*([\s\S]*)$/)!
+    if (tag === 'alias') {
+      const alias = body.split('\n')[0].trim()
+      if (alias) doc.aliases.push(alias)
+    } else if (tag === 'internal') {
+      doc.internal = true
+    } else if (tag === 'param' || tag === 'arg' || tag === 'argument') {
+      const param = parseParamTag(body)
+      if (param) doc.params[param.name] = param.description
+    }
+  }
+  return doc
+}
+
+/** Parses the body of a `@param` tag: an optional `{type}`, the (possibly `[bracketed]`, possibly dotted) name, an optional `-`, then the description. */
+const parseParamTag = (body: string): {name: string; description: string} | undefined => {
+  let rest = body
+  if (rest.startsWith('{')) {
+    let depth = 0
+    let i = 0
+    for (; i < rest.length; i++) {
+      if (rest[i] === '{') depth++
+      else if (rest[i] === '}' && --depth === 0) break
+    }
+    rest = rest.slice(i + 1).trimStart()
+  }
+  // the optional `-` separator must be followed by whitespace, so a description starting with a hyphen (`-5 means negative`) keeps it
+  const match = rest.match(/^\[?([\w$.]+)(?:=[^\]]*)?\]?(?:[ \t]+-)?(?:\s+([\s\S]*))?$/)
+  if (!match) return undefined
+  const description = (match[2] || '')
+    .split('\n')
+    .map(line => line.trim())
+    .join('\n')
+    .trim()
+  return description ? {name: match[1], description} : undefined
+}
+
+/**
+ * Apply `@param <paramName>.<property> description` tags from a function's jsdoc to the properties of the object
+ * parameter's schema (one level deep, in every union branch), where the property doesn't already have a description
+ * from its own jsdoc. Property jsdoc wins because it sits next to the type it documents.
+ */
+const applyParamTagPropertyDescriptions = (
+  schema: unknown,
+  paramName: string | undefined,
+  params: Record<string, string>,
+): void => {
+  if (!paramName) return
+  const prefix = `${paramName}.`
+  const entries = Object.entries(params).filter(([key]) => key.startsWith(prefix))
+  if (entries.length === 0) return
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return
+    const record = node as {
+      properties?: Record<string, unknown>
+      anyOf?: unknown[]
+      oneOf?: unknown[]
+      allOf?: unknown[]
+    }
+    for (const [key, description] of entries) {
+      const property = record.properties?.[key.slice(prefix.length)] as Record<string, unknown> | undefined
+      if (property && typeof property === 'object' && !property.description) property.description = description
+    }
+    ;[...(record.anyOf || []), ...(record.oneOf || []), ...(record.allOf || [])].forEach(visit)
+  }
+  visit(schema)
 }
 
 const applySchemaJsdocMetadata = (schema: unknown): unknown => {
@@ -998,8 +1310,7 @@ const parseNamedSpecifiers = (
  * Returns one command per export name: TS function overloads extract once per declaration, and all the overload
  * *signatures* become the command's calling conventions (see the grouping note inline).
  */
-export const extractModuleCommands = (source: string): ExtractedCommand[] => {
-  const scan = scanSource(source)
+export const extractModuleCommands = (scan: SourceScan): ExtractedCommand[] => {
   const declarations: Array<{
     name: string
     exportName: string
@@ -1030,23 +1341,24 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       default: false,
     },
   ]
+  const {source} = scan
   for (const {pattern, canBeSignature, default: defaultExport} of declarationPatterns) {
     for (const match of source.matchAll(pattern)) {
       if (scan.masked[match.index]) continue
       const name = match[1] || 'default'
       let parenIndex = match.index + match[0].length
-      if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>') // skip generic type params
+      if (source[parenIndex] === '<') parenIndex = findBalancedEnd(scan, parenIndex, '<', '>') // skip generic type params
       while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
       if (source[parenIndex] !== '(') continue // not a function shape after all, e.g. `export function` matched inside something weird
-      const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
+      const parenEnd = findBalancedEnd(scan, parenIndex, '(', ')')
       declarations.push({
         name,
         exportName: defaultExport ? 'default' : name,
         default: defaultExport,
         position: match.index,
-        hasBody: canBeSignature ? hasFunctionBody(source, scan, parenEnd) : true,
+        hasBody: canBeSignature ? hasFunctionBody(scan, parenEnd) : true,
         paramList: source.slice(parenIndex + 1, parenEnd - 1),
-        description: jsdocBefore(source, scan, match.index),
+        description: jsdocBefore(scan, match.index),
       })
     }
   }
@@ -1067,12 +1379,13 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
       return params ? [{description: declaration.description, params}] : []
     })
     if (overloads.length === 0) return []
-    const {name, exportName, default: defaultExport} = winners[0]
+    const {name, exportName, default: defaultExport, position} = winners[0]
     return [
       {
         name,
         exportName,
         default: defaultExport,
+        position,
         description: overloads[0].description,
         params: overloads[0].params,
         ...(overloads.length > 1 ? {overloads, implementationDescription: implementation?.description} : {}),
@@ -1085,6 +1398,7 @@ export const extractModuleCommands = (source: string): ExtractedCommand[] => {
  * Group declarations sharing a name. `winners` are the declarations defining the command's calling convention(s):
  * all body-less overload signatures when any exist (in declaration order), otherwise the first implementation.
  * The implementation declaration is kept separately - its jsdoc can describe an overloaded command as a whole.
+ * Groups with an `@internal` tag on *any* declaration are dropped: the function (or method) is a helper, not a command.
  */
 const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; description?: string | undefined}>(
   declarations: D[],
@@ -1095,7 +1409,8 @@ const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; de
     if (group) group.push(declaration)
     else groups.set(declaration.name, [declaration])
   }
-  return [...groups.values()].map(group => {
+  const isCommand = (group: D[]) => !group.some(declaration => parseCliJsdoc(declaration.description).internal)
+  return [...groups.values()].filter(isCommand).map(group => {
     const signatures = group.filter(declaration => !declaration.hasBody)
     return {
       winners: signatures.length > 0 ? signatures : group.slice(0, 1),
@@ -1104,8 +1419,8 @@ const groupOverloadDeclarations = <D extends {name: string; hasBody: boolean; de
   })
 }
 
-export const extractModuleClasses = (source: string): ExtractedClass[] => {
-  const scan = scanSource(source)
+export const extractModuleClasses = (scan: SourceScan): ExtractedClass[] => {
+  const {source} = scan
   const classes: ExtractedClass[] = []
 
   const patterns = [
@@ -1116,17 +1431,17 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
   for (const {pattern, default: defaultExport} of patterns) {
     for (const match of source.matchAll(pattern)) {
       if (scan.masked[match.index]) continue
+      if (parseCliJsdoc(jsdocBefore(scan, match.index)).internal) continue
       const name = match[1] || 'default'
       const exportName = defaultExport ? 'default' : name
       let headerIndex = match.index + match[0].length
-      if (source[headerIndex] === '<') headerIndex = findBalancedEnd(source, scan, headerIndex, '<', '>')
-      const braceIndex = findNextUnmasked(source, scan, headerIndex, '{')
+      if (source[headerIndex] === '<') headerIndex = findBalancedEnd(scan, headerIndex, '<', '>')
+      const braceIndex = findNextUnmasked(scan, headerIndex, '{')
       const header = source.slice(headerIndex, braceIndex)
       const hasBaseClass = /\bextends\b/.test(header)
 
-      const classEnd = findBalancedEnd(source, scan, braceIndex, '{', '}')
+      const classEnd = findBalancedEnd(scan, braceIndex, '{', '}')
       const {methodDeclarations, hasConstructorParameters, hasZeroArgConstructor} = extractClassMethodDeclarations(
-        source,
         scan,
         braceIndex + 1,
         classEnd - 1,
@@ -1135,7 +1450,7 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
       if (hasBaseClass && !hasZeroArgConstructor) continue
       if (methodDeclarations.length === 0) continue
       const methods = methodDeclarations.flatMap(
-        ({methodName, signatures, implementationDescription}): ExtractedCommand[] => {
+        ({methodName, position, signatures, implementationDescription}): ExtractedCommand[] => {
           const overloads = signatures.flatMap(signature => {
             const params = tryParseParams(`${name}.${methodName}`, signature.paramList)
             return params ? [{description: signature.description, params}] : []
@@ -1146,6 +1461,7 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
               name: methodName,
               exportName: methodName,
               default: false,
+              position,
               description: overloads[0].description,
               params: overloads[0].params,
               ...(overloads.length > 1 ? {overloads, implementationDescription} : {}),
@@ -1161,7 +1477,8 @@ export const extractModuleClasses = (source: string): ExtractedClass[] => {
   return classes
 }
 
-const findNextUnmasked = (source: string, scan: SourceScan, start: number, char: string): number => {
+const findNextUnmasked = (scan: SourceScan, start: number, char: string): number => {
+  const {source} = scan
   for (let i = start; i < source.length; i++) {
     if (!scan.masked[i] && source[i] === char) return i
   }
@@ -1169,13 +1486,13 @@ const findNextUnmasked = (source: string, scan: SourceScan, start: number, char:
 }
 
 const extractClassMethodDeclarations = (
-  source: string,
   scan: SourceScan,
   bodyStart: number,
   bodyEnd: number,
 ): {
   methodDeclarations: Array<{
     methodName: string
+    position: number
     /** one per body-less overload signature, or a single entry for a plain method - same rule as `groupOverloadDeclarations` */
     signatures: Array<{description: string | undefined; paramList: string}>
     /** jsdoc of the overload implementation, when the method is overloaded */
@@ -1184,6 +1501,7 @@ const extractClassMethodDeclarations = (
   hasConstructorParameters: boolean
   hasZeroArgConstructor: boolean
 } => {
+  const {source} = scan
   const body = source.slice(bodyStart, bodyEnd)
   const declarations: Array<{
     name: string
@@ -1199,7 +1517,7 @@ const extractClassMethodDeclarations = (
   for (const match of body.matchAll(pattern)) {
     const absoluteIndex = bodyStart + match.index
     if (scan.masked[absoluteIndex]) continue
-    if (!isTopLevelClassMember(source, scan, bodyStart, absoluteIndex)) continue
+    if (!isTopLevelClassMember(scan, bodyStart, absoluteIndex)) continue
 
     const visibility = match[1]
     const staticModifier = match[2]
@@ -1218,11 +1536,11 @@ const extractClassMethodDeclarations = (
     if (declarationStart.startsWith('set ')) continue
 
     let parenIndex = bodyStart + match.index + match[0].length
-    if (source[parenIndex] === '<') parenIndex = findBalancedEnd(source, scan, parenIndex, '<', '>')
+    if (source[parenIndex] === '<') parenIndex = findBalancedEnd(scan, parenIndex, '<', '>')
     while (parenIndex < source.length && /\s/.test(source[parenIndex])) parenIndex++
     if (source[parenIndex] !== '(') continue
 
-    const parenEnd = findBalancedEnd(source, scan, parenIndex, '(', ')')
+    const parenEnd = findBalancedEnd(scan, parenIndex, '(', ')')
     const paramList = source.slice(parenIndex + 1, parenEnd - 1)
     if (name === 'constructor') {
       if (paramList.trim()) hasConstructorParameters = true
@@ -1233,9 +1551,9 @@ const extractClassMethodDeclarations = (
     declarations.push({
       name,
       position: absoluteIndex,
-      hasBody: hasFunctionBody(source, scan, parenEnd),
+      hasBody: hasFunctionBody(scan, parenEnd),
       paramList,
-      description: jsdocBefore(source, scan, absoluteIndex),
+      description: jsdocBefore(scan, absoluteIndex),
     })
   }
 
@@ -1246,13 +1564,15 @@ const extractClassMethodDeclarations = (
     hasZeroArgConstructor,
     methodDeclarations: groupOverloadDeclarations(declarations).map(({winners, implementation}) => ({
       methodName: winners[0].name,
+      position: winners[0].position,
       signatures: winners.map(({description, paramList}) => ({description, paramList})),
       implementationDescription: implementation?.description,
     })),
   }
 }
 
-const isTopLevelClassMember = (source: string, scan: SourceScan, bodyStart: number, index: number): boolean => {
+const isTopLevelClassMember = (scan: SourceScan, bodyStart: number, index: number): boolean => {
+  const {source} = scan
   let depth = 0
   for (let i = bodyStart; i < index; i++) {
     if (scan.masked[i]) continue
@@ -1270,7 +1590,8 @@ const isTopLevelClassMember = (source: string, scan: SourceScan, bodyStart: numb
  * full type parser - an exotic depth-0 return type (e.g. a conditional type with a bare `extends {...}`) could
  * misclassify, which only matters when the same name is declared more than once.
  */
-const hasFunctionBody = (source: string, scan: SourceScan, parenEnd: number): boolean => {
+const hasFunctionBody = (scan: SourceScan, parenEnd: number): boolean => {
+  const {source} = scan
   const isComment = (i: number) => scan.comments.some(c => i >= c.start && i < c.end)
   const nextSignificant = (from: number): string => {
     for (let j = from; j < source.length; j++) {
@@ -1330,10 +1651,9 @@ const tryParseParams = (functionName: string, paramList: string): ExtractedParam
   }
 }
 
-const parseParams = (functionName: string, paramList: string): ExtractedParam[] => {
-  const scan = scanSource(paramList)
-
-  // split at top-level commas into [start, end) segments, one per parameter
+/** split a parameter list at top-level commas into [start, end) segments, one per parameter */
+const splitTopLevelCommas = (scan: SourceScan): Array<{start: number; end: number}> => {
+  const {source: paramList} = scan
   const segments: Array<{start: number; end: number}> = []
   let depth = 0
   let segmentStart = 0
@@ -1349,14 +1669,19 @@ const parseParams = (functionName: string, paramList: string): ExtractedParam[] 
     }
   }
   segments.push({start: segmentStart, end: paramList.length})
+  return segments
+}
 
-  return segments.flatMap((segment): ExtractedParam[] => {
+const parseParams = (functionName: string, paramList: string): ExtractedParam[] => {
+  const scan = scanSource(paramList)
+
+  return splitTopLevelCommas(scan).flatMap((segment): ExtractedParam[] => {
     if (!paramList.slice(segment.start, segment.end).trim()) return [] // no parameters at all, or a trailing comma
 
     // find the top-level `:` (start of the type annotation) and `=` (start of a default value) within the segment
     let colon = -1
     let eq = -1
-    depth = 0
+    let depth = 0
     for (let i = segment.start; i < segment.end; i++) {
       if (scan.masked[i]) continue
       const ch = paramList[i]
@@ -1481,7 +1806,7 @@ const buildDeclarationContext = (source: string): Record<string, unknown> => {
     // slice to the end of the whole statement, not just the first balanced `{}` - aliases like
     // `type Opts = {mode: string} & {extra: string}` or multi-line unions must keep their tails,
     // otherwise the schema would silently lose properties/variants
-    const end = findTypeAliasEnd(source, scan, start)
+    const end = findTypeAliasEnd(scan, start)
     const text = `type ${match[1]} = ${source.slice(start, end).replace(/;\s*$/, '').trim()}`
     declarations.push({name: match[1], text})
   }
@@ -1490,7 +1815,7 @@ const buildDeclarationContext = (source: string): Record<string, unknown> => {
   )) {
     if (scan.masked[match.index]) continue
     const braceIndex = match.index + match[0].length - 1
-    const end = findBalancedEnd(source, scan, braceIndex, '{', '}')
+    const end = findBalancedEnd(scan, braceIndex, '{', '}')
     declarations.push({name: match[1], text: source.slice(match.index, end).replace(/^export\s+/, '')})
   }
 

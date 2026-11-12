@@ -82,7 +82,7 @@ test('module commands: inputs are validated against the schema before the functi
   ).rejects.toMatchInlineSnapshot(
     `
       CLI exited with code 1
-        Caused by: Error: Invalid input: ✖ must be boolean → at frozenLockfile
+        Caused by: CliValidationError: error: option '--frozen-lockfile [boolean]' argument 'maybe' is invalid. must be boolean
     `,
   )
 })
@@ -218,6 +218,116 @@ test('module commands: module with only ignored function exports errors with no 
     exports: {greet: (name: string) => 'hi ' + name, loadSomeInternalThing: (input: any) => input.foo},
   }
   await expect(runWith(params, ['--help'])).rejects.toThrowError(/No commands found in module/)
+})
+
+test('module commands: @internal exports are not commands', async () => {
+  class Cache {
+    clear() {
+      return 'cleared'
+    }
+  }
+  class Users {
+    invite(options: {email: string}) {
+      return `invite ${this.normalizeEmail(options.email)}`
+    }
+
+    normalizeEmail(email: string) {
+      return email.toLowerCase()
+    }
+  }
+  const params = {
+    source: `
+      /** @internal */
+      export function loadConfig(options: {path: string}) {
+        return {path: options.path}
+      }
+
+      /**
+       * quote a value for logging
+       * @internal
+       */
+      export const quote = (value: string) => JSON.stringify(value)
+
+      /** @internal */
+      export class Cache {
+        clear() {
+          return 'cleared'
+        }
+      }
+
+      export class Users {
+        /** invite a user */
+        invite(options: {email: string}) {
+          return 'invite ' + this.normalizeEmail(options.email)
+        }
+
+        /** @internal */
+        normalizeEmail(email: string) {
+          return email.toLowerCase()
+        }
+      }
+
+      /** show the status */
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {
+      loadConfig: (options: any) => ({path: options.path}),
+      quote: (value: string) => JSON.stringify(value),
+      Cache,
+      Users,
+      status: () => 'ok',
+    },
+  }
+
+  expect(await runWith(params, ['--help'])).toMatchInlineSnapshot(`
+    "Usage: program [options] [command]
+
+    Available subcommands: status, users
+
+    Options:
+      -h, --help        display help for command
+
+    Commands:
+      status [options]  show the status
+      users             Available subcommands: invite
+      help [command]    display help for command
+    "
+  `)
+  expect(await runWith(params, ['users', 'invite', '--email', 'Ada@Example.com'])).toMatchInlineSnapshot(
+    `"invite ada@example.com"`,
+  )
+  await expect(runWith(params, ['load-config', '--path', 'x'])).rejects.toMatchInlineSnapshot(`
+    CLI exited with code 1
+      Caused by: CommanderError: error: unknown command 'load-config'
+  `)
+})
+
+test('module commands: @internal on any overload signature hides the whole command', async () => {
+  const params = {
+    source: `
+      /** resize by explicit dimensions */
+      export function resize(params: {width: number; height: number}): string
+      /**
+       * resize by scale factor
+       * @internal
+       */
+      export function resize(params: {scale: number}): string
+      export function resize(params: any) {
+        return 'resized'
+      }
+
+      export function status() {
+        return 'ok'
+      }
+    `,
+    exports: {resize: () => 'resized', status: () => 'ok'},
+  }
+
+  const help = await runWith(params, ['--help'])
+  expect(help).toContain('status')
+  expect(help).not.toContain('resize')
 })
 
 test('module commands: export * merges child module commands at the root', async () => {
@@ -460,7 +570,7 @@ test('module positionals: missing and invalid positionals fail before the functi
   `)
   await expect(runWith({filename: positionalModulePath}, ['add', '2', 'banana'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: CommanderError: error: command-argument value 'banana' is invalid for argument 'right'. Invalid number: banana
+      Caused by: CliValidationError: error: command-argument value 'banana' is invalid for argument 'right'. must be number
   `)
 })
 
@@ -637,6 +747,175 @@ test('module commands: jsdoc aliases create command and option aliases without l
   expect(installHelp).not.toContain('@alias')
 })
 
+test('module commands: @param and @returns tags document positionals without leaking into help', async () => {
+  const params = {
+    source: `
+      /**
+       * If you have some apples and someone gives you more, this will tell you how many you have afterwards
+       * @param a how many apples you had before
+       * @param b how many apples the guy gave you
+       * @returns number of apples you end up with
+       */
+      export const add = (a: number, b: number) => a + b
+    `,
+    exports: {add: (a: number, b: number) => a + b},
+  }
+
+  expect(await runWith(params, ['--help'])).toMatchInlineSnapshot(`
+    "Usage: program [options] [command]
+
+    Available subcommands: add
+
+    Options:
+      -h, --help      display help for command
+
+    Commands:
+      add <a> <b>     If you have some apples and someone gives you more, this will
+                      tell you how many you have afterwards
+      help [command]  display help for command
+    "
+  `)
+  expect(await runWith(params, ['add', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program add [options] <a> <b>
+
+    If you have some apples and someone gives you more, this will tell you how many
+    you have afterwards
+
+    Arguments:
+      a           number how many apples you had before (required)
+      b           number how many apples the guy gave you (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
+  expect(await runWith(params, ['add', '2', '3'])).toMatchInlineSnapshot(`"5"`)
+})
+
+test('module commands: @param spellings, precedence, and other standard tags', async () => {
+  const params = {
+    source: `
+      /**
+       * copy a file
+       *
+       * Overwrites nothing unless asked to.
+       *
+       * @param {string} source - this loses to the inline comment before the parameter
+       * @param [dest] where to copy it
+       *   (defaults to \`<source>.bak\`)
+       * @param options the options object itself has no home in help, so this line is dropped
+       * @param options.force overwrite the destination if it exists
+       * @param options.verbose this loses to the property's own jsdoc
+       * @param options.offset -5 means five lines back (a leading hyphen is part of the description, not a separator)
+       * @return the destination path
+       * @example
+       * copy('a.txt', 'b.txt', {force: true})
+       * @see https://example.com/copy
+       * @deprecated use \`cp\` instead
+       */
+      export function copy(
+        /** the file to copy */ source: string,
+        dest?: string,
+        options: {
+          force?: boolean
+          /** print what's happening */
+          verbose?: boolean
+          offset?: number
+        } = {},
+      ) {
+        return \`copied \${source} to \${dest || source + '.bak'}\`
+      }
+    `,
+    exports: {copy: (source: string, dest?: string) => `copied ${source} to ${dest || source + '.bak'}`},
+  }
+
+  expect(await runWith(params, ['copy', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program copy [options] <source> [dest]
+
+    copy a file
+
+    Overwrites nothing unless asked to.
+
+    Arguments:
+      source               the file to copy (required)
+      dest                 where to copy it
+                           (defaults to \`<source>.bak\`)
+
+    Options:
+      --force [boolean]    overwrite the destination if it exists
+      --verbose [boolean]  print what's happening
+      --offset [number]    -5 means five lines back (a leading hyphen is part of the
+                           description, not a separator)
+      -h, --help           display help for command
+    "
+  `)
+})
+
+test('module commands: @param documents the properties of a single options-object parameter', async () => {
+  const params = {
+    source: `
+      /**
+       * install dependencies
+       * @param options.frozenLockfile fail if the lockfile is out of date
+       * @param options.nope not a real flag - ignored
+       */
+      export function install(options: {frozenLockfile?: boolean}) {
+        return options.frozenLockfile ? 'frozen' : 'normal'
+      }
+    `,
+    exports: {install: (options: any) => (options.frozenLockfile ? 'frozen' : 'normal')},
+  }
+
+  expect(await runWith(params, ['install', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program install [options]
+
+    install dependencies
+
+    Options:
+      --frozen-lockfile [boolean]  fail if the lockfile is out of date
+      -h, --help                   display help for command
+    "
+  `)
+})
+
+test('module commands: @param tags work on class methods too', async () => {
+  class Users {
+    login(email: string, password: string) {
+      return `login ${email} with ${password.length} chars`
+    }
+  }
+  const params = {
+    source: `
+      export class Users {
+        /**
+         * log a user in
+         * @param email the user's email address
+         * @param password their password
+         * @returns a session summary
+         */
+        login(email: string, password: string) {
+          return \`login \${email} with \${password.length} chars\`
+        }
+      }
+    `,
+    exports: {Users},
+  }
+
+  expect(await runWith(params, ['users', 'login', '--help'])).toMatchInlineSnapshot(`
+    "Usage: program users login [options] <email> <password>
+
+    log a user in
+
+    Arguments:
+      email       the user's email address (required)
+      password    their password (required)
+
+    Options:
+      -h, --help  display help for command
+    "
+  `)
+})
+
 test('module commands: union-of-objects parameter derives union flags', async () => {
   const params = {
     // regression (caught in review): the flags-object decision briefly only accepted plain objects,
@@ -746,7 +1025,7 @@ test('module commands: overloaded functions become alternate calling conventions
   // matching no signature reports each signature's issues - closest match (fewest issues) first
   await expect(runWith(params, ['resize', '--input', 'a.png'])).rejects.toMatchInlineSnapshot(`
     CLI exited with code 1
-      Caused by: Error: Invalid input: ✖ matched none of the 2 ways to call this command:
+      Caused by: CliValidationError: ✖ matched none of the 2 ways to call this command:
       --input <string> --width <number> --height <number>: must have required properties width, height
       --input <string> --scale <number>: must have required properties scale
   `)

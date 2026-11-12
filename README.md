@@ -332,6 +332,38 @@ path/to/cli copy a.txt b.txt --mkdirp
 
 >Note: when using a tuple, object types for options must appear _last_ in the `.input(...)` tuple, when being used with positional arguments. So `z.tuple([z.string(), z.object({mkdirp: z.boolean()}), z.string()])` would not be allowed (inputs would have to be passed as JSON).
 
+#### Validation errors
+
+When the input schema rejects a value, the issue is reported against the argument or option it came from, worded like commander's own parse errors:
+
+```ts
+t.router({
+  checkHealth: t.procedure
+    .input(
+      z.tuple([
+        z
+          .url()
+          .refine(url => url.startsWith('https://'), 'secure only pls')
+          .describe('url'),
+        z.object({timeout: z.number().int().positive().optional()}),
+      ]),
+    )
+    .query(({input: [url, options]}) =>
+      getHealthFromSomeExternalService(url, options),
+    ),
+})
+```
+
+```
+$ mycli check-health http://example.com
+error: command-argument value 'http://example.com' is invalid for argument 'url'. secure only pls
+
+$ mycli check-health https://example.com --timeout 0
+error: option '--timeout [integer]' argument '0' is invalid. Too small: expected number to be >0
+```
+
+Help text follows the errors. This works for any validator, and for tRPC, oRPC, standalone and module-mode routers alike. Issues that don't belong to one argument or option (e.g. a `.refine()` on the whole input object) are printed as `✖ <message>`. Errors thrown _inside_ a procedure (say, a stray `z.number().parse(...)`) are not treated as bad input - they're reported as the crash they are.
+
 ### Command Configuration
 
 You can change the behaviour of the command generated for a given procedure by using trpc's `meta` feature.
@@ -681,13 +713,20 @@ void createCli({filename: '/path/to/commands.ts'}).run()
 
 trpc-cli reads the module's *source text* and dynamically imports it: each exported function becomes a command (kebab-cased, e.g. `listVersions` → `list-versions`), the jsdoc above the function becomes the command description, and parameter type annotations are parsed by the vendored `Type.Script` into real JSON schemas - property jsdoc comments become flag descriptions, and inputs are validated before your function runs (`mycli add --package-name left-pad --dev`). A default-exported function becomes the default command, so `export default function hola(...)` can be run as either `mycli ...` or `mycli hola ...`.
 
-Exported functions whose signatures cannot be converted into CLI inputs are ignored as ordinary non-command exports. This gives helper exports an escape hatch without adding trpc-cli-specific metadata:
+To export a helper from the commands module without it becoming a command, tag it `@internal` - the standard TSDoc tag for "exported, but not public API":
 
 ```ts
-export const loadSomeInternalThing = (params: NoInfer<{foo: string}>) => {
-  return loadIt(params.foo) // not a command
+/** @internal */
+export const loadConfig = (options: {path: string}) => {
+  return readConfigFile(options.path) // not a command
 }
 ```
+
+`@internal` works on functions, `fn()`/`z.function()` exports, classes (the whole group) and class methods. On an overloaded function, tagging any of its declarations hides the whole command.
+
+If you don't want to add `/** @internal */`, there are a couple of other ways to hide an export from trpc-cli:
+1. just stop trpc-cli from being able to infer the function inputs: `export const foo = (params: NoInfer<{ bar: string }>) => ...`.
+2. expose it under an object: `export const foo = { abc: (params: { bar: string}) => ... }`.
 
 Command and option aliases can be added with `@alias` tags in the same jsdoc comments:
 
@@ -773,7 +812,29 @@ export async function copy(
 }
 ```
 
-Inline jsdoc before a parameter (`/** the file to copy */ source: string`) becomes the positional argument's description.
+Standard jsdoc tags work the way you'd expect: `@param name description` documents a positional argument (or a flag, via `@param options.force ...`), and the command description is the free text before the first tag.
+
+```ts
+/**
+ * If you have some apples and someone gives you more, this tells you how many you have afterwards
+ * @param a how many apples you had before
+ * @param b how many apples the guy gave you
+ * @returns number of apples you end up with
+ */
+export const add = (a: number, b: number) => a + b
+```
+
+```
+Usage: mycli add [options] <a> <b>
+
+If you have some apples and someone gives you more, this tells you how many you have afterwards
+
+Arguments:
+  a           number how many apples you had before (required)
+  b           number how many apples the guy gave you (required)
+```
+
+The `@param {type} name desc`, `@param name - desc` and `@param [name]` spellings are all accepted (the jsdoc type is ignored - the TypeScript annotation is what counts). Inline jsdoc before a parameter (`/** the file to copy */ source: string`) also becomes the positional argument's description, and wins over a `@param` tag for the same parameter; likewise a property's own jsdoc wins over `@param options.prop`. A `@param options` line describing the trailing options object itself has no home in help and is dropped. `@returns` and every other tag (`@example`, `@see`, `@deprecated`, ...) are stripped from the description - they're for documentation tooling, not CLI help.
 
 TypeScript function overloads become alternate calling conventions for a single command, when every signature takes a single object parameter:
 
@@ -812,13 +873,68 @@ The flags list is the union of all signatures' flags, and flags that never appea
 
 jsdoc conventions for overloaded commands: each signature's jsdoc describes *its* calling convention (it becomes that usage line's `#` comment); a jsdoc on the *implementation* signature describes the command as a whole (shown as the command description - without one, the signatures' descriptions are joined). Property jsdoc works as usual, and a flag documented differently in different signatures (say, an `input` that means a URL in one and a file path in another) shows each distinct description, joined with `/`.
 
+#### Module mode with `fn()`
+
+Parsing TypeScript types has limits: no runtime transforms, no `.default()`s, no custom metadata beyond jsdoc. If you'd rather write real schemas, export `fn(...).implement(...)` results. `fn` is shaped like [`z.function()`](https://zod.dev/api#functions) but takes *any* [Standard Schema](https://standardschema.dev) (zod, valibot, arktype, ...) and needs nothing from source: the input schemas are read straight from the export, and positional arguments are named after the callback's parameters.
+
+```ts
+// commands.ts
+import {fn} from 'trpc-cli'
+import {z} from 'zod'
+
+export const sayHello = fn({
+  input: [
+    z.string().describe('who to greet'), // positional
+    z.object({enthusiasm: z.number().int().positive().default(1)}).optional(), // flags
+  ],
+})
+  .describe('greet someone')
+  .meta({aliases: {command: ['hi']}})
+  .implement(
+    (name, options) => `Hello, ${name}${'!'.repeat(options?.enthusiasm || 1)}`,
+  )
+
+void createCli(import.meta).run() // mycli say-hello bob --enthusiasm 3
+```
+
+The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `fn()` with no `input` is a command with no arguments. `.describe()` sets the command description and `.meta()` takes the same meta as router-mode procedures (aliases, examples, ...); a jsdoc comment above the export is used as a fallback, including `@alias` and `@param name` tags (by callback parameter name, losing to `.describe()` on the schema). Calling the implemented function directly from other code validates its arguments (and its result, if you pass `output`) through the same schemas. Plain functions, classes and `fn()` exports mix freely in one file, and `export default fn(...)` becomes the default command.
+
+#### Module mode with zod functions
+
+If you'd rather stick to zod's own API, [`z.function()`](https://zod.dev/api#functions) implementations work the same way - zod ≥4.5 attaches the function schema to the implemented function (see [colinhacks/zod#6104](https://github.com/colinhacks/zod/issues/6104)), so trpc-cli reads the input schemas straight from the exports:
+
+```ts
+// commands.ts
+import {z} from 'zod'
+
+/** greet someone */
+export const sayHello = z
+  .function({
+    input: [
+      z.string().meta({title: 'name', description: 'who to greet'}), // positional
+      z
+        .object({
+          enthusiasm: z.number().int().positive().describe('how many !s'),
+        })
+        .optional(), // flags
+    ],
+  })
+  .implement(
+    (name, options) => `Hello, ${name}${'!'.repeat(options?.enthusiasm || 0)}`,
+  )
+
+void createCli(import.meta).run() // mycli say-hello bob --enthusiasm 3
+```
+
+The same tuple convention applies as for `.input(z.tuple([...]))`: leading scalars become positional arguments, a trailing object becomes flags, a single object parameter is flags-only, and `z.function()` with no `input` is a command with no arguments. Everything said about `fn()` above applies, with one difference: zod keeps the `.implement()` callback private, so its parameter names are read from the `.implement((name, options) => ...)` text in the source file (a `.meta({title})` on the item schema wins if present), and command descriptions, `@alias` tags and `@param` tags come from the jsdoc above `export const <name>` since `z.function().describe()` metadata isn't reachable from the implemented function. Rest arguments (`input: z.array(...)` or a tuple rest) aren't supported.
+
 Details and limitations:
 
 - `filename` accepts an absolute path (robust - works from any directory), `import.meta` (when the call lives in the commands file itself), or a `URL` like `new URL('./commands.ts', import.meta.url)` (resolves relative to the importing file, so a distributed CLI works wherever it's invoked). A *relative* path string is resolved against `process.cwd()`, so it's only reliable when the CLI is run from a known directory - fine for quick scripts, but it breaks the moment a globally-installed CLI runs somewhere else, so prefer `import.meta`/`URL` for anything you distribute. For `.ts` modules, run under tsx, bun, deno, or node >=22.18 (which strip types natively).
 - `createCli(import.meta)` re-imports the commands file to read its exports, so when the call lives in that same file it's a *self-import*. That's fine as long as the call is at the **bottom** of the file (so all `export const` arrow functions above it are initialized) and is **not** top-level-`await`ed - `void createCli(import.meta).run()` is the safe form. A top-level `await createCli(import.meta).run()` would deadlock (the await suspends the module before the self-import can resolve). When another module imports this file, the `.run()` call is a no-op, so the exported command functions remain importable as plain functions.
 - Parameter types can be inline literals (`{foo: string}`, `'fast' | 'slow'`), references to a `type X = {...}`/`interface X {...}` declared in the same file, or relative file-backed type imports such as `import type {Options} from './types.ts'`. Interface `extends` clauses and intersections of object literals like `type X = {a: string} & {b: number}` are flattened into one set of flags when possible. Functions with no parameters become commands with no arguments.
 - Only the *last* parameter can be an object type (it maps to flags); the others must be strings, numbers, booleans, or arrays of those (a `files: string[]` parameter becomes a variadic positional). Rest parameters and destructured positional parameters aren't supported.
-- Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed), `export default function f(...)` (anonymous default functions become a command named `default`), `export class Group { method(...) {} }`, `export default class Commands { method(...) {} }`, `export * as group from './group'`, `export * from './group'`, and `export {commandOrGroup} from './group'`. The module must export *only* commands: any other exported function - a local `export {f}` statement or a declaration the extractor can't parse - makes the CLI fail at startup with an error naming the offending export (failing loudly beats silently dropping a command). Keep helpers in a separate, un-re-exported module.
+- Supported declaration syntaxes: `export function f(...)`, `export async function f(...)`, `export const f = (...) => ...` (including `export const f = async (...) => ...`; type-annotated consts like `export const f: Cmd = ...` aren't parsed), `export default function f(...)` (anonymous default functions become a command named `default`), `export class Group { method(...) {} }`, `export default class Commands { method(...) {} }`, `export * as group from './group'`, `export * from './group'`, and `export {commandOrGroup} from './group'`. Other exported functions - a local `export {f}` statement, or a declaration the extractor can't turn into CLI inputs - are skipped. Usually you shouldn't rely on that to hide helpers: tag them `@internal` so a later signature change can't accidentally turn one into a command.
 - Overloaded functions (and class methods) become alternate calling conventions as described above when every signature takes a single object parameter. Signatures involving positional parameters can't be presented as alternatives (commander has no way to show alternate positional layouts for one command), so those fall back to using only the *first* overload signature - the primary documented shape, since TypeScript resolves calls against signatures in order. The implementation signature is always ignored.
 - For bundlers/browsers (no filesystem, no dynamic import), pass the source and exports explicitly: `createCli({source: rawSourceText, exports: await import('./commands.js')})`. Re-exported command modules are not supported in this form because trpc-cli has no filesystem location to resolve child modules from.
 - In this mode `run`/`buildProgram`/`toJSON` are all **async** (the module is loaded asynchronously): `const program = await createCli(import.meta).buildProgram()`. With a router, `buildProgram`/`toJSON` are synchronous.
@@ -1201,7 +1317,7 @@ Note: previously, `@trpc/server` was included in the dependencies of this packag
 
 ### oRPC
 
-You can now also pass an [oRPC](https://orpc.unnoq.com/) router! Note that it needs to be an `@orpc/server` router, not an `@orpc/contract`. It works the same way as with tRPC, just pass a router:
+You can now also pass an [oRPC](https://orpc.dev/) router! Note that it needs to be an `@orpc/server` router, not an `@orpc/contract`. It works the same way as with tRPC, just pass a router:
 
 ```ts
 import {os} from '@orpc/server'
@@ -1437,14 +1553,13 @@ test('make sure parsing works correctly', async () => {
     `[Error: Get real]`,
   )
   await expect(run(['add', '2', 'notanumber'])).rejects.toMatchInlineSnapshot(`
-    [Error: Validation error
-      - Expected number, received string at index 1
+    [Error: error: command-argument value 'notanumber' is invalid for argument 'parameter_2'. Expected number, received string
 
     Usage: program add [options] <parameter_1> <parameter_2>
 
     Arguments:
-      parameter_1   (required)
-      parameter_2   (required)
+      parameter_1  number (required)
+      parameter_2  number (required)
 
     Options:
       -h, --help   display help for command
@@ -1705,7 +1820,7 @@ Note: the bin script no longer accepts files exporting trpc/orpc routers - if yo
 ### API docs
 
 <!-- codegen:start {preset: markdownFromJsdoc, source: src/index.ts, export: createCli} -->
-#### [createCli](./src/index.ts#L183)
+#### [createCli](./src/index.ts#L185)
 
 Run a trpc router as a CLI.
 

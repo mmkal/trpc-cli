@@ -32,6 +32,7 @@
     "lint": "eslint --max-warnings=0 .",
     "clean": "rm -rf dist",
     "compile": "tsc -p tsconfig.lib.json",
+    "typecheck": "tsc -p .",
     "dts-ignore": "sed -i.bak \"s#declare module#\\n$(cat src/index.ts | grep ts-ignore | head -n 1)\\ndeclare module#g\" dist/index.d.ts && rm dist/index.d.ts.bak",
     "build": "pnpm clean && pnpm ztjs && pnpm compile && pnpm dts-ignore",
     "dev": "cd test/fixtures && tsx",
@@ -110,12 +111,13 @@
     "strip-ansi": "7.1.0",
     "trpcserver10": "npm:@trpc/server@^10.45.2",
     "trpcserver11": "npm:@trpc/server@^11.1.1",
-    "tsx": "4.20.3",
+    "tsx": "4.23.15",
     "typebox": "1.2.8",
     "typescript": "5.8.3",
     "valibot": "1.2.0",
     "vitest": "3.2.4",
     "yaml": "^2.8.2",
+    "zod": "4.6.5",
     "zod-to-json-schema": "3.24.6",
     "zod3": "npm:zod@3.25.76"
   }
