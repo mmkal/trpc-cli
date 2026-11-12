@@ -1295,7 +1295,7 @@ Note: previously, `@trpc/server` was included in the dependencies of this packag
 
 ### oRPC
 
-You can now also pass an [oRPC](https://orpc.unnoq.com/) router! Note that it needs to be an `@orpc/server` router, not an `@orpc/contract`. It works the same way as with tRPC, just pass a router:
+You can now also pass an [oRPC](https://orpc.dev/) router! Note that it needs to be an `@orpc/server` router, not an `@orpc/contract`. It works the same way as with tRPC, just pass a router:
 
 ```ts
 import {os} from '@orpc/server'
